@@ -211,9 +211,11 @@ fit <- glam_fit_poisson(
 )
 ```
 
-Also: `glam_fit_gaussian()`, `simulate_glam_poisson()`.
-Vignette: `vignette("glam-poisson", package = "TTPsplines")`.
-Script: `Rscript inst/examples/example_glam_poisson.R`.
+Also: `glam_fit_gaussian()`, `simulate_glam_poisson()`,
+`compare_glam_tt_gaussian()` (Gaussian GLAM vs TT on \(d=3,5\) grids).
+Vignettes: `vignette("glam-poisson")`, `vignette("glam-gaussian")`.
+Scripts: `inst/examples/example_glam_poisson.R`,
+`inst/examples/example_glam_gaussian_vs_tt.R`.
 
 | In v0 | Not yet |
 |---|---|

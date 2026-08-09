@@ -12,7 +12,8 @@ tt_adam_fit(
   control,
   penalty_order = 2,
   init_cores = NULL,
-  family = NULL
+  family = NULL,
+  offset = NULL
 )
 }
 \description{

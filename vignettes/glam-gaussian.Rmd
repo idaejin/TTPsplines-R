@@ -1,0 +1,126 @@
+---
+title: "Gaussian GLAM vs TTPsplines (d = 3 and 5)"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Gaussian GLAM vs TTPsplines (d = 3 and 5)}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+# Setup
+
+On a **regular grid**, Currie–Durbán–Eilers **GLAM** fits a full tensor-product
+P-spline coefficient array with rotated-\(H\) algebra. `ttpspline()` fits the
+same kind of surface after vectorizing the grid, but stores the coefficients in
+**Tensor-Train** format.
+
+This vignette uses fixed \(\lambda\) (no cGCV) so the comparison is about
+**compression, accuracy and time**, not smoothing-parameter selection.
+Helper: `compare_glam_tt_gaussian()`.
+
+```{r}
+library(TTPsplines)
+cols <- c("method", "npar", "npar_dense", "compression",
+          "rmse_truth", "rmse_y", "rmse_vs_glam", "time_s", "time_vs_glam")
+```
+
+# \(d = 3\)
+
+Default grid \(14\times 12\times 10\), \(k=6\) (dense \(k^d = 216\)).
+
+```{r d3}
+tab3 <- compare_glam_tt_gaussian(d = 3, ranks = 1:4, max_sweeps = 10)
+print(tab3[, cols], digits = 3, row.names = FALSE)
+```
+
+```{r d3-plot, fig.width = 7, fig.height = 3.5}
+tt3 <- tab3[!is.na(tab3$rank), ]
+op <- par(mfrow = c(1, 2), mar = c(4, 4, 2, 1))
+plot(tt3$rank, tt3$rmse_truth, type = "b", pch = 19,
+     xlab = "TT rank", ylab = "RMSE vs truth",
+     main = "d = 3: accuracy",
+     ylim = range(c(tt3$rmse_truth, tab3$rmse_truth[1])))
+abline(h = tab3$rmse_truth[1], col = 2, lty = 2)
+legend("topright", c("TT", "GLAM"), col = c(1, 2), lty = c(1, 2),
+       pch = c(19, NA), bty = "n", cex = 0.8)
+plot(tt3$rank, tt3$npar, type = "b", pch = 19,
+     xlab = "TT rank", ylab = "Stored parameters",
+     main = "d = 3: compression",
+     ylim = range(c(tt3$npar, tab3$npar[1])))
+abline(h = tab3$npar[1], col = 2, lty = 2)
+par(op)
+```
+
+# \(d = 5\)
+
+Default grid \(6^5 = 7776\) cells, \(k=5\) (dense \(k^d = 3125\)). Full GLAM
+still builds a dense \(3125\times 3125\) system; TT stays linear in \(d\) at
+fixed rank.
+
+```{r d5}
+tab5 <- compare_glam_tt_gaussian(d = 5, ranks = 1:3, max_sweeps = 8)
+print(tab5[, cols], digits = 3, row.names = FALSE)
+```
+
+```{r d5-plot, fig.width = 7, fig.height = 3.5}
+tt5 <- tab5[!is.na(tab5$rank), ]
+op <- par(mfrow = c(1, 2), mar = c(4, 4, 2, 1))
+plot(tt5$rank, tt5$rmse_truth, type = "b", pch = 19,
+     xlab = "TT rank", ylab = "RMSE vs truth",
+     main = "d = 5: accuracy",
+     ylim = range(c(tt5$rmse_truth, tab5$rmse_truth[1])))
+abline(h = tab5$rmse_truth[1], col = 2, lty = 2)
+legend("topright", c("TT", "GLAM"), col = c(1, 2), lty = c(1, 2),
+       pch = c(19, NA), bty = "n", cex = 0.8)
+plot(tt5$rank, tt5$time_s, type = "b", pch = 19,
+     xlab = "TT rank", ylab = "Time (s)",
+     main = "d = 5: wall time",
+     ylim = range(c(tt5$time_s, tab5$time_s[1])))
+abline(h = tab5$time_s[1], col = 2, lty = 2)
+par(op)
+```
+
+# How to read the table
+
+| Column | Meaning |
+|--------|---------|
+| `npar` | Stored parameters (GLAM = full \(k^d\); TT = TT cores) |
+| `compression` | `npar_dense / npar` |
+| `rmse_truth` | RMSE vs the known smooth |
+| `rmse_y` | RMSE vs noisy data |
+| `rmse_vs_glam` | RMSE of TT means vs GLAM means |
+| `time_s` | Wall time |
+| `time_vs_glam` | Time relative to GLAM on the same grid |
+
+Typical pattern: at small \(d\), GLAM is cheap and a useful dense baseline; as
+\(d\) grows, TT wins on **storage and time**, and a moderate rank often matches
+or beats GLAM accuracy under the same fixed \(\lambda\).
+
+For Poisson age × year with exposure, see `vignette("glam-poisson")`.
+
+# See also
+
+- `vignette("glam-poisson", package = "TTPsplines")`
+- `vignette("rank-compression", package = "TTPsplines")`
+- `vignette("getting-started", package = "TTPsplines")`
+
+# References
+
+Currie, I. D., Durban, M. and Eilers, P. H. C. (2006).
+Generalized linear array models with applications to multidimensional
+smoothing. *Journal of the Royal Statistical Society: Series B*, **68**,
+259–280. <https://doi.org/10.1111/j.1467-9868.2006.00543.x>
+
+Eilers, P. H. C. and Marx, B. D. (1996).
+Flexible smoothing with \(B\)-splines and penalties.
+*Statistical Science*, **11**, 89–121.
+<https://doi.org/10.1214/ss/1038425655>
+
+Oseledets, I. V. (2011).
+Tensor-train decomposition.
+*SIAM Journal on Scientific Computing*, **33**, 2295–2317.
+<https://doi.org/10.1137/090752286>
