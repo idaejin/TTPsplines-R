@@ -57,10 +57,11 @@ local({
       for (opt in optimizers) {
         ctrl <- .default_control(
           backend = "R",
-          max_sweeps = 20L,
+          max_sweeps = 80L,
           pirls_maxit = 15L,
           als_sweeps_per_pirls = 3L,
           lbfgs_maxit = 200L,
+          tol = 1e-10,
           seed = seed_init,
           init_sd = 0.1,
           compute_edf = TRUE,

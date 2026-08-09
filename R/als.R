@@ -21,6 +21,7 @@ tt_als_fit <- function(y, basis, ranks, lambda_spec, control, penalty_order = 2,
   n_sweeps <- 0L
   history <- list()
   prev_lam <- lambda
+  prev_eta <- NULL
   t0 <- proc.time()[["elapsed"]]
   use_spec <- isTRUE(control$use_spectral_gcv)
 
@@ -42,10 +43,22 @@ tt_als_fit <- function(y, basis, ranks, lambda_spec, control, penalty_order = 2,
     n_sweeps <- sw
     eta <- intercept + tt_contraction(cores, basis)
     rss <- sum((y - eta)^2)
-    history[[sw]] <- list(sweep = sw, rss = rss, lambda = lambda)
+    # Full Gaussian penalized objective (same as LBFGS)
+    pen_val <- 0
+    for (kk in seq_len(d)) {
+      g <- as.numeric(cores[[kk]])
+      pen_val <- pen_val + 0.5 * lambda[kk] * sum(g * as.numeric(penalties[[kk]] %*% g))
+    }
+    obj <- 0.5 * rss + pen_val
+    d_eta <- if (sw == 1L) NA_real_ else sqrt(mean((eta - prev_eta)^2))
+    history[[sw]] <- list(
+      sweep = sw, rss = rss, objective = obj, penalty = pen_val,
+      lambda = lambda, d_eta = d_eta
+    )
+    prev_eta <- eta
     if (control$trace) {
-      cat(sprintf("  ALS sweep %2d | RSS=%.6g | λ=%s\n",
-                  sw, rss, paste(sprintf("%.3g", lambda), collapse = ",")))
+      cat(sprintf("  ALS sweep %2d | obj=%.6g | RSS=%.6g | λ=%s\n",
+                  sw, obj, rss, paste(sprintf("%.3g", lambda), collapse = ",")))
     }
     if (identical(method, "cGCV")) {
       dlog <- max(abs(log(lambda) - log(pmax(prev_lam, 1e-12))))

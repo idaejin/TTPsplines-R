@@ -30,9 +30,9 @@
 #' @param edf_max_npar Maximum packed TT parameters for joint EDF (memory guard).
 #' @return A list of class `"tt_control"`.
 #' @export
-tt_control <- function(max_sweeps = 20,
+tt_control <- function(max_sweeps = 50,
                        pirls_maxit = 50,
-                       tol = 1e-6,
+                       tol = 1e-8,
                        tol_lambda = 1e-4,
                        lambda_start = 1,
                        lambda_bounds = c(1e-4, 1e4),
