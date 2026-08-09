@@ -1,4 +1,4 @@
-# Run all Paper-1 package benchmarks (development).
+# Run all package benchmarks (development).
 #
 #   cd ttpsplines-pkg
 #   Rscript inst/benchmarks/run_all.R

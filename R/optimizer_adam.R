@@ -1,4 +1,4 @@
-# Optional Adam / Keras backend (Gate 8 — stub until ALS+cGCV+Rcpp+GLM are solid).
+# Optional Adam / Keras backend (stub until ALS+cGCV+Rcpp+GLM are solid).
 
 #' Is the optional Keras/TensorFlow stack available?
 #'
@@ -101,8 +101,8 @@ tt_adam_fit <- function(y, basis, ranks, lambda_spec, control,
                         family = NULL) {
   st <- tt_keras_status()
   msg <- paste0(
-    "optimizer = \"Adam\" is reserved for an optional Keras/TensorFlow backend ",
-    "(Paper 1 Gate 8) and is not implemented yet.\n",
+    "optimizer = \"Adam\" requires the optional Keras/TensorFlow backend ",
+    "and is not implemented yet.\n",
     "Use optimizer = \"ALS\" (default) or \"LBFGS\".\n",
     "Keras status: ", st$detail, "\n",
     "Call tt_keras_status() / tt_has_keras() for diagnostics. ",

@@ -1,4 +1,4 @@
-#' Fit TT P-splines over a grid of ranks (Paper 1 diagnostic).
+#' Fit TT P-splines over a grid of ranks (rank diagnostic).
 #'
 #' @inheritParams ttpspline
 #' @param ranks Numeric vector of scalar ranks to try.

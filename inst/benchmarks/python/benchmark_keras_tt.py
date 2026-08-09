@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Optional Keras / autodiff TT-P-spline comparator (Paper 1 roadmap).
+"""Optional Keras / autodiff TT-P-spline comparator (optional comparator).
 
 This is NOT an R package dependency. Implement outside R CMD check.
 

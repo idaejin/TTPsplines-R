@@ -58,9 +58,9 @@ fit_b <- ttpspline(y, X, family = binomial(), rank = 3, k = 8, lambda = 1)
 
 Fixed anisotropic λ: `lambda = c(1, 10, 0.5)`.
 
-## Paper 1 scope
+## Current scope
 
-| In v0 | Not yet (Paper 2+) |
+| In v0 | Not yet |
 |---|---|
 | TT-ALS / PIRLS | TT-cFS, cREML |
 | Gaussian / Poisson / Bernoulli | SA-CAB, SOP, DMRG |
@@ -71,7 +71,7 @@ Fixed anisotropic λ: `lambda = c(1, 10, 0.5)`.
 
 MIT
 
-## Benchmarks (Paper 1)
+## Benchmarks
 
 Not run in `R CMD check`. From the package root:
 

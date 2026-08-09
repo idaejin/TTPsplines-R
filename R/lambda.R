@@ -1,4 +1,4 @@
-# Modular smoothing / λ engines (Paper 1: fixed, cGCV; Paper 2 hooks: cFS, cREML).
+# Modular smoothing / lambda engines (fixed, cGCV; reserved hooks: cFS, cREML).
 
 #' Parse public `lambda` into an internal specification.
 #'
@@ -19,7 +19,7 @@ parse_lambda_spec <- function(lambda, d, control = NULL) {
     if (method %in% c("cFS", "cREML")) {
       stop(
         "lambda = '", method,
-        "' is reserved for Paper 2 (TT-cFS / cREML) and not implemented yet.",
+        "' is not implemented yet (planned: TT-cFS / cREML).",
         call. = FALSE
       )
     }
@@ -64,7 +64,7 @@ parse_lambda_spec <- function(lambda, d, control = NULL) {
 #' Update one core's λ and coefficients under a smoothing method.
 #'
 #' Workspace must cache `S`, `b`, `P` (and weighted `Xw`,`yw` for GCV RSS).
-#' Paper 2 may add `cFS` / `cREML` here without changing [ttpspline()].
+#' Future releases may add `cFS` / `cREML` here without changing [ttpspline()].
 #'
 #' @keywords internal
 update_lambda <- function(method, workspace, ...) {
@@ -73,8 +73,8 @@ update_lambda <- function(method, workspace, ...) {
     method,
     fixed = update_lambda_fixed(workspace, ...),
     cGCV = update_lambda_cgcv(workspace, ...),
-    cFS = stop("cFS not implemented (Paper 2).", call. = FALSE),
-    cREML = stop("cREML not implemented (Paper 2).", call. = FALSE)
+    cFS = stop("cFS not implemented yet.", call. = FALSE),
+    cREML = stop("cREML not implemented yet.", call. = FALSE)
   )
 }
 

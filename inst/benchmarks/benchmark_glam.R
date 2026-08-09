@@ -1,4 +1,4 @@
-# Paper 1 — GLAM / full-tensor vs TT (FIXED λ, same basis / data)
+# GLAM / full-tensor vs TT (FIXED λ, same basis / data)
 # Compression + surface recovery — not λ selection.
 # source("inst/benchmarks/benchmark_glam.R")
 

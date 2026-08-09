@@ -18,5 +18,5 @@ Gaussian uses ALS; Poisson / Bernoulli use PIRLS + weighted TT-ALS.
 # ttpspline(y, X, family = binomial(), rank = 3, lambda = 1)
 ```
 
-Automatic λ: `lambda = "cGCV"`. Paper 2 will add `"cFS"` / `"cREML"` via the
+Automatic λ: `lambda = "cGCV"`. Future versions may add `"cFS"` / `"cREML"` via the
 same argument.

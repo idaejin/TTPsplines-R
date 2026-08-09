@@ -1,4 +1,4 @@
-# Paper 1 — Bernoulli / binomial scattered-data benchmark
+# Bernoulli / binomial scattered-data benchmark
 # source("inst/benchmarks/benchmark_bernoulli.R")
 
 local({

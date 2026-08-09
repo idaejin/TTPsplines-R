@@ -20,9 +20,9 @@
 #' @param degree B-spline degree.
 #' @param penalty_order Difference penalty order.
 #' @param lambda Numeric (isotropic / anisotropic fixed) or `"cGCV"`.
-#'   `"cFS"` / `"cREML"` are reserved for Paper 2.
+#'   `"cFS"` / `"cREML"` are not implemented yet.
 #' @param optimizer `"ALS"` (default), `"LBFGS"`, or `"Adam"` (optional Keras;
-#'   not yet implemented — use ALS/LBFGS for Paper 1 workflows).
+#'   not yet implemented — use ALS or LBFGS).
 #' @param backend `"auto"`, `"R"`, `"Rcpp"`, or `"keras"`. Overridden by
 #'   `control$backend` only when this argument is `"auto"` and control is not;
 #'   prefer setting backend here or in [tt_control()].

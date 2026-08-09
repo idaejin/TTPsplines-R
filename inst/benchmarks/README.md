@@ -1,4 +1,4 @@
-# TTPsplines Paper-1 benchmarks
+# TTPsplines benchmarks
 #
 # Reproducible examples comparing rank, λ mode (fixed / cGCV), and GLAM.
 # **Not** executed by `R CMD check`.

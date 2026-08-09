@@ -1,4 +1,4 @@
-#' TT complexity layers for Paper 1 (storage ≠ intrinsic ≠ EDF).
+#' TT complexity layers (storage != intrinsic != EDF).
 #'
 #' Separates concepts that must not be collapsed into a single “complexity”:
 #'
@@ -13,7 +13,7 @@
 #'     \strong{not} equal to \eqn{N_{\mathrm{TT}}}.}
 #' }
 #'
-#' Methodological reading for Paper 1: rank \eqn{r} is \emph{structural}
+#' Methodological reading: rank \eqn{r} is \emph{structural}
 #' capacity; \eqn{\boldsymbol{\lambda}} / EDF is \emph{smoothness} complexity.
 #'
 #' @param fit A [ttpspline()] object, or a list with `d`, `k` (or `basis_dim` /

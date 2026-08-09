@@ -12,8 +12,7 @@ Description: Tensor-Train (TT) compression of multidimensional P-spline
     continuous covariates. Supports Gaussian, Poisson, and Bernoulli
     responses via ALS / PIRLS, fixed anisotropic smoothing, and
     conditional GCV (cGCV). Full-tensor / GLAM baselines are available
-    when feasible. Development version for the TTPsplines Paper 1
-    programme; the public API may still change.
+    when feasible. Development version; the public API may still change.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

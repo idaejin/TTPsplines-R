@@ -1,4 +1,4 @@
-# Paper 1 — Gaussian scattered-data benchmark
+# Gaussian scattered-data benchmark
 #
 # Usage (from package root after load_all / install):
 #   source("inst/benchmarks/benchmark_gaussian.R")

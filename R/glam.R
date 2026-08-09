@@ -1,4 +1,4 @@
-# Minimal GLAM helpers for Paper 1 fixed-λ grid benchmarks (not the main API).
+# Minimal GLAM helpers for fixed-λ grid benchmarks (not the main API).
 
 #' @keywords internal
 glam_H <- function(M, A) {
@@ -60,7 +60,7 @@ glam_gram_unweighted <- function(B_list) {
 
 #' Fixed-λ Gaussian GLAM on a d-way grid (Currie array methods).
 #'
-#' Exposed for Paper 1 compression benchmarks; scattered-data users should
+#' Exposed for compression benchmarks; scattered-data users should
 #' prefer [ttpspline()].
 #'
 #' @param Y d-way array.

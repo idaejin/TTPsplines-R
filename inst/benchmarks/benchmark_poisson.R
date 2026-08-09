@@ -1,4 +1,4 @@
-# Paper 1 — Poisson scattered-data benchmark
+# Poisson scattered-data benchmark
 # source("inst/benchmarks/benchmark_poisson.R")
 
 local({

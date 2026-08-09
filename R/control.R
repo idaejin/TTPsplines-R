@@ -2,7 +2,7 @@
 #'
 #' Separates algorithmic knobs from the model API. Optimizer-specific fields
 #' for L-BFGS / Adam are reserved; Adam/Keras is optional and not required
-#' for Paper 1 ALS + cGCV workflows.
+#' for the default ALS + cGCV workflows.
 #'
 #' @param max_sweeps Maximum ALS sweeps (Gaussian / inner GLM).
 #' @param pirls_maxit Maximum outer PIRLS iterations (GLM).
@@ -11,7 +11,7 @@
 #' @param lambda_start Initial λ used when `lambda = "cGCV"`.
 #' @param lambda_bounds Length-2 bounds for automatic λ search on log scale.
 #' @param lambda_tol Alias of `tol_lambda`.
-#' @param lambda_update Reserved (`"auto"`); Paper 2 may extend.
+#' @param lambda_update Reserved (`"auto"`); future releases may extend.
 #' @param backend `"auto"`, `"R"`, `"Rcpp"`, or `"keras"` (Adam only).
 #' @param sparse `"auto"`, `TRUE`, or `FALSE` (v0: dense bases; hybrid reserved).
 #' @param use_spectral_gcv Use spectral cache inside Brent cGCV when feasible.

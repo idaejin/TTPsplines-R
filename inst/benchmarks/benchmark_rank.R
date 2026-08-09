@@ -1,4 +1,4 @@
-# Paper 1 — rank profile diagnostic (tt_rank_profile)
+# Rank profile diagnostic (tt_rank_profile)
 # source("inst/benchmarks/benchmark_rank.R")
 
 local({

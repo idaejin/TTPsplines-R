@@ -1,10 +1,10 @@
-# Package Paper 1 implementation status
+# Package implementation status
 
 **Package:** `TTPsplines` (`01_PROJECTS/ttpsplines-pkg/`, GitHub `idaejin/TTPsplines-R`)  
 **Research lab (validation reference):** `01_PROJECTS/TTPsplines/`  
 **Last updated:** 2026-08-09
 
-## Complexity layers (DECISION for Paper 1 terminology)
+## Complexity layers (terminology)
 
 `tt_complexity()` reports **distinct** objects — never a single “complexity”:
 
@@ -16,11 +16,12 @@
 
 Reading: \(r\) = structural capacity; \(\lambda\) = smoothness; EDF = effective fit complexity.
 
+## Architecture
 
 Public API separates three decisions:
 
-| Axis | Argument | Paper 1 options |
-|------|----------|-----------------|
+| Axis | Argument | Options |
+|------|----------|---------|
 | Optimizer | `optimizer` | `ALS` (default), `LBFGS`, `Adam` (stub) |
 | Smoothing | `lambda` | scalar / length-`d` fixed, `"cGCV"` |
 | Backend | `backend` / `tt_control(backend=)` | `auto`, `R`, `Rcpp`, `keras` |
@@ -31,12 +32,12 @@ Internal λ dispatch:
 parse_lambda_spec(lambda, d, control)
   → list(method, values, automatic)
 update_lambda(method, workspace)
-  → fixed | cGCV   (cFS / cREML reserved for Paper 2)
+  → fixed | cGCV   (cFS / cREML not implemented yet)
 ```
 
 Same statistical model for all optimizers: non-additive TT P-spline surface on scattered \(X \in \mathbb{R}^{n\times d}\).
 
-## 2. Files touched / added (this pass)
+## Files touched / added
 
 | Path | Role |
 |------|------|
@@ -50,9 +51,9 @@ Same statistical model for all optimizers: non-additive TT P-spline surface on s
 | `R/ttpspline.R` | `optimizer` / `backend` / `init` dispatch |
 | `R/methods.R` | Summary shows optimizer / outer / λ evals |
 | `DESCRIPTION` / `NAMESPACE` | Collate + exports |
-| `tests/testthat/test-paper1-api.R` | λ / init / LBFGS / Adam stub tests |
+| `tests/testthat/test-api.R` | λ / init / LBFGS / Adam stub tests |
 
-## 3. Public API
+## Public API
 
 ```r
 ttpspline(y, X, family, rank, k, degree, penalty_order,
@@ -62,7 +63,7 @@ tt_has_keras(); tt_keras_status()
 # S3: print, summary, predict, fitted, residuals, coef, deviance, plot
 ```
 
-## 4–6. Family status
+## Family status
 
 | Family | Status | Notes |
 |--------|--------|-------|
@@ -70,23 +71,23 @@ tt_has_keras(); tt_keras_status()
 | Poisson | **Working (ALS/PIRLS)** | Fixed + cGCV; LBFGS NLL path available |
 | Bernoulli | **Working with caveats** | PIRLS damping; high-rank `|η|` can blow up |
 
-## 7–9. Optimizer status
+## Optimizer status
 
 | Optimizer | Status |
 |-----------|--------|
 | ALS | **Primary / default** — Gaussian + PIRLS GLM |
 | LBFGS | **Implemented (R)** — joint cores; outer cGCV alternation |
-| Adam/Keras | **Stub only** — clear error; no TF dependency; Gate 8 deferred |
+| Adam/Keras | **Stub only** — clear error; no TF hard dependency |
 
-## 10. cGCV status
+## cGCV status
 
 - Conditional GCV per core with Brent/`optimize()` on \(\eta=\log\lambda\)
 - Workspace caches `S`, `b`, `P`, weighted `Xw`/`yw`
-- Optional spectral cache (`use_spectral_gcv = TRUE`) — adopt only where beneficial
+- Optional spectral cache (`use_spectral_gcv = TRUE`)
 - ALS: update λ on each core visit; LBFGS/Adam: outer freeze-cores then conditional update
 - **Not** global GCV; **not** cFS/cREML
 
-## 11–12. Rcpp / sparse
+## Rcpp / sparse
 
 | Item | Status |
 |------|--------|
@@ -94,29 +95,30 @@ tt_has_keras(); tt_keras_status()
 | Sparse `Matrix` hybrid | Hook (`sparse=` in control); dense default in v0 |
 | Matrix-free \(X_k\) | Experimental / not default |
 
-## 13. Tests
+## Tests
 
-- Existing: gaussian fixed/cGCV, poisson, bernoulli, predict=fitted, Paper-2 λ reserved
-- New: λ expansion/validation, `tt_initialize` reproducibility, ALS vs LBFGS surface proximity, Adam stub message, anisotropic λ
+- Gaussian fixed/cGCV, poisson, bernoulli, predict=fitted, reserved λ methods
+- λ expansion/validation, `tt_initialize` reproducibility, ALS vs LBFGS surface proximity, Adam stub message, anisotropic λ
+- Complexity layers (storage / intrinsic / EDF)
 
-## 14. Benchmarks
+## Benchmarks
 
-Lab + `inst/benchmarks/` remain the reference. Paper-1 optimizer benchmarks (`benchmark_optimizers_*.R`) still to be fleshed under Gate 10; do not block ALS/cGCV correctness.
+Lab + `inst/benchmarks/` remain the reference. Optimizer comparison benchmarks still to be fleshed out; do not block ALS/cGCV correctness.
 
-## 15–16. Speedups / parity
+## Speedups / parity
 
-- Prefer end-to-end timings in `docs/COMPUTATIONAL_AUDIT.md` (lab) and future package audit notes
-- Numerical parity vs lab scripts: still validate before claiming bit-level match; compare **η / μ / objective**, never raw cores (gauge)
+- Prefer end-to-end timings in the research lab audit notes
+- Numerical parity vs lab scripts: compare **η / μ / objective**, never raw cores (gauge)
 
-## 17. Blockers / deferred
+## Blockers / deferred
 
-1. **Adam/Keras full implementation** — intentionally deferred until ALS + cGCV + Rcpp + GLM are solid  
+1. **Adam/Keras full implementation** — deferred until ALS + cGCV + Rcpp + GLM are solid  
 2. Joint EDF — **implemented** (linearized stacked Jacobian; skip via `edf_max_npar`)  
 3. Sparse / matrix-free backends — experimental  
 4. Automated lab↔package parity suite  
 5. Bernoulli stability at high rank  
 
-## 18. Explicitly Paper 2
+## Not implemented yet (reserved API hooks)
 
 - `lambda = "cFS"`, `"cREML"`
 - TT-cSOP, Schall, DMRG, Riemannian, MALS  
@@ -138,7 +140,7 @@ fit <- ttpspline(y, X, rank = 3, lambda = "cGCV")
 # L-BFGS + cGCV
 fit <- ttpspline(y, X, rank = 3, optimizer = "LBFGS", lambda = "cGCV")
 
-# Adam — errors with install/status guidance until Gate 8
+# Adam — errors with install/status guidance until implemented
 # fit <- ttpspline(y, X, rank = 3, optimizer = "Adam", lambda = "cGCV")
 
 # Fair optimizer comparison

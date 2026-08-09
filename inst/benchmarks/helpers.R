@@ -1,4 +1,4 @@
-# Shared helpers for TTPsplines Paper-1 benchmarks.
+# Shared helpers for TTPsplines benchmarks.
 # Sourced by benchmark_*.R — not run by R CMD check.
 
 .ttps_bench_pkg_root <- function() {

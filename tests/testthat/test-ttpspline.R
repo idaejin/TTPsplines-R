@@ -68,13 +68,13 @@ test_that("bernoulli probabilities in (0,1)", {
   expect_true(is.finite(fit$deviance))
 })
 
-test_that("Paper 2 lambda hooks are reserved", {
+test_that("unimplemented lambda methods are reserved", {
   set.seed(1)
   X <- matrix(runif(50 * 2), 50, 2)
   y <- rnorm(50)
   expect_error(
     ttpspline(y, X, rank = 1, k = 5, lambda = "cFS",
               control = tt_control(max_sweeps = 2, backend = "R")),
-    "Paper 2"
+    "not implemented"
   )
 })
