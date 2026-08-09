@@ -8,7 +8,8 @@
 - **Package** owns the fitting engine and unit tests.
 - **Lab consumes** the installed package for Paper-1 engine demos (`library(TTPsplines)` / `R/00_load_package.R`).
 - Lab retains Paper-2 prototypes (TT-cFS / cREML / SA-CAB / SOP) until they are ported here.
-- Lab `R/tt_pspline_nd.R`, `tt_glm_pirls.R`, `tt_cgcv.R`, `pspline_tt_complete.R`, and lab `src/` are **SUPERSEDED as the engine** (kept for history / Paper-2 scaffolding).
+- Lab `R/tt_pspline_nd.R`, `tt_glm_pirls.R`, … → `R/_archive_engine/` (historical; Paper-2 scaffolding)
+- Lab engine unit tests removed; package `tests/testthat/` is authoritative
 
 ## Done in v0 prototype
 

@@ -29,6 +29,29 @@ glam_linear_predictor <- function(Theta, B_list) {
   out
 }
 
+#' Predict GLAM mean at scattered locations (same knots as fit).
+#' @keywords internal
+#' @noRd
+.glam_predict_scattered <- function(Theta, intercept, knots, degree, Xnew) {
+  Xnew <- as.matrix(Xnew)
+  d <- ncol(Xnew)
+  stopifnot(length(knots) == d, length(dim(Theta)) == d)
+  B <- lapply(seq_len(d), function(j) {
+    bspline_basis(Xnew[, j], knots[[j]], degree = degree)
+  })
+  n <- nrow(Xnew)
+  coef <- as.numeric(Theta)
+  mu <- numeric(n)
+  for (i in seq_len(n)) {
+    v <- B[[1L]][i, ]
+    if (d >= 2L) {
+      for (j in 2:d) v <- kronecker(B[[j]][i, ], v)
+    }
+    mu[i] <- intercept + sum(v * coef)
+  }
+  mu
+}
+
 #' @keywords internal
 #' @noRd
 glam_Bt_y <- function(Y, B_list) {
@@ -345,134 +368,11 @@ simulate_glam_poisson <- function(n_age = 41L, n_year = 31L, seed = 44L) {
   if (d >= 5L) {
     f <- f + 0.2 * X[, 5] * sin(2 * pi * X[, 1])
   }
+  if (d >= 6L) {
+    f <- f + 0.15 * cos(2 * pi * X[, 6]) * (X[, 2] - 0.5)
+  }
+  if (d >= 7L) {
+    f <- f + 0.12 * sin(2 * pi * X[, 7]) * cos(2 * pi * X[, 3])
+  }
   as.numeric(f)
-}
-
-#' Compare Currie–Durbán–Eilers Gaussian GLAM vs TT-P-splines on a grid.
-#'
-#' Builds a regular `d`-way design, a non-additive truth, Gaussian noise, then
-#' fits fixed-\(\lambda\) GLAM (full coefficient array) and `ttpspline()` at
-#' several TT ranks. Reports parameter counts, compression, RMSE (truth / data /
-#' vs GLAM), and wall time.
-#'
-#' @param d Dimension (number of margins), typically 3 or 5.
-#' @param n_grid Grid size per margin (scalar or length-`d`). Defaults are
-#'   modest for vignettes (`d=3` → 14×12×10; `d=5` → \(6^5\)).
-#' @param k Basis size per margin.
-#' @param ranks Integer vector of TT ranks to try.
-#' @param lambda Fixed smoothing (scalar or length-`d`).
-#' @param sigma Gaussian noise sd.
-#' @param max_sweeps ALS sweeps for TT fits.
-#' @param seed RNG seed.
-#' @param backend TT backend (`"R"` / `"Rcpp"` / `"auto"`).
-#' @return A `data.frame` of comparison rows (one GLAM + one per rank).
-#' @export
-#' @examples
-#' tab3 <- compare_glam_tt_gaussian(d = 3, ranks = 1:3, max_sweeps = 6)
-#' tab3[, c("method", "npar", "compression", "rmse_truth", "time_s")]
-compare_glam_tt_gaussian <- function(d = 3L,
-                                     n_grid = NULL,
-                                     k = NULL,
-                                     ranks = 1:3,
-                                     lambda = 1,
-                                     sigma = 0.25,
-                                     max_sweeps = 10L,
-                                     seed = 51L,
-                                     backend = "R") {
-  d <- as.integer(d)
-  if (d < 2L) stop("`d` must be >= 2.", call. = FALSE)
-  if (is.null(n_grid)) {
-    n_grid <- if (d == 3L) {
-      c(14L, 12L, 10L)
-    } else if (d == 5L) {
-      rep(6L, 5L)
-    } else {
-      rep(max(6L, 12L - d), d)
-    }
-  }
-  n_grid <- rep(as.integer(n_grid), length.out = d)
-  if (is.null(k)) k <- if (d <= 3L) 6L else 5L
-  k <- as.integer(k)[1L]
-  ranks <- as.integer(ranks)
-  lambda <- rep(as.numeric(lambda), length.out = d)
-  set.seed(as.integer(seed))
-
-  axes <- lapply(n_grid, function(nk) seq(0, 1, length.out = nk))
-  names(axes) <- paste0("x", seq_len(d))
-  idx <- expand.grid(lapply(n_grid, seq_len), KEEP.OUT.ATTRS = FALSE)
-  X <- do.call(cbind, lapply(seq_len(d), function(j) axes[[j]][idx[[j]]]))
-  colnames(X) <- names(axes)
-  truth <- .grid_truth_surface(X)
-  Y_vec <- truth + stats::rnorm(length(truth), 0, sigma)
-  Y <- array(Y_vec, dim = n_grid)
-  n_cells <- length(Y_vec)
-  npar_dense <- as.integer(k)^d
-
-  bb <- glam_grid_bases(axes, k = k)
-  t0 <- proc.time()[["elapsed"]]
-  glam <- glam_fit_gaussian(Y, bb$B, lambda = lambda)
-  time_glam <- proc.time()[["elapsed"]] - t0
-  mu_glam <- as.numeric(glam$mu)
-
-  rmse <- function(a, b) sqrt(mean((as.numeric(a) - as.numeric(b))^2))
-  rows <- list(data.frame(
-    d = d,
-    method = "GLAM",
-    rank = NA_integer_,
-    n_cells = n_cells,
-    k = k,
-    npar = as.integer(glam$npar),
-    npar_dense = npar_dense,
-    compression = 1,
-    rmse_truth = rmse(mu_glam, truth),
-    rmse_y = rmse(mu_glam, Y_vec),
-    rmse_vs_glam = 0,
-    time_s = time_glam,
-    time_vs_glam = 1,
-    backend = "array",
-    optimizer = glam$method,
-    stringsAsFactors = FALSE
-  ))
-
-  ctrl <- tt_control(
-    max_sweeps = as.integer(max_sweeps),
-    backend = backend,
-    compute_edf = FALSE,
-    seed = as.integer(seed) + 7L
-  )
-  for (r in ranks) {
-    t1 <- proc.time()[["elapsed"]]
-    fit <- ttpspline(
-      Y_vec, X,
-      family = stats::gaussian(),
-      rank = r,
-      k = k,
-      lambda = lambda,
-      knots = bb$knots,
-      control = ctrl
-    )
-    elapsed <- proc.time()[["elapsed"]] - t1
-    mu_tt <- fitted(fit)
-    rows[[length(rows) + 1L]] <- data.frame(
-      d = d,
-      method = sprintf("TT-r%d", r),
-      rank = r,
-      n_cells = n_cells,
-      k = k,
-      npar = as.integer(fit$npar_tt),
-      npar_dense = as.integer(fit$npar_dense),
-      compression = fit$compression_ratio,
-      rmse_truth = rmse(mu_tt, truth),
-      rmse_y = rmse(mu_tt, Y_vec),
-      rmse_vs_glam = rmse(mu_tt, mu_glam),
-      time_s = elapsed,
-      time_vs_glam = elapsed / max(time_glam, 1e-12),
-      backend = fit$backend,
-      optimizer = fit$optimizer_used,
-      stringsAsFactors = FALSE
-    )
-  }
-  out <- do.call(rbind, rows)
-  rownames(out) <- NULL
-  out
 }

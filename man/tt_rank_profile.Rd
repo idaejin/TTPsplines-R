@@ -2,7 +2,7 @@
 % Please edit documentation in R/rank_profile.R
 \name{tt_rank_profile}
 \alias{tt_rank_profile}
-\title{Fit TT P-splines over a grid of ranks (rank diagnostic).}
+\title{Fit TT P-splines over a grid of ranks (in-sample rank diagnostic).}
 \usage{
 tt_rank_profile(
   y,
@@ -38,5 +38,10 @@ tt_rank_profile(
 Object of class \code{"tt_rank_profile"}.
 }
 \description{
-Fit TT P-splines over a grid of ranks (rank diagnostic).
+Sweeps ranks on the \strong{full} training sample and reports deviance /
+complexity. This is \strong{not} cross-validated predictive selection; for
+that use \code{\link[=tt_rank_select]{tt_rank_select()}}.
+}
+\seealso{
+\code{\link[=tt_rank_select]{tt_rank_select()}}
 }

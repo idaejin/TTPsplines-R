@@ -1,9 +1,14 @@
-#' Fit TT P-splines over a grid of ranks (rank diagnostic).
+#' Fit TT P-splines over a grid of ranks (in-sample rank diagnostic).
+#'
+#' Sweeps ranks on the **full** training sample and reports deviance /
+#' complexity. This is **not** cross-validated predictive selection; for
+#' that use [tt_rank_select()].
 #'
 #' @inheritParams ttpspline
 #' @param ranks Numeric vector of scalar ranks to try.
 #' @param ... Passed to [ttpspline()] (overrides `rank`).
 #' @return Object of class `"tt_rank_profile"`.
+#' @seealso [tt_rank_select()]
 #' @export
 tt_rank_profile <- function(y,
                             X,

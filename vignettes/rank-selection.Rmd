@@ -1,0 +1,120 @@
+---
+title: "Choosing the Tensor-Train rank"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Choosing the Tensor-Train rank}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+# Setup
+
+`ttpspline()` **never** chooses the TT rank for you: `rank = 2` means
+exactly rank 2. Predictive selection is a separate step:
+
+```{r}
+library(TTPsplines)
+data(friedman)
+# short subsample keeps the vignette install-time friendly
+idx <- seq_len(250)
+X <- as.matrix(friedman[idx, paste0("x", 1:5)])
+y <- friedman$y[idx]
+```
+
+# Three complexity layers
+
+| Symbol | Role |
+|--------|------|
+| \(r\) | **structural capacity** (TT rank) |
+| \(\lambda\) | **directional smoothness** |
+| EDF | **effective fitted flexibility** after penalization |
+
+\[
+\boxed{r \neq \lambda \neq \mathrm{EDF}}.
+\]
+
+Increasing \(r\) enlarges the TT manifold (more stored parameters, less
+compression). It can improve prediction, but gains are often marginal.
+Smoothing \(\lambda\) (fixed or cGCV) is a different knob.
+
+# Cross-validation + 1-SE
+
+`tt_rank_select()` uses a **single** K-fold split shared across candidate
+ranks, a family-aware validation loss (RMSE for Gaussian), then:
+
+- **minimum-CV** rank \(r_{\min}\);
+- **1-SE** rank: the *smallest* \(r\) whose mean CV error is within one
+  fold-SE of the minimum.
+
+The 1-SE rule selects the smallest candidate rank whose cross-validated
+error lies within one standard error of the minimum. This is a
+**parsimonious predictive choice**, not a formal test of a “true” tensor
+rank.
+
+```{r select}
+sel <- tt_rank_select(
+  y, X,
+  ranks = 1:4,
+  family = gaussian(),
+  k = 5,
+  lambda = 1,          # fixed λ for a fast vignette build
+  folds = 4,
+  rule = "1se",
+  seed = 1,
+  control = tt_control(max_sweeps = 5, compute_edf = FALSE)
+)
+sel
+```
+
+```{r plot, fig.width = 6, fig.height = 4}
+plot(sel)                 # CV error ± SE
+plot(sel, type = "tradeoff")
+```
+
+```{r refit}
+fit <- tt_rank_refit(sel)
+summary(fit)
+```
+
+# Optional: cGCV inside folds
+
+When `lambda = "cGCV"`, each fold selects \(\lambda\) **only on its
+training rows**, then scores the held-out fold. Validation data never
+enter cGCV.
+
+```{r cgcv, eval = FALSE}
+sel_cgcv <- tt_rank_select(
+  y, X, ranks = 1:4, k = 5, lambda = "cGCV",
+  folds = 4, rule = "1se", seed = 1,
+  control = tt_control(max_sweeps = 5, compute_edf = FALSE)
+)
+```
+
+# What this is not
+
+- Not a likelihood-ratio / bootstrap test of TT rank.
+- Not adaptive TT-SVD / greedy rank expansion.
+- Not oracle \(r\) from simulation truth (`RMSE` vs \(f_{\mathrm{true}}\)).
+
+Oracle ranks are useful **only** in simulation to audit CV; they are not
+part of the user API.
+
+# See also
+
+- `vignette("rank-compression", package = "TTPsplines")`
+- `vignette("getting-started", package = "TTPsplines")`
+- `tt_rank_profile()` — in-sample rank sweep (not CV)
+
+# References
+
+Hastie, T., Tibshirani, R. and Friedman, J. (2009).
+*The Elements of Statistical Learning* (1-SE rule context).
+Springer.
+
+Oseledets, I. V. (2011).
+Tensor-train decomposition.
+*SIAM Journal on Scientific Computing*, **33**, 2295–2317.

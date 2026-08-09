@@ -20,6 +20,8 @@
 #' @param family A [stats::family()] object or one of
 #'   `"gaussian"`, `"poisson"`, `"binomial"`.
 #' @param rank TT rank (scalar or length `d-1`); see [tt_rank()].
+#'   **Not** selected automatically — `rank = 2` means exactly rank 2.
+#'   For data-driven choice use [tt_rank_select()] then [tt_rank_refit()].
 #' @param k Number of B-spline basis functions per margin.
 #' @param degree B-spline degree.
 #' @param penalty_order Difference penalty order.

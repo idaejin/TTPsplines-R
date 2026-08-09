@@ -31,7 +31,9 @@ ttpspline(
 \item{family}{A \code{\link[stats:family]{stats::family()}} object or one of
 \code{"gaussian"}, \code{"poisson"}, \code{"binomial"}.}
 
-\item{rank}{TT rank (scalar or length \code{d-1}); see \code{\link[=tt_rank]{tt_rank()}}.}
+\item{rank}{TT rank (scalar or length \code{d-1}); see \code{\link[=tt_rank]{tt_rank()}}.
+\strong{Not} selected automatically — \code{rank = 2} means exactly rank 2.
+For data-driven choice use \code{\link[=tt_rank_select]{tt_rank_select()}} then \code{\link[=tt_rank_refit]{tt_rank_refit()}}.}
 
 \item{k}{Number of B-spline basis functions per margin.}
 

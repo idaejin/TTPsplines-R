@@ -198,6 +198,20 @@ On-the-fly redraws: `simulate_ishigami()`, `simulate_sobol_g()`,
 Vignette: `vignette("getting-started", package = "TTPsplines")`.
 Script: `Rscript inst/examples/example_test_functions.R`.
 
+## Choosing the TT rank (CV + 1-SE)
+
+`ttpspline(..., rank = r)` always uses that exact rank (no auto-selection).
+For predictive choice of \(r\):
+
+```r
+sel <- tt_rank_select(y, X, ranks = 1:5, lambda = 1, folds = 5, rule = "1se")
+sel
+plot(sel)
+fit <- tt_rank_refit(sel)   # full-data refit at selected_rank
+```
+
+Vignette: `vignette("rank-selection", package = "TTPsplines")`.
+
 ## GLAM Poisson (Currie–Durbán–Eilers)
 
 On a regular age × year grid with exposures (Currie, Durbán & Eilers, 2006):
@@ -212,7 +226,8 @@ fit <- glam_fit_poisson(
 ```
 
 Also: `glam_fit_gaussian()`, `simulate_glam_poisson()`,
-`compare_glam_tt_gaussian()` (Gaussian GLAM vs TT on \(d=3,5\) grids).
+`compare_glam_tt_gaussian()` / `compare_glam_tt_scale()` (Gaussian GLAM vs TT
+on \(d=3,5,7\) grids, including \(n\times k\) scale at \(d=7\)).
 Vignettes: `vignette("glam-poisson")`, `vignette("glam-gaussian")`.
 Scripts: `inst/examples/example_glam_poisson.R`,
 `inst/examples/example_glam_gaussian_vs_tt.R`.
@@ -222,7 +237,8 @@ Scripts: `inst/examples/example_glam_poisson.R`,
 | TT-ALS / PIRLS / global L-BFGS | TT-cFS, cREML |
 | Family-aware `auto` optimizer | rank-/λ-adaptive `auto` |
 | Gaussian / Poisson / Bernoulli | SA-CAB, SOP, DMRG |
-| `lambda` fixed / `"cGCV"` | automatic rank |
+| `lambda` fixed / `"cGCV"` | automatic rank inside `ttpspline()` |
+| `tt_rank_select()` + `tt_rank_refit()` | LRT / bootstrap rank tests |
 | Experimental: `GD`, `Damped-Newton-ALS`, `LBFGS-ALS` | mixed effects / TMB |
 | GLAM Gaussian + Poisson (fixed λ, d≤3) | higher-d GLAM / REML |
 

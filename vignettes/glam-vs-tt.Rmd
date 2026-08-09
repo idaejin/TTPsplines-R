@@ -1,0 +1,103 @@
+---
+title: "Full tensor vs Tensor-Train smoothing"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Full tensor vs Tensor-Train smoothing}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+# Motivation
+
+A tensor-product P-spline stores about \(k^d\) coefficients. The TT
+representation stores on the order of \(O(d k r^2)\) parameters for uniform
+interior ranks — a scaling statement, not an exact identity.
+
+\[
+\boxed{r \neq \lambda \neq \mathrm{EDF}}.
+\]
+
+Rank is **structural capacity**; \(\lambda\) is **smoothness**. Rank is
+**not** chosen inside `ttpspline()`:
+
+```r
+sel <- tt_rank_select(...)
+fit <- tt_rank_refit(sel)
+```
+
+# Timing: be honest with the referee
+
+Selecting \(r\) by \(K\)-fold CV costs many fits. The comparison therefore
+reports **separately**:
+
+| Column | Meaning |
+|--------|---------|
+| `fit_time` | Final model fit (rank known) |
+| `rank_selection_time` | Cost of `tt_rank_select()` |
+| `total_procedure_time` | `fit_time + rank_selection_time` |
+| `oracle_probe_time` | Simulation-only cost of probing all ranks (**not** in totals) |
+
+```{r}
+library(TTPsplines)
+```
+
+# Low-\(d\) reference (\(d=3\))
+
+GLAM is cheap; TT may add selection overhead but compresses.
+
+```{r d3}
+cmp3 <- compare_glam_tt_gaussian(
+  d = 3, n_grid = c(10, 10, 10), k = 6, ranks = 1:4,
+  lambda = 1, folds = 4, rank_rule = "both",
+  max_sweeps = 5, seed = 1, detail_ranks = TRUE, n_test = 800
+)
+print(cmp3)
+```
+
+```{r d3-plots, fig.width = 7, fig.height = 3.5}
+op <- par(mfrow = c(1, 2), mar = c(4, 4, 2, 1))
+plot(cmp3, type = "rmse_rank")
+plot(cmp3, type = "tradeoff")
+par(op)
+```
+
+# Higher-\(d\) case (\(d=5\))
+
+```{r d5}
+cmp5 <- compare_glam_tt_gaussian(
+  d = 5, n_grid = 6, k = 5, ranks = 1:4,
+  lambda = 1, folds = 4, max_sweeps = 5, seed = 1,
+  detail_ranks = TRUE, n_test = 1000
+)
+analyze_glam_tt_rank_select(cmp5)
+```
+
+# Oracle vs data-driven ranks
+
+| Method | Role |
+|--------|------|
+| `GLAM` | Full tensor reference |
+| `TT-oracle` | \(\arg\min_r\mathrm{RMSE}_{\mathrm{test}}(\hat f_r,f_{\mathrm{true}})\) — **simulation only** |
+| `TT-minCV` | Minimum CV on training folds |
+| `TT-1SE` | Parsimonious CV rule (recommended practical default) |
+
+Never choose rank using truth on real data.
+
+# Practical recommendation
+
+```r
+sel <- tt_rank_select(y, X, ranks = 1:5, lambda = 1, folds = 5, rule = "1se")
+fit <- tt_rank_refit(sel)
+```
+
+See also `vignette("rank-selection")` for the selection API alone.
+
+# References
+
+Currie, I. D., Durban, M. and Eilers, P. H. C. (2006). *JRSS-B*.
+
+Oseledets, I. V. (2011). *SIAM J. Sci. Comput.*

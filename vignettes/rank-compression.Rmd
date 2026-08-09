@@ -23,6 +23,7 @@ counts and EDF layers; `tt_rank_profile()` sweeps ranks at fixed \(\lambda\).
 
 # See also
 
+- `vignette("rank-selection", package = "TTPsplines")` — CV + 1-SE rank choice
 - `vignette("getting-started", package = "TTPsplines")`
 - `vignette("introduction", package = "TTPsplines")`
 
