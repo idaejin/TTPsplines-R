@@ -56,6 +56,8 @@ usage in *Generalized TTPsplines*, and Currie–Durbán–Eilers grid Poisson in
 
 - `vignette("getting-started", package = "TTPsplines")`
 - `vignette("generalized", package = "TTPsplines")`
+- `vignette("rank-selection", package = "TTPsplines")`
+- `vignette("glam-vs-tt", package = "TTPsplines")`
 - `vignette("glam-poisson", package = "TTPsplines")`
 - `vignette("rank-compression", package = "TTPsplines")`
 

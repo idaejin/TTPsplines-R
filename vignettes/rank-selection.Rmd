@@ -105,6 +105,7 @@ part of the user API.
 
 # See also
 
+- `vignette("glam-vs-tt", package = "TTPsplines")`
 - `vignette("rank-compression", package = "TTPsplines")`
 - `vignette("getting-started", package = "TTPsplines")`
 - `tt_rank_profile()` — in-sample rank sweep (not CV)

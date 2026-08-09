@@ -8,33 +8,58 @@ vignette: >
 ---
 
 ```{r, include = FALSE}
-knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
 
-Tensor-Train (TT) ranks control how many parameters are stored relative to the
-full \(p^d\) coefficient tensor. `tt_complexity(fit)` reports dense vs TT
-counts and EDF layers; `tt_rank_profile()` sweeps ranks at fixed \(\lambda\).
+# Complexity layers
+
+\[
+\boxed{r \neq \lambda \neq \mathrm{EDF}}.
+\]
+
+| Layer | Meaning |
+|-------|---------|
+| \(k^d\) | Full tensor-product coefficients |
+| TT stored | Entries in the cores (\(\approx O(dkr^2)\) for uniform interior ranks) |
+| TT intrinsic | Stored minus gauge redundancy |
+| EDF | Effective flexibility **after** P-spline penalization |
+
+`ttpspline(..., rank = r)` uses that **exact** rank. For predictive choice of
+\(r\), see `vignette("rank-selection")`.
 
 ```{r}
-# prof <- tt_rank_profile(y, X, ranks = c(1, 2, 3, 4), lambda = 1)
-# plot(prof)
-# tt_complexity(fit)
+library(TTPsplines)
+data(ishigami)
+X <- as.matrix(ishigami[, c("x1", "x2", "x3")])
+fit <- ttpspline(
+  ishigami$y, X, rank = 2, k = 8, lambda = 1,
+  control = tt_control(max_sweeps = 8, compute_edf = TRUE)
+)
+tt_complexity(fit)
+```
+
+# In-sample rank sweep (diagnostic)
+
+`tt_rank_profile()` refits on the **full** sample at each rank and reports
+deviance / `npar`. This is **not** cross-validation.
+
+```{r profile, fig.width = 6, fig.height = 3.5}
+prof <- tt_rank_profile(
+  ishigami$y, X, ranks = 1:4, k = 6, lambda = 1,
+  control = tt_control(max_sweeps = 6, compute_edf = FALSE)
+)
+print(prof)
+plot(prof)
 ```
 
 # See also
 
-- `vignette("rank-selection", package = "TTPsplines")` — CV + 1-SE rank choice
+- `vignette("rank-selection", package = "TTPsplines")` — CV + 1-SE
+- `vignette("glam-vs-tt", package = "TTPsplines")` — full tensor vs TT
 - `vignette("getting-started", package = "TTPsplines")`
-- `vignette("introduction", package = "TTPsplines")`
 
 # References
 
 Oseledets, I. V. (2011).
 Tensor-train decomposition.
 *SIAM Journal on Scientific Computing*, **33**, 2295–2317.
-<https://doi.org/10.1137/090752286>
-
-Eilers, P. H. C. and Marx, B. D. (1996).
-Flexible smoothing with \(B\)-splines and penalties.
-*Statistical Science*, **11**, 89–121.
-<https://doi.org/10.1214/ss/1038425655>

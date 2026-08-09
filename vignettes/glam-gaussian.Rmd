@@ -1,8 +1,8 @@
 ---
-title: "Gaussian GLAM vs TTPsplines (d = 3, 5, 7)"
+title: "Gaussian GLAM vs TT (quick start)"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Gaussian GLAM vs TTPsplines (d = 3, 5, 7)}
+  %\VignetteIndexEntry{Gaussian GLAM vs TT (quick start)}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -13,14 +13,13 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 
 # Setup
 
-Grid-based Currie–Durbán–Eilers **GLAM** vs **TT** with data-driven ranks
+Short demo of grid **GLAM** vs **TT** with data-driven ranks
 (`TT-minCV`, `TT-1SE`) and a simulation-only `TT-oracle`.
 
-**Timings are separated:** `fit_time` (final model) vs
-`rank_selection_time` (CV) vs `total_procedure_time` (sum). Oracle probe
-cost is **not** folded into practical totals.
+**Timings are separated:** `fit_time` | `rank_selection_time` |
+`total_procedure_time`. Oracle probe cost is **not** in practical totals.
 
-The full narrative lives in `vignette("glam-vs-tt")`.
+Full narrative (plots, \(d=5\), accuracy–compression): `vignette("glam-vs-tt")`.
 
 ```{r}
 library(TTPsplines)
@@ -32,8 +31,11 @@ print(cmp)
 summarize_glam_tt_compare(cmp)
 ```
 
-See also `vignette("glam-vs-tt")`, `vignette("rank-selection")`,
-`vignette("glam-poisson")`.
+# See also
+
+- `vignette("glam-vs-tt", package = "TTPsplines")`
+- `vignette("rank-selection", package = "TTPsplines")`
+- `vignette("glam-poisson", package = "TTPsplines")`
 
 # References
 

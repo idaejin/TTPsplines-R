@@ -162,9 +162,10 @@ fit <- ttpspline(dat$y, dat$X, rank = 3, k = 10, lambda = "cGCV")
 
 - `vignette("introduction", package = "TTPsplines")` — short overview
 - `vignette("generalized", package = "TTPsplines")` — Poisson / Bernoulli
+- `vignette("rank-selection", package = "TTPsplines")` — CV + 1-SE for \(r\)
+- `vignette("glam-vs-tt", package = "TTPsplines")` — full tensor vs TT
 - `vignette("glam-poisson", package = "TTPsplines")` — Currie–Durbán–Eilers Poisson
-- `vignette("glam-gaussian", package = "TTPsplines")` — GLAM vs TT (\(d=3,5\))
-- `vignette("rank-compression", package = "TTPsplines")` — ranks and EDF layers
+- `vignette("rank-compression", package = "TTPsplines")` — complexity layers
 
 # References
 

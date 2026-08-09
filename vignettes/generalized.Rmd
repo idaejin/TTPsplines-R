@@ -68,6 +68,7 @@ see `vignette("glam-poisson")` and `data(glam_poisson)`.
 # See also
 
 - `vignette("getting-started", package = "TTPsplines")`
+- `vignette("rank-selection", package = "TTPsplines")`
 - `vignette("glam-poisson", package = "TTPsplines")`
 - `vignette("introduction", package = "TTPsplines")`
 

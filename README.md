@@ -228,7 +228,8 @@ fit <- glam_fit_poisson(
 Also: `glam_fit_gaussian()`, `simulate_glam_poisson()`,
 `compare_glam_tt_gaussian()` / `compare_glam_tt_scale()` (Gaussian GLAM vs TT
 on \(d=3,5,7\) grids, including \(n\times k\) scale at \(d=7\)).
-Vignettes: `vignette("glam-poisson")`, `vignette("glam-gaussian")`.
+Vignettes: `vignette("glam-vs-tt")`, `vignette("glam-gaussian")`,
+`vignette("glam-poisson")`.
 Scripts: `inst/examples/example_glam_poisson.R`,
 `inst/examples/example_glam_gaussian_vs_tt.R`.
 
