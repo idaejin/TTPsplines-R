@@ -11,9 +11,29 @@ vignette: >
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
 ```
 
+Tensor-Train (TT) ranks control how many parameters are stored relative to the
+full \(p^d\) coefficient tensor. `tt_complexity(fit)` reports dense vs TT
+counts and EDF layers; `tt_rank_profile()` sweeps ranks at fixed \(\lambda\).
+
 ```{r}
 # prof <- tt_rank_profile(y, X, ranks = c(1, 2, 3, 4), lambda = 1)
 # plot(prof)
+# tt_complexity(fit)
 ```
 
-`tt_complexity(fit)` reports dense \(p^d\) vs TT parameter counts.
+# See also
+
+- `vignette("getting-started", package = "TTPsplines")`
+- `vignette("introduction", package = "TTPsplines")`
+
+# References
+
+Oseledets, I. V. (2011).
+Tensor-train decomposition.
+*SIAM Journal on Scientific Computing*, **33**, 2295–2317.
+<https://doi.org/10.1137/090752286>
+
+Eilers, P. H. C. and Marx, B. D. (1996).
+Flexible smoothing with \(B\)-splines and penalties.
+*Statistical Science*, **11**, 89–121.
+<https://doi.org/10.1214/ss/1038425655>

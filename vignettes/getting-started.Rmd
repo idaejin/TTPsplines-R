@@ -157,3 +157,40 @@ predict(fit_b, X_i[1:5, ], type = "response")
 dat <- simulate_ishigami(n = 2000, sigma = 0.1, seed = 99)
 fit <- ttpspline(dat$y, dat$X, rank = 3, k = 10, lambda = "cGCV")
 ```
+
+# See also
+
+- `vignette("introduction", package = "TTPsplines")` — short overview
+- `vignette("generalized", package = "TTPsplines")` — Poisson / Bernoulli
+- `vignette("glam-poisson", package = "TTPsplines")` — Currie GLAM on grids
+- `vignette("rank-compression", package = "TTPsplines")` — ranks and EDF layers
+
+# References
+
+Currie, I. D., Durban, M. and Eilers, P. H. C. (2006).
+Generalized linear array models with applications to multidimensional
+smoothing. *Journal of the Royal Statistical Society: Series B*, **68**,
+259–280. <https://doi.org/10.1111/j.1467-9868.2006.00543.x>
+
+Eilers, P. H. C. and Marx, B. D. (1996).
+Flexible smoothing with \(B\)-splines and penalties.
+*Statistical Science*, **11**, 89–121.
+<https://doi.org/10.1214/ss/1038425655>
+
+Friedman, J. H. (1991).
+Multivariate adaptive regression splines.
+*The Annals of Statistics*, **19**, 1–67.
+<https://doi.org/10.1214/aos/1176347963>
+
+Ishigami, T. and Homma, T. (1990).
+An importance quantification technique in uncertainty analysis for computer
+models. In *Proceedings of the ISUMA'90, First International Symposium on
+Uncertainty Modeling and Analysis*, 398–403. IEEE.
+
+Oseledets, I. V. (2011).
+Tensor-train decomposition.
+*SIAM Journal on Scientific Computing*, **33**, 2295–2317.
+<https://doi.org/10.1137/090752286>
+
+Saltelli, A., Chan, K. and Scott, E. M. (eds) (2000).
+*Sensitivity Analysis*. Wiley.

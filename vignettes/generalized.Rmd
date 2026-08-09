@@ -64,3 +64,29 @@ argument.
 For **regular arrays** (e.g. age × year counts with exposure), use
 `glam_fit_poisson()` instead of scattering the grid into `ttpspline()` —
 see `vignette("glam-poisson")` and `data(glam_poisson)`.
+
+# See also
+
+- `vignette("getting-started", package = "TTPsplines")`
+- `vignette("glam-poisson", package = "TTPsplines")`
+- `vignette("introduction", package = "TTPsplines")`
+
+# References
+
+Currie, I. D., Durban, M. and Eilers, P. H. C. (2006).
+Generalized linear array models with applications to multidimensional
+smoothing. *Journal of the Royal Statistical Society: Series B*, **68**,
+259–280. <https://doi.org/10.1111/j.1467-9868.2006.00543.x>
+
+Eilers, P. H. C. and Marx, B. D. (1996).
+Flexible smoothing with \(B\)-splines and penalties.
+*Statistical Science*, **11**, 89–121.
+<https://doi.org/10.1214/ss/1038425655>
+
+McCullagh, P. and Nelder, J. A. (1989).
+*Generalized Linear Models* (2nd ed.). Chapman & Hall/CRC.
+
+Oseledets, I. V. (2011).
+Tensor-train decomposition.
+*SIAM Journal on Scientific Computing*, **33**, 2295–2317.
+<https://doi.org/10.1137/090752286>
