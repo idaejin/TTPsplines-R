@@ -18,6 +18,7 @@ ttpspline(
   backend = c("auto", "R", "Rcpp", "keras"),
   init = NULL,
   control = tt_control(),
+  monitor = FALSE,
   knots = NULL
 )
 }
@@ -63,6 +64,9 @@ prefer setting backend here or in \code{\link[=tt_control]{tt_control()}}.}
 comparisons; \code{NULL} draws from \code{control$seed}.}
 
 \item{control}{A \code{\link[=tt_control]{tt_control()}} list.}
+
+\item{monitor}{If \code{TRUE}, print iteration progress (sets \code{control$trace}).
+Convenient alias of \code{tt_control(monitor = TRUE)} / \code{tt_control(trace = TRUE)}.}
 
 \item{knots}{Optional list of knot vectors (advanced).}
 }
@@ -111,5 +115,11 @@ fit_b <- ttpspline(yb, X, family = binomial(), rank = 2, k = 6, lambda = 5,
                    control = tt_control(lbfgs_maxit = 100, compute_edf = FALSE))
 fit_b$optimizer_used
 predict(fit_b, X[1:3, ], type = "response")
+
+## Watch iteration progress
+\dontrun{
+fit_m <- ttpspline(y, X, family = gaussian(), rank = 2, k = 6, lambda = 1,
+                   monitor = TRUE, control = tt_control(max_sweeps = 8))
+}
 
 }

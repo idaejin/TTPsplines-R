@@ -31,6 +31,7 @@ tt_control(
   adam_batch_size = NULL,
   adam_patience = 30,
   trace = FALSE,
+  monitor = NULL,
   damping = TRUE,
   pirls_step_halving = NULL,
   step_factor = 0.5,
@@ -100,7 +101,10 @@ tt_control(
 \item{adam_lr, adam_epochs, adam_batch_size, adam_patience}{Adam/Keras knobs
 (optional backend; \code{adam_batch_size = NULL} means full-batch).}
 
-\item{trace}{Print iteration progress.}
+\item{trace}{Print iteration progress (\code{TRUE}/\code{FALSE}). Alias of \code{monitor}.}
+
+\item{monitor}{Alias of \code{trace} — set \code{monitor = TRUE} to watch ALS / PIRLS /
+L-BFGS / GD sweeps. If both are supplied, either \code{TRUE} enables logging.}
 
 \item{damping}{Legacy alias: for Bernoulli, enables \code{pirls_step_halving}
 when \code{pirls_step_halving} is left at default.}

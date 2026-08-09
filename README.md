@@ -134,6 +134,19 @@ Fixed anisotropic λ: `lambda = c(1, 10, 0.5)`.
 Fit fields: `optimizer_requested`, `optimizer_used`, `optimizer_reason`
 (and `optimizer` ≡ `optimizer_used` for compatibility).
 
+### Monitor progress
+
+```r
+# either form enables the same iteration logs
+fit <- ttpspline(y, X, family = gaussian(), rank = 2, k = 8, lambda = 1,
+                 monitor = TRUE)
+fit <- ttpspline(y, X, family = gaussian(), rank = 2, k = 8, lambda = 1,
+                 control = tt_control(monitor = TRUE, max_sweeps = 12))
+# equivalent: tt_control(trace = TRUE)
+```
+
+With `monitor = TRUE` and `backend = "auto"`, the package uses the **R** path so ALS/PIRLS sweep lines are printed. Pass `backend = "Rcpp"` explicitly if you prefer the fast path without per-sweep logs.
+
 ## Current scope
 
 | In v0 | Not yet |

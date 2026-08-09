@@ -28,7 +28,9 @@
 #' @param gd_armijo_c Armijo sufficient-decrease constant (default 1e-4).
 #' @param adam_lr,adam_epochs,adam_batch_size,adam_patience Adam/Keras knobs
 #'   (optional backend; `adam_batch_size = NULL` means full-batch).
-#' @param trace Print iteration progress.
+#' @param trace Print iteration progress (`TRUE`/`FALSE`). Alias of `monitor`.
+#' @param monitor Alias of `trace` — set `monitor = TRUE` to watch ALS / PIRLS /
+#'   L-BFGS / GD sweeps. If both are supplied, either `TRUE` enables logging.
 #' @param damping Legacy alias: for Bernoulli, enables `pirls_step_halving`
 #'   when `pirls_step_halving` is left at default.
 #' @param pirls_step_halving Bernoulli outer line search on the true penalized
@@ -83,6 +85,7 @@ tt_control <- function(max_sweeps = 50,
                        adam_batch_size = NULL,
                        adam_patience = 30,
                        trace = FALSE,
+                       monitor = NULL,
                        damping = TRUE,
                        pirls_step_halving = NULL,
                        step_factor = 0.5,
@@ -113,6 +116,10 @@ tt_control <- function(max_sweeps = 50,
   }
   if (!is.null(lambda_tol)) tol_lambda <- lambda_tol
   if (is.null(pirls_step_halving)) pirls_step_halving <- isTRUE(damping)
+  # monitor is a user-facing alias of trace (either TRUE enables logging)
+  if (!is.null(monitor)) {
+    trace <- isTRUE(trace) || isTRUE(monitor)
+  }
   structure(
     list(
       max_sweeps = as.integer(max_sweeps),
@@ -140,6 +147,7 @@ tt_control <- function(max_sweeps = 50,
       adam_batch_size = if (is.null(adam_batch_size)) NULL else as.integer(adam_batch_size),
       adam_patience = as.integer(adam_patience),
       trace = isTRUE(trace),
+      monitor = isTRUE(trace),
       damping = isTRUE(damping),
       pirls_step_halving = isTRUE(pirls_step_halving),
       step_factor = as.numeric(step_factor),

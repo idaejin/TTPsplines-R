@@ -45,6 +45,8 @@
 #' @param init Optional TT cores from [tt_initialize()] for fair optimizer
 #'   comparisons; `NULL` draws from `control$seed`.
 #' @param control A [tt_control()] list.
+#' @param monitor If `TRUE`, print iteration progress (sets `control$trace`).
+#'   Convenient alias of `tt_control(monitor = TRUE)` / `tt_control(trace = TRUE)`.
 #' @param knots Optional list of knot vectors (advanced).
 #'
 #' @return An object of class `"ttpspline"`.
@@ -75,6 +77,12 @@
 #' fit_b$optimizer_used
 #' predict(fit_b, X[1:3, ], type = "response")
 #'
+#' ## Watch iteration progress
+#' \dontrun{
+#' fit_m <- ttpspline(y, X, family = gaussian(), rank = 2, k = 6, lambda = 1,
+#'                    monitor = TRUE, control = tt_control(max_sweeps = 8))
+#' }
+#'
 #' @export
 ttpspline <- function(y,
                       X,
@@ -90,6 +98,7 @@ ttpspline <- function(y,
                       backend = c("auto", "R", "Rcpp", "keras"),
                       init = NULL,
                       control = tt_control(),
+                      monitor = FALSE,
                       knots = NULL) {
   cl <- match.call()
   fam <- normalize_family(family)
@@ -112,6 +121,10 @@ ttpspline <- function(y,
   if (!inherits(control, "tt_control")) {
     control <- do.call(tt_control, as.list(control))
   }
+  if (isTRUE(monitor)) {
+    control$trace <- TRUE
+    control$monitor <- TRUE
+  }
   opt_res <- .resolve_optimizer(match.arg(optimizer), key)
   optimizer_requested <- opt_res$requested
   optimizer_used <- opt_res$used
@@ -124,9 +137,27 @@ ttpspline <- function(y,
   if (!identical(backend_arg, "auto")) {
     control$backend <- backend_arg
   }
+  # Detailed ALS/PIRLS logs live on the R path; with monitor + backend=auto,
+  # prefer R so iteration lines actually appear.
+  if (isTRUE(control$trace) && identical(backend_arg, "auto") &&
+      identical(control$backend, "auto") &&
+      optimizer %in% c("ALS", "Damped-Newton-ALS", "LBFGS-ALS", "GD", "hybrid")) {
+    control$backend <- "R"
+  }
   backend <- resolve_backend(control, optimizer = optimizer)
   ranks <- tt_rank(rank, d = d)
   lambda_spec <- parse_lambda_spec(lambda, d = d, control = control)
+  if (isTRUE(control$trace)) {
+    lam_lab <- if (identical(lambda_spec$method, "cGCV")) {
+      "cGCV"
+    } else {
+      paste(sprintf("%.3g", lambda_spec$values), collapse = ",")
+    }
+    cat(sprintf(
+      "TTPsplines | family=%s | optimizer=%s | backend=%s | lambda=%s\n",
+      fam$family, optimizer_used, backend, lam_lab
+    ))
+  }
 
   if (!is.null(init)) {
     if (!is.list(init) || length(init) != d) {
