@@ -1,0 +1,13 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+src/*.o
+src/*.so
+src/*.dll
+inst/doc
+Meta
+doc
+*.tar.gz
+.DS_Store
+inst/benchmarks/results/

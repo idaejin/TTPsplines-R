@@ -1,0 +1,58 @@
+Package: TTPsplines
+Title: Tensor-Train P-Splines for Multidimensional Smoothing and GLMs
+Version: 0.0.0.9000
+Authors@R: c(
+    person("Dae-Jin", "Lee", , "daejin.lee@ie.edu", role = c("aut", "cre"),
+           comment = c(ORCID = "0000-0002-9090-0475")),
+    person("Rafael", "Ballester-Ripoll", role = "ctb",
+           comment = "planned collaborator")
+  )
+Description: Tensor-Train (TT) compression of multidimensional P-spline
+    coefficient arrays for non-additive smooth regression on scattered
+    continuous covariates. Supports Gaussian, Poisson, and Bernoulli
+    responses via ALS / PIRLS, fixed anisotropic smoothing, and
+    conditional GCV (cGCV). Full-tensor / GLAM baselines are available
+    when feasible. Development version for the TTPsplines Paper 1
+    programme; the public API may still change.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Depends:
+    R (>= 4.1.0)
+Imports:
+    Rcpp (>= 1.0.0),
+    stats,
+    graphics,
+    utils,
+    splines
+Suggests:
+    Matrix,
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown
+LinkingTo:
+    Rcpp,
+    RcppArmadillo
+VignetteBuilder: knitr
+URL: https://github.com/idaejin/TTPsplines
+BugReports: https://github.com/idaejin/TTPsplines/issues
+Config/testthat/edition: 3
+Collate:
+    'TTPsplines-package.R'
+    'linalg.R'
+    'basis.R'
+    'penalties.R'
+    'rank.R'
+    'control.R'
+    'families.R'
+    'tt_geometry.R'
+    'lambda.R'
+    'als.R'
+    'pirls.R'
+    'ttpspline.R'
+    'complexity.R'
+    'methods.R'
+    'rank_profile.R'
+    'glam.R'
+    'RcppExports.R'

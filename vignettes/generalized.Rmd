@@ -1,0 +1,22 @@
+---
+title: "Generalized TTPsplines"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Generalized TTPsplines}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+Gaussian uses ALS; Poisson / Bernoulli use PIRLS + weighted TT-ALS.
+
+```{r}
+# ttpspline(y, X, family = poisson(),  rank = 3, lambda = 1)
+# ttpspline(y, X, family = binomial(), rank = 3, lambda = 1)
+```
+
+Automatic λ: `lambda = "cGCV"`. Paper 2 will add `"cFS"` / `"cREML"` via the
+same argument.

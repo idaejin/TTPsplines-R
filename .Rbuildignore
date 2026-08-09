@@ -1,0 +1,13 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^LICENSE\.md$
+^README\.Rmd$
+^\.github$
+^docs$
+^pkgdown$
+^\.venv$
+^vignettes/*\.html$
+^vignettes/*\.R$
+^cran-comments\.md$
+^Meta$
+^doc$

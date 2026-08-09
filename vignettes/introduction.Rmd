@@ -1,0 +1,32 @@
+---
+title: "Introduction to TTPsplines"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Introduction to TTPsplines}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+# Scattered data, tensor coefficients, TT compression
+
+`TTPsplines` models a **single non-additive** smooth
+
+\[
+g(\mathbb{E}[Y\mid x]) = f(x_1,\ldots,x_d)
+\]
+
+with a tensor-product P-spline whose coefficient array \(\Theta\) is stored in
+**Tensor-Train** format. Observations \(X\in\mathbb{R}^{n\times d}\) may be
+arbitrarily scattered — **no data grid** is required.
+
+```{r}
+library(TTPsplines)
+# fit <- ttpspline(y, X, family = gaussian(), rank = 3, k = 8, lambda = "cGCV")
+# tt_complexity(fit)
+```
+
+See the package README for a full example.

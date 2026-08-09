@@ -1,0 +1,19 @@
+---
+title: "Rank and compression"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Rank and compression}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+```{r}
+# prof <- tt_rank_profile(y, X, ranks = c(1, 2, 3, 4), lambda = 1)
+# plot(prof)
+```
+
+`tt_complexity(fit)` reports dense \(p^d\) vs TT parameter counts.
