@@ -11,3 +11,5 @@ doc
 *.tar.gz
 .DS_Store
 inst/benchmarks/results/
+vignettes/*.html
+vignettes/*.R
