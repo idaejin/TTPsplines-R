@@ -1,15 +1,19 @@
 #' GLM PIRLS + weighted TT-ALS (fixed or cGCV λ), R backend.
 #' @keywords internal
 tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
-                         penalty_order = 2) {
+                         penalty_order = 2, init_cores = NULL) {
   d <- length(basis)
   p <- ncol(basis[[1]])
   method <- lambda_spec$method
-  lambda <- lambda_spec$lambda0
+  lambda <- lambda_spec$values %||% lambda_spec$lambda0
   fam <- normalize_family(family)
   intercept <- init_intercept(fam, y)
-  cores <- initialize_tt_cores(p, ranks, seed = control$seed, sd = control$init_sd)
-  for (k in seq_len(d)) cores[[k]] <- cores[[k]] * 0.05
+  if (is.null(init_cores)) {
+    cores <- initialize_tt_cores(p, ranks, seed = control$seed, sd = control$init_sd)
+    for (k in seq_len(d)) cores[[k]] <- cores[[k]] * 0.05
+  } else {
+    cores <- init_cores
+  }
   penalties <- lapply(seq_len(d), function(k) {
     core_penalty(ranks[k], p, ranks[k + 1L], penalty_order)
   })
@@ -21,6 +25,7 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
   n_eval <- 0L
   t0 <- proc.time()[["elapsed"]]
   n_pirls <- 0L
+  use_spec <- isTRUE(control$use_spectral_gcv)
 
   for (it in seq_len(control$pirls_maxit)) {
     work <- glm_working(fam, y, eta)
@@ -35,7 +40,8 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
         Xk <- tt_design_core(L[[k]], R[[k]], basis[[k]])
         ws <- make_core_workspace(
           zc, Xk, penalties[[k]], lambda[k],
-          control$lambda_bounds, control$tol_lambda, weight = w
+          control$lambda_bounds, control$tol_lambda,
+          weight = w, use_spectral = use_spec
         )
         upd <- update_lambda(method, ws)
         cores[[k]] <- array(upd$g, c(ranks[k], p, ranks[k + 1L]))
@@ -53,11 +59,9 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
     # Soft deviance guard for Bernoulli
     if (isTRUE(control$damping) && identical(family_key(fam), "bernoulli") &&
         is.finite(dev) && is.finite(dev_cand) && dev_cand > dev * 1.25 && it > 1L) {
-      # reject extreme step: shrink cores toward previous eta via intercept-only keep
       if (control$trace) {
         cat(sprintf("  PIRLS %2d | damped (dev %.4g → %.4g)\n", it, dev, dev_cand))
       }
-      # keep previous; stop
       history <- rbind(history, data.frame(pirls = it, deviance = dev))
       n_pirls <- it
       break
@@ -96,6 +100,7 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
     elapsed = proc.time()[["elapsed"]] - t0,
     converged = is.finite(dev),
     method_lambda = method,
+    optimizer = "ALS",
     backend = "R"
   )
 }
@@ -103,14 +108,20 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
 #' GLM PIRLS via Rcpp when available.
 #' @keywords internal
 tt_pirls_fit_rcpp <- function(y, basis, family, ranks, lambda_spec, control,
-                              penalty_order = 2) {
+                              penalty_order = 2, init_cores = NULL) {
   key <- family_key(family)
   if (!exists("tt_glm_pirls_cgcv_cpp", mode = "function")) {
-    return(tt_pirls_fit(y, basis, family, ranks, lambda_spec, control, penalty_order))
+    return(tt_pirls_fit(y, basis, family, ranks, lambda_spec, control,
+                        penalty_order, init_cores = init_cores))
   }
   d <- length(basis)
   p <- ncol(basis[[1]])
-  cores <- initialize_tt_cores(p, ranks, seed = control$seed, sd = control$init_sd)
+  lambda0 <- lambda_spec$values %||% lambda_spec$lambda0
+  if (is.null(init_cores)) {
+    cores <- initialize_tt_cores(p, ranks, seed = control$seed, sd = control$init_sd)
+  } else {
+    cores <- init_cores
+  }
   penalties <- lapply(seq_len(d), function(k) {
     core_penalty(ranks[k], p, ranks[k + 1L], penalty_order)
   })
@@ -121,7 +132,7 @@ tt_pirls_fit_rcpp <- function(y, basis, family, ranks, lambda_spec, control,
     init_cores = cores,
     penalties_list = penalties,
     family = key,
-    lambda_init = lambda_spec$lambda0,
+    lambda_init = lambda0,
     pirls_iter = as.integer(control$pirls_maxit),
     als_sweeps = as.integer(control$als_sweeps_per_pirls),
     lambda_min = control$lambda_bounds[1],
@@ -149,6 +160,7 @@ tt_pirls_fit_rcpp <- function(y, basis, family, ranks, lambda_spec, control,
     elapsed = proc.time()[["elapsed"]] - t0,
     converged = is.finite(fit$deviance),
     method_lambda = lambda_spec$method,
+    optimizer = "ALS",
     backend = "Rcpp"
   )
 }

@@ -28,6 +28,7 @@ Imports:
     splines
 Suggests:
     Matrix,
+    reticulate,
     testthat (>= 3.0.0),
     knitr,
     rmarkdown
@@ -45,11 +46,15 @@ Collate:
     'penalties.R'
     'rank.R'
     'control.R'
+    'initialization.R'
     'families.R'
     'tt_geometry.R'
     'lambda.R'
+    'edf.R'
     'als.R'
     'pirls.R'
+    'optimizer_lbfgs.R'
+    'optimizer_adam.R'
     'ttpspline.R'
     'complexity.R'
     'methods.R'

@@ -3,9 +3,14 @@
 export(ttpspline)
 export(tt_control)
 export(tt_rank)
+export(tt_initialize)
 export(tt_complexity)
 export(tt_rank_profile)
+export(tt_has_keras)
+export(tt_keras_status)
 export(glam_fit_gaussian)
+
+S3method(print, tt_keras_status)
 
 S3method(print, ttpspline)
 S3method(summary, ttpspline)

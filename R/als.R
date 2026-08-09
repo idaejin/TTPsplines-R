@@ -1,13 +1,18 @@
 #' Gaussian TT-ALS with fixed or cGCV λ (R backend).
 #' @keywords internal
-tt_als_fit <- function(y, basis, ranks, lambda_spec, control, penalty_order = 2) {
+tt_als_fit <- function(y, basis, ranks, lambda_spec, control, penalty_order = 2,
+                       init_cores = NULL) {
   d <- length(basis)
   p <- ncol(basis[[1]])
   method <- lambda_spec$method
-  lambda <- lambda_spec$lambda0
+  lambda <- lambda_spec$values %||% lambda_spec$lambda0
   intercept <- mean(y)
   yc <- y - intercept
-  cores <- initialize_tt_cores(p, ranks, seed = control$seed, sd = control$init_sd)
+  if (is.null(init_cores)) {
+    cores <- initialize_tt_cores(p, ranks, seed = control$seed, sd = control$init_sd)
+  } else {
+    cores <- init_cores
+  }
   penalties <- lapply(seq_len(d), function(k) {
     core_penalty(ranks[k], p, ranks[k + 1L], penalty_order)
   })
@@ -17,6 +22,7 @@ tt_als_fit <- function(y, basis, ranks, lambda_spec, control, penalty_order = 2)
   history <- list()
   prev_lam <- lambda
   t0 <- proc.time()[["elapsed"]]
+  use_spec <- isTRUE(control$use_spectral_gcv)
 
   for (sw in seq_len(control$max_sweeps)) {
     for (k in seq_len(d)) {
@@ -25,7 +31,8 @@ tt_als_fit <- function(y, basis, ranks, lambda_spec, control, penalty_order = 2)
       Xk <- tt_design_core(L[[k]], R[[k]], basis[[k]])
       ws <- make_core_workspace(
         yc, Xk, penalties[[k]], lambda[k],
-        control$lambda_bounds, control$tol_lambda
+        control$lambda_bounds, control$tol_lambda,
+        use_spectral = use_spec
       )
       upd <- update_lambda(method, ws)
       cores[[k]] <- array(upd$g, c(ranks[k], p, ranks[k + 1L]))
@@ -66,16 +73,23 @@ tt_als_fit <- function(y, basis, ranks, lambda_spec, control, penalty_order = 2)
     penalties = penalties,
     elapsed = proc.time()[["elapsed"]] - t0,
     converged = TRUE,
-    method_lambda = method
+    method_lambda = method,
+    optimizer = "ALS"
   )
 }
 
 #' Try Rcpp Gaussian cGCV / fixed-λ path.
 #' @keywords internal
-tt_als_fit_rcpp <- function(y, basis, ranks, lambda_spec, control, penalty_order = 2) {
+tt_als_fit_rcpp <- function(y, basis, ranks, lambda_spec, control, penalty_order = 2,
+                            init_cores = NULL) {
   d <- length(basis)
   p <- ncol(basis[[1]])
-  cores <- initialize_tt_cores(p, ranks, seed = control$seed, sd = control$init_sd)
+  lambda0 <- lambda_spec$values %||% lambda_spec$lambda0
+  if (is.null(init_cores)) {
+    cores <- initialize_tt_cores(p, ranks, seed = control$seed, sd = control$init_sd)
+  } else {
+    cores <- init_cores
+  }
   penalties <- lapply(seq_len(d), function(k) {
     core_penalty(ranks[k], p, ranks[k + 1L], penalty_order)
   })
@@ -86,7 +100,7 @@ tt_als_fit_rcpp <- function(y, basis, ranks, lambda_spec, control, penalty_order
       basis_list = basis,
       init_cores = cores,
       penalties_list = penalties,
-      lambda_init = lambda_spec$lambda0,
+      lambda_init = lambda0,
       sweeps = as.integer(control$max_sweeps),
       lambda_min = control$lambda_bounds[1],
       lambda_max = control$lambda_bounds[2],
@@ -113,6 +127,7 @@ tt_als_fit_rcpp <- function(y, basis, ranks, lambda_spec, control, penalty_order
       elapsed = proc.time()[["elapsed"]] - t0,
       converged = TRUE,
       method_lambda = "cGCV",
+      optimizer = "ALS",
       backend = "Rcpp"
     ))
   }
@@ -121,7 +136,7 @@ tt_als_fit_rcpp <- function(y, basis, ranks, lambda_spec, control, penalty_order
       y = as.numeric(y),
       basis_list = basis,
       init_cores = cores,
-      lambda = lambda_spec$lambda0,
+      lambda = lambda0,
       penalties_list = penalties,
       sweeps = as.integer(control$max_sweeps),
       return_jacobian = FALSE
@@ -132,7 +147,7 @@ tt_als_fit_rcpp <- function(y, basis, ranks, lambda_spec, control, penalty_order
     return(list(
       cores = out_cores,
       intercept = fit$intercept,
-      lambda = lambda_spec$lambda0,
+      lambda = lambda0,
       ranks = ranks,
       eta = as.numeric(fit$mu),
       mu = as.numeric(fit$mu),
@@ -145,11 +160,13 @@ tt_als_fit_rcpp <- function(y, basis, ranks, lambda_spec, control, penalty_order
       elapsed = proc.time()[["elapsed"]] - t0,
       converged = TRUE,
       method_lambda = "fixed",
+      optimizer = "ALS",
       backend = "Rcpp"
     ))
   }
   # fallback
-  out <- tt_als_fit(y, basis, ranks, lambda_spec, control, penalty_order)
+  out <- tt_als_fit(y, basis, ranks, lambda_spec, control, penalty_order,
+                    init_cores = init_cores)
   out$backend <- "R"
   out
 }

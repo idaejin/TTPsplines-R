@@ -1,19 +1,34 @@
 # TTPsplines package — prototype status (Paper 1)
 
+**Canonical status report:** [`docs/PACKAGE_PAPER1_IMPLEMENTATION.md`](docs/PACKAGE_PAPER1_IMPLEMENTATION.md)
+
 **Folder:** `01_PROJECTS/ttpsplines-pkg/` (avoids macOS case-clash with lab `TTPsplines/`)  
 **Package name:** `TTPsplines`  
 **Version:** `0.0.0.9000`  
 **Lab (unchanged source of truth for sims):** `01_PROJECTS/TTPsplines/`
+
+## API axes (Paper 1)
+
+```text
+optimizer ∈ {ALS, LBFGS, Adam*}
+lambda    ∈ {scalar, length-d, "cGCV"}   # cFS/cREML → Paper 2
+backend   ∈ {auto, R, Rcpp, keras*}
+* Adam/keras = optional stub until Gate 8
+```
+
+Public entry: `ttpspline(..., optimizer=, backend=, init=)` plus `tt_initialize()`.
 
 ## 1. Files created (high level)
 
 ```text
 DESCRIPTION, NAMESPACE, LICENSE, README.md, PORTING.md
 R/  TTPsplines-package, linalg, basis, penalties, rank, control,
-    families, tt_geometry, lambda, als, pirls, ttpspline,
+    initialization, families, tt_geometry, lambda, als, pirls,
+    optimizer_lbfgs, optimizer_adam, ttpspline,
     complexity, methods, rank_profile, glam, RcppExports
 src/ tt_pspline_nd.cpp (+ Makevars, RcppExports.cpp)
-tests/testthat/test-ttpspline.R
+tests/testthat/test-ttpspline.R, test-paper1-api.R
+docs/PACKAGE_PAPER1_IMPLEMENTATION.md
 vignettes/ introduction, generalized, rank-compression
 inst/benchmarks/ *.R + python/benchmark_keras_tt.py (stubs)
 ```

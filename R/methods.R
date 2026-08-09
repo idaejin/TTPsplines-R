@@ -1,16 +1,26 @@
 #' @export
+#' @export
 print.ttpspline <- function(x, ...) {
   cat("Tensor-Train P-spline fit\n")
   cat(sprintf("  Family: %s (%s)\n", x$family$family, x$family$link))
   cat(sprintf("  n = %d, d = %d, k = %d\n", x$n, x$d, x$k))
-  cat(sprintf("  Rank chain: %s\n", paste(x$rank, collapse = "-")))
+  cat(sprintf("  TT rank: %s | chain: %s\n",
+              .tt_rank_label(x), paste(x$rank, collapse = "-")))
+  cat(sprintf("  Optimizer: %s | backend: %s\n",
+              x$optimizer %||% "ALS", x$backend))
   cat(sprintf("  Lambda (%s): %s\n",
               x$lambda_method,
               paste(sprintf("%.4g", x$lambda), collapse = ", ")))
-  cat(sprintf("  TT params: %d | dense: %d | compression: %.1fx\n",
-              x$npar_tt, x$npar_dense, x$compression_ratio))
-  cat(sprintf("  Deviance/RSS: %.6g | backend: %s | time: %.3fs\n",
-              x$deviance, x$backend, x$timing))
+  cat(sprintf("  TT stored: %s | full: %s | CR: %.1fx\n",
+              format(x$npar_tt, big.mark = ","),
+              format(x$npar_dense, big.mark = ","),
+              x$compression_ratio))
+  if (is.finite(x$edf)) {
+    cat(sprintf("  EDF: %.2f (!= N_TT; %.0f%% of stored params)\n",
+                x$edf, 100 * x$edf / max(x$npar_tt, 1)))
+  }
+  cat(sprintf("  Deviance/RSS: %.6g | time: %.3fs\n",
+              x$deviance, x$timing))
   invisible(x)
 }
 
@@ -29,27 +39,46 @@ print.summary.ttpspline <- function(x, ...) {
   cat(sprintf("Basis size k:           %d\n", x$k))
   cat(sprintf("Degree:                 %d\n", x$degree))
   cat(sprintf("Penalty order:          %d\n", x$penalty_order))
+  cat(sprintf("TT rank:                %s\n", .tt_rank_label(x)))
   cat(sprintf("Rank chain:             %s\n", paste(x$rank, collapse = "-")))
-  cat(sprintf("TT parameters:          %d\n", x$npar_tt))
-  cat(sprintf("Full tensor parameters: %d\n", x$npar_dense))
-  cat(sprintf("Compression ratio:      %.2f\n", x$compression_ratio))
+  cat(sprintf("Full tensor coeffs:     %s\n",
+              format(x$npar_dense, big.mark = ",", scientific = FALSE)))
+  cat(sprintf("TT stored parameters:   %s\n",
+              format(x$npar_tt, big.mark = ",", scientific = FALSE)))
+  if (!is.null(x$npar_tt_intrinsic) && is.finite(x$npar_tt_intrinsic)) {
+    cat(sprintf("TT intrinsic dimension: %s\n",
+                format(x$npar_tt_intrinsic, big.mark = ",", scientific = FALSE)))
+  }
+  cat(sprintf("Compression ratio:      %.2fx\n", x$compression_ratio))
   cat("\n")
+  cat(sprintf("Optimizer:              %s\n", x$optimizer %||% "ALS"))
+  cat(sprintf("Backend:                %s\n", x$backend))
   cat(sprintf("Lambda method:          %s\n", x$lambda_method))
   cat(sprintf("Lambda:                 %s\n",
               paste(sprintf("%.6g", x$lambda), collapse = ", ")))
   cat("\n")
   cat(sprintf("Deviance / RSS:         %.6g\n", x$deviance))
-  cat(sprintf("EDF:                    %s\n",
-              if (is.na(x$edf)) "NA (not computed in v0)" else sprintf("%.2f", x$edf)))
+  if (is.finite(x$edf)) {
+    cat(sprintf("EDF (joint linearized): %.2f\n", x$edf))
+    cat(sprintf("EDF / TT stored:        %.2f\n", x$edf / max(x$npar_tt, 1)))
+  } else {
+    note <- x$edf_note %||% "not computed"
+    cat(sprintf("EDF:                    NA (%s)\n", note))
+  }
   cat(sprintf("Converged:              %s\n", x$converged))
   cat(sprintf("ALS sweeps:             %s\n",
               if (is.na(x$n_sweeps)) "NA" else as.character(x$n_sweeps)))
   cat(sprintf("PIRLS iterations:       %s\n",
               if (is.na(x$n_pirls)) "NA" else as.character(x$n_pirls)))
-  cat(sprintf("Criterion evaluations:  %s\n",
+  cat(sprintf("Optimizer iterations:   %s\n",
+              if (is.null(x$n_opt_iter) || is.na(x$n_opt_iter)) "NA"
+              else as.character(x$n_opt_iter)))
+  cat(sprintf("Outer iterations:       %s\n",
+              if (is.null(x$n_outer) || is.na(x$n_outer)) "NA"
+              else as.character(x$n_outer)))
+  cat(sprintf("Lambda evaluations:     %s\n",
               if (is.null(x$n_criterion_evals)) "NA" else as.character(x$n_criterion_evals)))
-  cat(sprintf("Backend:                %s\n", x$backend))
-  cat(sprintf("Time (s):               %.4f\n", x$timing))
+  cat(sprintf("Wall time (s):          %.4f\n", x$timing))
   invisible(x)
 }
 
@@ -187,3 +216,17 @@ plot.ttpspline <- function(x,
         main = sprintf("TT slice (dims %d,%d)", dims[1], dims[2]), ...)
   invisible(x)
 }
+
+#' Human-readable TT rank label (uniform r, or anisotropic).
+#' @keywords internal
+.tt_rank_label <- function(x) {
+  ranks <- x$rank
+  if (is.null(ranks) || length(ranks) < 3L) return("?")
+  internal <- ranks[-c(1L, length(ranks))]
+  if (length(unique(internal)) == 1L) {
+    as.character(internal[1])
+  } else {
+    paste0("anisotropic (", paste(internal, collapse = "-"), ")")
+  }
+}
+
