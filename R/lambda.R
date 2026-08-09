@@ -81,7 +81,8 @@ update_lambda <- function(method, workspace, ...) {
 update_lambda_fixed <- function(workspace, ...) {
   lam <- workspace$lambda0
   g <- solve_spd_ridge(workspace$S + lam * workspace$P, workspace$b)
-  list(lambda = lam, g = g, value = NA_real_, ed = NA_real_, n_eval = 1L)
+  # n_eval counts smoothing-*criterion* evaluations (cGCV/cFS/…), not core solves
+  list(lambda = lam, g = g, value = NA_real_, ed = NA_real_, n_eval = 0L)
 }
 
 .ed_S <- function(S, P, lambda) {

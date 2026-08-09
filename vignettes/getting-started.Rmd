@@ -1,8 +1,8 @@
 ---
-title: "Classic test surfaces (Ishigami, Sobol-g, Friedman)"
+title: "Getting started with TTPsplines"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Classic test surfaces (Ishigami, Sobol-g, Friedman)}
+  %\VignetteIndexEntry{Getting started with TTPsplines}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -18,9 +18,9 @@ knitr::opts_chunk$set(
 
 # Why these datasets?
 
-`TTPsplines` targets **non-additive** multidimensional smoothing. Classic UQ
-response surfaces are convenient demos: known truth, strong interactions, and
-increasing dimension.
+`TTPsplines` targets **non-additive** multidimensional smoothing on scattered
+covariates. Classic UQ response surfaces are convenient demos: known truth,
+strong interactions, and increasing dimension.
 
 Packaged samples (each `n = 800`) load with the usual R idiom:
 

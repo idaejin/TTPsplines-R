@@ -107,8 +107,7 @@ print.summary.ttpspline <- function(x, ...) {
   cat(sprintf("Outer iterations:       %s\n",
               if (is.null(x$n_outer) || is.na(x$n_outer)) "NA"
               else as.character(x$n_outer)))
-  cat(sprintf("Lambda evaluations:     %s\n",
-              if (is.null(x$n_criterion_evals)) "NA" else as.character(x$n_criterion_evals)))
+  cat(sprintf("Criterion evaluations:  %s\n", .fmt_criterion_evals(x)))
   cat(sprintf("Wall time (s):          %.4f\n", x$timing))
   invisible(x)
 }
@@ -277,5 +276,23 @@ plot.ttpspline <- function(x,
     return(sprintf("NA (not used; %s)", opt))
   }
   "NA (not used)"
+}
+
+#' Format smoothing-criterion evaluation count for summary.
+#'
+#' With fixed λ there is no GCV/FS/REML search; ALS may still have counted
+#' one linear solve per core update in older builds. Never label those as
+#' "lambda evaluations".
+#'
+#' @keywords internal
+#' @noRd
+.fmt_criterion_evals <- function(x) {
+  meth <- x$lambda_method %||% "fixed"
+  if (identical(meth, "fixed")) {
+    return("NA (fixed lambda; not searched)")
+  }
+  n <- x$n_criterion_evals
+  if (is.null(n) || (length(n) == 1L && is.na(n))) return("NA")
+  as.character(as.integer(n))
 }
 

@@ -47,7 +47,7 @@ c(
 )
 ```
 
-Also available: `data(sobol_g)`, `data(friedman)`. See the vignette
-*Classic test surfaces* for Sobol-\(g\) and Friedman demos, Poisson /
-Bernoulli usage in *Generalized TTPsplines*, and Currie-style grid Poisson
-in *GLAM Poisson (Currie array methods)* (`data(glam_poisson)`).
+Also available: `data(sobol_g)`, `data(friedman)`. See *Getting started with
+TTPsplines* for Ishigami / Sobol-\(g\) / Friedman demos, Poisson / Bernoulli
+usage in *Generalized TTPsplines*, and Currie-style grid Poisson in
+*GLAM Poisson (Currie array methods)* (`data(glam_poisson)`).

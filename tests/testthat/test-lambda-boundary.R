@@ -71,3 +71,19 @@ test_that("summary marks optimizer iterations as cumulative when present", {
   out <- capture.output(summary(fit))
   expect_true(any(grepl("Optimizer iterations:.*cumulative", out)))
 })
+
+test_that("summary does not claim lambda evaluations under fixed λ", {
+  set.seed(3)
+  n <- 80
+  X <- matrix(runif(n * 2), n, 2)
+  y <- sin(2 * pi * X[, 1]) + rnorm(n, 0, 0.2)
+  fit <- ttpspline(
+    y, X, family = gaussian(), rank = 2, k = 5, lambda = 1,
+    control = tt_control(max_sweeps = 4L, backend = "R", compute_edf = FALSE)
+  )
+  expect_identical(fit$lambda_method, "fixed")
+  expect_equal(fit$n_criterion_evals, 0L)
+  out <- capture.output(summary(fit))
+  expect_false(any(grepl("^Lambda evaluations:", out)))
+  expect_true(any(grepl("Criterion evaluations:.*fixed lambda", out)))
+})

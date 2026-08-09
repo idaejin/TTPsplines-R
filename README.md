@@ -28,12 +28,12 @@ remotes::install_github("idaejin/TTPsplines-R", build_vignettes = TRUE)
 Then open with an explicit package (or `library(TTPsplines)` first):
 
 ```r
-vignette("test-surfaces", package = "TTPsplines")
+vignette("getting-started", package = "TTPsplines")
 browseVignettes("TTPsplines")
 ```
 
 `devtools::load_all()` does **not** install vignettes into the library, so
-`vignette("test-surfaces")` will still warn until you `install(..., build_vignettes = TRUE)`.
+`vignette("getting-started")` will still warn until you `install(..., build_vignettes = TRUE)`.
 
 Local (development folder `ttpsplines-pkg/`):
 
@@ -195,7 +195,7 @@ On-the-fly redraws: `simulate_ishigami()`, `simulate_sobol_g()`,
 `simulate_friedman()`. Truth helpers: `f_ishigami()`, `f_sobol_g()`,
 `f_friedman()`.
 
-Vignette: `vignette("test-surfaces", package = "TTPsplines")`.
+Vignette: `vignette("getting-started", package = "TTPsplines")`.
 Script: `Rscript inst/examples/example_test_functions.R`.
 
 ## GLAM Poisson (Currie array methods)
