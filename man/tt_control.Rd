@@ -51,7 +51,8 @@ tt_control(
   block_lbfgs_maxit = 50L,
   block_lbfgs_sweeps = 40L,
   compute_edf = TRUE,
-  edf_max_npar = 2500L
+  edf_max_npar = 2500L,
+  warn_lambda_boundary = TRUE
 )
 }
 \arguments{
@@ -151,6 +152,8 @@ used in both \code{W} and \code{z}.}
 Skipped automatically when packed TT size exceeds \code{edf_max_npar}.}
 
 \item{edf_max_npar}{Maximum packed TT parameters for joint EDF (memory guard).}
+
+\item{warn_lambda_boundary}{Soft warning when cGCV λ hits search bounds.}
 }
 \value{
 A list of class \code{"tt_control"}.

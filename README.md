@@ -147,6 +147,18 @@ fit <- ttpspline(y, X, family = gaussian(), rank = 2, k = 8, lambda = 1,
 
 With `monitor = TRUE` and `backend = "auto"`, the package uses the **R** path so ALS/PIRLS sweep lines are printed. Pass `backend = "Rcpp"` explicitly if you prefer the fast path without per-sweep logs.
 
+### cGCV λ near search bounds
+
+Default search interval is `lambda_bounds = c(1e-4, 1e4)`. If selected λ hug the edges, `summary(fit)` reports:
+
+```text
+Lambda:                 9922.5, 0.0431, 0.000100
+Lambda boundary:        upper, interior, lower
+Lambda search bounds:   [0.0001, 10000]
+```
+
+and (unless `warn_lambda_boundary = FALSE`) emits a soft warning. Fields: `fit$lambda_boundary`, `fit$lambda_bounds`, `fit$lambda_at_boundary`.
+
 ## Current scope
 
 | In v0 | Not yet |

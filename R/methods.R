@@ -69,6 +69,16 @@ print.summary.ttpspline <- function(x, ...) {
   cat(sprintf("Lambda method:          %s\n", x$lambda_method))
   cat(sprintf("Lambda:                 %s\n",
               paste(sprintf("%.6g", x$lambda), collapse = ", ")))
+  if (!is.null(x$lambda_boundary) && length(x$lambda_boundary) &&
+      (identical(x$lambda_method, "cGCV") || isTRUE(x$lambda_at_boundary))) {
+    cat(sprintf("Lambda boundary:        %s\n",
+                paste(x$lambda_boundary, collapse = ", ")))
+    if (!is.null(x$lambda_bounds) && length(x$lambda_bounds) == 2L) {
+      cat(sprintf("Lambda search bounds:   [%s, %s]\n",
+                  format(x$lambda_bounds[1], digits = 4),
+                  format(x$lambda_bounds[2], digits = 4)))
+    }
+  }
   cat("\n")
   cat(sprintf("Deviance / RSS:         %.6g\n", x$deviance))
   if (is.finite(x$edf)) {
@@ -89,8 +99,11 @@ print.summary.ttpspline <- function(x, ...) {
               if (is.na(x$n_sweeps)) "NA" else as.character(x$n_sweeps)))
   cat(sprintf("PIRLS iterations:       %s\n", .fmt_pirls_iters(x)))
   cat(sprintf("Optimizer iterations:   %s\n",
-              if (is.null(x$n_opt_iter) || is.na(x$n_opt_iter)) "NA"
-              else as.character(x$n_opt_iter)))
+              if (is.null(x$n_opt_iter) || is.na(x$n_opt_iter)) {
+                "NA"
+              } else {
+                sprintf("%s (cumulative)", as.character(x$n_opt_iter))
+              }))
   cat(sprintf("Outer iterations:       %s\n",
               if (is.null(x$n_outer) || is.na(x$n_outer)) "NA"
               else as.character(x$n_outer)))

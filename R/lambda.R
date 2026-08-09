@@ -201,3 +201,59 @@ make_core_workspace <- function(zc, X, P, lambda0, bounds, tol,
     use_spectral = isTRUE(use_spectral)
   )
 }
+
+#' Classify each λ relative to cGCV search bounds.
+#'
+#' Labels: `"lower"`, `"upper"`, `"interior"` (or `"NA"` if non-finite).
+#' Nearness is judged on a multiplicative / log scale (default 2%).
+#'
+#' @param lambda Numeric vector of smoothing parameters.
+#' @param bounds Length-2 `c(lambda_min, lambda_max)`.
+#' @param rel Relative tolerance (e.g. `0.02` ⇒ within 2% of a bound).
+#' @return Character vector of labels, same length as `lambda`.
+#' @keywords internal
+#' @noRd
+.lambda_boundary_status <- function(lambda, bounds, rel = 0.02) {
+  lambda <- as.numeric(lambda)
+  bounds <- as.numeric(bounds)
+  if (length(bounds) != 2L || any(!is.finite(bounds)) || bounds[1] <= 0 ||
+      bounds[2] <= bounds[1]) {
+    return(rep(NA_character_, length(lambda)))
+  }
+  lo <- bounds[1]
+  hi <- bounds[2]
+  log_tol <- abs(log1p(rel))
+  vapply(lambda, function(l) {
+    if (!is.finite(l) || l <= 0) return(NA_character_)
+    if (abs(log(l) - log(lo)) <= log_tol || l <= lo * (1 + rel)) return("lower")
+    if (abs(log(l) - log(hi)) <= log_tol || l >= hi / (1 + rel)) return("upper")
+    "interior"
+  }, character(1))
+}
+
+#' Attach λ-boundary diagnostics and optionally warn.
+#' @keywords internal
+#' @noRd
+.tt_lambda_boundary_info <- function(lambda, method, control) {
+  bounds <- control$lambda_bounds %||% c(1e-4, 1e4)
+  status <- .lambda_boundary_status(lambda, bounds)
+  at_bound <- isTRUE(identical(method, "cGCV")) &&
+    any(status %in% c("lower", "upper"), na.rm = TRUE)
+  if (at_bound && isTRUE(control$warn_lambda_boundary %||% TRUE)) {
+    idx <- which(status %in% c("lower", "upper"))
+    parts <- sprintf("lambda[%d]->%s (%.6g)", idx, status[idx], lambda[idx])
+    warning(
+      "Note: ", paste(parts, collapse = "; "),
+      " near the cGCV search boundaries [",
+      format(bounds[1], digits = 4), ", ", format(bounds[2], digits = 4), "]. ",
+      "Interpret directional λ cautiously; consider widening lambda_bounds ",
+      "or inspecting the surface.",
+      call. = FALSE
+    )
+  }
+  list(
+    lambda_bounds = as.numeric(bounds),
+    lambda_boundary = status,
+    lambda_at_boundary = isTRUE(at_bound)
+  )
+}

@@ -57,6 +57,7 @@
 #' @param compute_edf Compute joint linearized EDF after fit (`TRUE`/`FALSE`).
 #'   Skipped automatically when packed TT size exceeds `edf_max_npar`.
 #' @param edf_max_npar Maximum packed TT parameters for joint EDF (memory guard).
+#' @param warn_lambda_boundary Soft warning when cGCV λ hits search bounds.
 #' @return A list of class `"tt_control"`.
 #' @export
 tt_control <- function(max_sweeps = 50,
@@ -105,7 +106,8 @@ tt_control <- function(max_sweeps = 50,
                        block_lbfgs_maxit = 50L,
                        block_lbfgs_sweeps = 40L,
                        compute_edf = TRUE,
-                       edf_max_npar = 2500L) {
+                       edf_max_npar = 2500L,
+                       warn_lambda_boundary = TRUE) {
   backend <- match.arg(backend)
   if (is.character(sparse) && length(sparse) == 1L) {
     sparse <- match.arg(sparse, c("auto", "TRUE", "FALSE", "true", "false"))
@@ -167,7 +169,8 @@ tt_control <- function(max_sweeps = 50,
       block_lbfgs_maxit = as.integer(block_lbfgs_maxit),
       block_lbfgs_sweeps = as.integer(block_lbfgs_sweeps),
       compute_edf = isTRUE(compute_edf),
-      edf_max_npar = as.integer(edf_max_npar)
+      edf_max_npar = as.integer(edf_max_npar),
+      warn_lambda_boundary = isTRUE(warn_lambda_boundary)
     ),
     class = "tt_control"
   )

@@ -220,6 +220,10 @@ ttpspline <- function(y,
     edf_note <- "disabled (control$compute_edf = FALSE)"
   }
 
+  lam_info <- .tt_lambda_boundary_info(
+    as.numeric(raw$lambda), raw$method_lambda, control
+  )
+
   structure(
     list(
       call = cl,
@@ -238,6 +242,9 @@ ttpspline <- function(y,
       rank_max = max(ranks),
       lambda = as.numeric(raw$lambda),
       lambda_method = raw$method_lambda,
+      lambda_bounds = lam_info$lambda_bounds,
+      lambda_boundary = lam_info$lambda_boundary,
+      lambda_at_boundary = lam_info$lambda_at_boundary,
       intercept = raw$intercept,
       fitted.values = raw$mu,
       linear.predictors = raw$eta,
