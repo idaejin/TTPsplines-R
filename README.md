@@ -16,6 +16,25 @@ pak::pak("idaejin/TTPsplines-R")
 # or: remotes::install_github("idaejin/TTPsplines-R")
 ```
 
+To register vignettes in the installed library (needed for `vignette(...)`):
+
+```r
+# from a clone of this repo:
+devtools::install(build_vignettes = TRUE)
+# or from GitHub:
+remotes::install_github("idaejin/TTPsplines-R", build_vignettes = TRUE)
+```
+
+Then open with an explicit package (or `library(TTPsplines)` first):
+
+```r
+vignette("test-surfaces", package = "TTPsplines")
+browseVignettes("TTPsplines")
+```
+
+`devtools::load_all()` does **not** install vignettes into the library, so
+`vignette("test-surfaces")` will still warn until you `install(..., build_vignettes = TRUE)`.
+
 Local (development folder `ttpsplines-pkg/`):
 
 ```r
