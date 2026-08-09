@@ -49,8 +49,8 @@ c(
 
 Also available: `data(sobol_g)`, `data(friedman)`. See *Getting started with
 TTPsplines* for Ishigami / Sobol-\(g\) / Friedman demos, Poisson / Bernoulli
-usage in *Generalized TTPsplines*, and Currie-style grid Poisson in
-*GLAM Poisson (Currie array methods)* (`data(glam_poisson)`).
+usage in *Generalized TTPsplines*, and Currie–Durbán–Eilers grid Poisson in
+*GLAM Poisson (Currie–Durbán–Eilers)* (`data(glam_poisson)`).
 
 # See also
 

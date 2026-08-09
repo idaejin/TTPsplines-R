@@ -2,7 +2,7 @@
 % Please edit documentation in R/glam.R
 \name{glam_fit_gaussian}
 \alias{glam_fit_gaussian}
-\title{Fixed-λ Gaussian GLAM on a d-way grid (Currie array methods).}
+\title{Fixed-λ Gaussian GLAM on a d-way grid (Currie–Durbán–Eilers).}
 \usage{
 glam_fit_gaussian(Y, B_list, lambda = 1, penalty_order = 2L)
 }

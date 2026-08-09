@@ -1,8 +1,8 @@
 ---
-title: "GLAM Poisson (Currie array methods)"
+title: "GLAM Poisson (Currie–Durbán–Eilers)"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{GLAM Poisson (Currie array methods)}
+  %\VignetteIndexEntry{GLAM Poisson (Currie–Durbán–Eilers)}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -14,12 +14,14 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 # Grid arrays vs scattered TT
 
 `ttpspline()` targets **scattered** covariates with a Tensor-Train coefficient
-array. When responses live on a **regular multiway grid**, Currie–Durbán–Eilers
-**GLAM** (generalized linear array models) evaluate the same tensor-product
-P-spline without forming the Kronecker design, via rotated-\(H\) algebra.
+array. When responses live on a **regular multiway grid**, the
+**Currie–Durbán–Eilers** GLAM framework (generalized linear array models)
+evaluates the same tensor-product P-spline without forming the Kronecker
+design, via rotated-\(H\) algebra.
 
 This vignette shows fixed-\(\lambda\) **Poisson** GLAM with an exposure offset
-— the classical age × year mortality-style setting.
+— the classical age × year mortality-style setting of Currie, Durbán and
+Eilers (2006).
 
 ```{r}
 library(TTPsplines)

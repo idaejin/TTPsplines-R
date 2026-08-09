@@ -2,7 +2,7 @@
 % Please edit documentation in R/glam.R
 \name{simulate_glam_poisson}
 \alias{simulate_glam_poisson}
-\title{Simulate a Currie-style Poisson age × year array.}
+\title{Simulate a Currie–Durbán–Eilers-style Poisson age × year array.}
 \usage{
 simulate_glam_poisson(n_age = 41L, n_year = 31L, seed = 44L)
 }

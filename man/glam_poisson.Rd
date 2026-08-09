@@ -3,7 +3,7 @@
 \docType{data}
 \name{glam_poisson}
 \alias{glam_poisson}
-\title{Currie-style Poisson age × year array}
+\title{Currie–Durbán–Eilers Poisson age × year array}
 \format{
 A list with components:
 \describe{
@@ -19,7 +19,7 @@ glam_poisson
 \description{
 Simulated mortality-style counts on a regular age–period grid with known
 smooth log-rate and exposures. Intended for \code{\link[=glam_fit_poisson]{glam_fit_poisson()}} demos
-(GLAM / Currie et al. array methods).
+(Currie–Durbán–Eilers GLAM array methods).
 }
 \examples{
 data(glam_poisson)

@@ -1,4 +1,4 @@
-# Minimal GLAM helpers for fixed-λ grid benchmarks (Currie array methods).
+# Minimal GLAM helpers for fixed-λ grid benchmarks (Currie–Durbán–Eilers).
 # Scattered-data users should prefer [ttpspline()].
 
 #' @keywords internal
@@ -147,7 +147,7 @@ glam_grid_bases <- function(axes, k = 10, degree = 3L) {
   list(B = B, knots = knots, axes = axes, p = k, degree = degree)
 }
 
-#' Fixed-λ Gaussian GLAM on a d-way grid (Currie array methods).
+#' Fixed-λ Gaussian GLAM on a d-way grid (Currie–Durbán–Eilers).
 #'
 #' Exposed for compression benchmarks; scattered-data users should
 #' prefer [ttpspline()].
@@ -178,11 +178,12 @@ glam_fit_gaussian <- function(Y, B_list, lambda = 1, penalty_order = 2L) {
   )
 }
 
-#' Fixed-λ Poisson GLAM on a grid (Currie et al. array PIRLS).
+#' Fixed-λ Poisson GLAM on a grid (Currie–Durbán–Eilers PIRLS).
 #'
 #' Fits a Poisson log-linear P-spline on a regular multiway array using
 #' GLAM / rotated-H algebra (no explicit Kronecker design). Supports an
 #' optional exposure/`offset` array (e.g. mortality person-years).
+#' Method of Currie, Durbán and Eilers (2006).
 #'
 #' @param Y d-way count array.
 #' @param B_list Marginal bases (`n_k × p_k`), e.g. from [glam_grid_bases()].
@@ -286,7 +287,7 @@ glam_fit_poisson <- function(Y, B_list, lambda = 1, offset = NULL,
   )
 }
 
-#' Simulate a Currie-style Poisson age × year array.
+#' Simulate a Currie–Durbán–Eilers-style Poisson age × year array.
 #'
 #' Builds a smooth log-rate surface on an age–period grid, applies exposures,
 #' and draws Poisson counts — the classical GLAM mortality-style demo setting.

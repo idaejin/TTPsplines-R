@@ -162,7 +162,7 @@ fit <- ttpspline(dat$y, dat$X, rank = 3, k = 10, lambda = "cGCV")
 
 - `vignette("introduction", package = "TTPsplines")` — short overview
 - `vignette("generalized", package = "TTPsplines")` — Poisson / Bernoulli
-- `vignette("glam-poisson", package = "TTPsplines")` — Currie GLAM on grids
+- `vignette("glam-poisson", package = "TTPsplines")` — Currie–Durbán–Eilers GLAM
 - `vignette("rank-compression", package = "TTPsplines")` — ranks and EDF layers
 
 # References

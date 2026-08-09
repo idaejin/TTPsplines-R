@@ -2,7 +2,7 @@
 % Please edit documentation in R/glam.R
 \name{glam_fit_poisson}
 \alias{glam_fit_poisson}
-\title{Fixed-λ Poisson GLAM on a grid (Currie et al. array PIRLS).}
+\title{Fixed-λ Poisson GLAM on a grid (Currie–Durbán–Eilers PIRLS).}
 \usage{
 glam_fit_poisson(
   Y,
@@ -40,6 +40,7 @@ A list with \code{Theta}, \code{intercept}, \code{eta}, \code{mu}, \code{devianc
 Fits a Poisson log-linear P-spline on a regular multiway array using
 GLAM / rotated-H algebra (no explicit Kronecker design). Supports an
 optional exposure/\code{offset} array (e.g. mortality person-years).
+Method of Currie, Durbán and Eilers (2006).
 }
 \examples{
 data(glam_poisson)

@@ -198,9 +198,9 @@ On-the-fly redraws: `simulate_ishigami()`, `simulate_sobol_g()`,
 Vignette: `vignette("getting-started", package = "TTPsplines")`.
 Script: `Rscript inst/examples/example_test_functions.R`.
 
-## GLAM Poisson (Currie array methods)
+## GLAM Poisson (Currie–Durbán–Eilers)
 
-On a regular age × year grid with exposures:
+On a regular age × year grid with exposures (Currie, Durbán & Eilers, 2006):
 
 ```r
 data(glam_poisson)
