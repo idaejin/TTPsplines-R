@@ -23,4 +23,15 @@ test_that("tt_complexity on a fit attaches EDF without confusing it with N_TT", 
   expect_equal(cx$n_tt_intrinsic, fit$npar_tt_intrinsic)
   expect_true(is.finite(cx$edf))
   expect_false(isTRUE(all.equal(cx$edf, cx$n_tt_stored)))
+
+  out_cx <- capture.output(print(cx))
+  expect_true(any(grepl("Interpretation:", out_cx, fixed = TRUE)))
+  expect_true(any(grepl("rank\\s*=\\s*structural capacity", out_cx)))
+  expect_true(any(grepl("EDF / stored parameters", out_cx, fixed = TRUE)))
+  expect_true(any(grepl("EDF / intrinsic TT dim", out_cx, fixed = TRUE)))
+
+  out_sum <- capture.output(summary(fit))
+  expect_true(any(grepl("EDF / stored parameters", out_sum, fixed = TRUE)))
+  expect_true(any(grepl("EDF / intrinsic TT dim", out_sum, fixed = TRUE)))
+  expect_false(any(grepl("EDF / TT stored", out_sum, fixed = TRUE)))
 })

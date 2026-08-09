@@ -100,7 +100,7 @@ tt_gauge_dim <- function(ranks) {
 #' @export
 print.tt_complexity <- function(x, ...) {
   cat("TTPsplines complexity layers\n")
-  cat("(storage != TT intrinsic dimension != EDF)\n\n")
+  cat("(storage != intrinsic TT dimension != EDF)\n\n")
 
   cat("--- Geometry ---\n")
   cat(sprintf("  d:                         %d\n", x$d))
@@ -130,16 +130,22 @@ print.tt_complexity <- function(x, ...) {
               format(x$n_gauge, big.mark = ",", scientific = FALSE)))
   cat(sprintf("  TT intrinsic dimension:    %s\n",
               format(x$n_tt_intrinsic, big.mark = ",", scientific = FALSE)))
-  cat("  (dim M_r = N_TT - sum_{k=1}^{d-1} r_k^2)\n")
+  cat("  (intrinsic = stored parameters - gauge redundancy)\n")
 
   cat("\n--- 3. Statistical effective complexity ---\n")
   if (is.finite(x$edf)) {
     cat(sprintf("  Joint EDF:                 %.2f\n", x$edf))
-    cat(sprintf("  EDF / N_TT (stored):       %.2f\n", x$edf / max(x$n_tt_stored, 1)))
-    cat(sprintf("  EDF / dim(M_r):            %.2f\n", x$edf / max(x$n_tt_intrinsic, 1)))
+    cat(sprintf("  EDF / stored parameters:   %.2f\n",
+                x$edf / max(x$n_tt_stored, 1)))
+    cat(sprintf("  EDF / intrinsic TT dim.:   %.2f\n",
+                x$edf / max(x$n_tt_intrinsic, 1)))
   } else {
     cat("  Joint EDF:                 NA (fit with compute_edf=TRUE, or pass edf=)\n")
   }
-  cat("\n  Note: r = structural capacity; lambda = smoothness; EDF != N_TT.\n")
+
+  cat("\nInterpretation:\n")
+  cat("  rank   = structural capacity\n")
+  cat("  lambda = directional smoothness\n")
+  cat("  EDF    = effective fitted flexibility\n")
   invisible(x)
 }

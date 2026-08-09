@@ -22,7 +22,7 @@ print.ttpspline <- function(x, ...) {
               format(x$npar_dense, big.mark = ","),
               x$compression_ratio))
   if (is.finite(x$edf)) {
-    cat(sprintf("  EDF: %.2f (!= N_TT; %.0f%% of stored params)\n",
+    cat(sprintf("  EDF: %.2f (%.0f%% of stored parameters)\n",
                 x$edf, 100 * x$edf / max(x$npar_tt, 1)))
   }
   cat(sprintf("  Deviance/RSS: %.6g | time: %.3fs\n",
@@ -73,7 +73,13 @@ print.summary.ttpspline <- function(x, ...) {
   cat(sprintf("Deviance / RSS:         %.6g\n", x$deviance))
   if (is.finite(x$edf)) {
     cat(sprintf("EDF (joint linearized): %.2f\n", x$edf))
-    cat(sprintf("EDF / TT stored:        %.2f\n", x$edf / max(x$npar_tt, 1)))
+    cat(sprintf("EDF / stored parameters: %.2f\n",
+                x$edf / max(x$npar_tt, 1)))
+    if (!is.null(x$npar_tt_intrinsic) && is.finite(x$npar_tt_intrinsic) &&
+        x$npar_tt_intrinsic > 0) {
+      cat(sprintf("EDF / intrinsic TT dim.: %.2f\n",
+                  x$edf / x$npar_tt_intrinsic))
+    }
   } else {
     note <- x$edf_note %||% "not computed"
     cat(sprintf("EDF:                    NA (%s)\n", note))
