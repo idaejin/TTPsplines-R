@@ -91,10 +91,25 @@ set.seed(1)
 n <- 400
 X <- matrix(runif(n * 3), n, 3)
 f <- sin(2 * pi * X[, 1]) * cos(2 * pi * X[, 2]) + X[, 3]
+
+## Gaussian (auto -> ALS)
 y <- f + rnorm(n, 0, 0.3)
 fit <- ttpspline(y, X, family = gaussian(), rank = 2, k = 6,
                  lambda = 1, control = tt_control(max_sweeps = 8))
-summary(fit)   # Requested/Selected optimizer under auto
+summary(fit)
 tt_complexity(fit)
+
+## Poisson (auto -> PIRLS-ALS)
+yp <- rpois(n, exp(f - mean(f) + log(2)))
+fit_p <- ttpspline(yp, X, family = poisson(), rank = 2, k = 6, lambda = 1,
+                   control = tt_control(pirls_maxit = 15, compute_edf = FALSE))
+fit_p$optimizer_used
+
+## Bernoulli (auto -> LBFGS)
+yb <- rbinom(n, 1, plogis(1.2 * (f - mean(f))))
+fit_b <- ttpspline(yb, X, family = binomial(), rank = 2, k = 6, lambda = 5,
+                   control = tt_control(lbfgs_maxit = 100, compute_edf = FALSE))
+fit_b$optimizer_used
+predict(fit_b, X[1:3, ], type = "response")
 
 }

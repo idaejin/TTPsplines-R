@@ -25,6 +25,8 @@ devtools::load_all("path/to/ttpsplines-pkg")
 
 ## Quick start
 
+### Gaussian (`auto` → ALS)
+
 ```r
 library(TTPsplines)
 
@@ -56,6 +58,59 @@ Selected optimizer:     ALS
 Reason:                 gaussian family default
 ```
 
+### Poisson (`auto` → PIRLS-ALS)
+
+```r
+library(TTPsplines)
+
+set.seed(2)
+n <- 800
+X <- matrix(runif(n * 3), n, 3)
+f <- sin(2 * pi * X[, 1]) * cos(2 * pi * X[, 2]) + 0.4 * X[, 3]
+eta <- f - mean(f) + log(3)
+y <- rpois(n, exp(eta))
+
+fit_p <- ttpspline(
+  y, X,
+  family = poisson(),
+  rank = 2,
+  k = 8,
+  lambda = 1,
+  control = tt_control(pirls_maxit = 25, als_sweeps_per_pirls = 4,
+                       backend = "auto")
+)
+
+summary(fit_p)
+# Requested optimizer: auto | Selected: PIRLS-ALS | poisson family default
+predict(fit_p, X[1:5, ], type = "response")
+```
+
+### Bernoulli (`auto` → LBFGS)
+
+```r
+library(TTPsplines)
+
+set.seed(3)
+n <- 800
+X <- matrix(runif(n * 3), n, 3)
+f <- sin(2 * pi * X[, 1]) * cos(2 * pi * X[, 2]) + 0.4 * X[, 3]
+eta <- 1.5 * (f - mean(f))
+y <- rbinom(n, 1, plogis(eta))
+
+fit_b <- ttpspline(
+  y, X,
+  family = binomial(),
+  rank = 2,
+  k = 8,
+  lambda = 5,
+  control = tt_control(lbfgs_maxit = 300, backend = "auto")
+)
+
+summary(fit_b)
+# Requested optimizer: auto | Selected: LBFGS | binomial family default
+predict(fit_b, X[1:5, ], type = "response")
+```
+
 ## Family-aware `auto` (v1)
 
 | Family | Selected optimizer |
@@ -67,14 +122,10 @@ Reason:                 gaussian family default
 Always overridable:
 
 ```r
-# Poisson / Bernoulli with auto defaults
-fit_p <- ttpspline(yp, X, family = poisson(),  rank = 3, k = 8, lambda = 1)
-fit_b <- ttpspline(yb, X, family = binomial(), rank = 3, k = 8, lambda = 1)
-
 # Explicit overrides (research / benchmarking)
-fit_b_als <- ttpspline(yb, X, family = binomial(), rank = 3, k = 8, lambda = 1,
+fit_b_als <- ttpspline(y, X, family = binomial(), rank = 2, k = 8, lambda = 5,
                        optimizer = "PIRLS-ALS")
-fit_g_lb  <- ttpspline(y,  X, family = gaussian(), rank = 2, k = 8, lambda = 1,
+fit_g_lb  <- ttpspline(yg, X, family = gaussian(), rank = 2, k = 8, lambda = 1,
                        optimizer = "LBFGS")
 ```
 
@@ -116,8 +167,10 @@ TTPSPLINES_BENCH_WHICH=poisson,bernoulli Rscript inst/benchmarks/run_all.R
 
 Results: `inst/benchmarks/results/*.csv` (+ PNG). See `inst/benchmarks/README.md`.
 
-Quick three-family smoke:
+Quick three-family smoke (or per-family scripts):
 
 ```bash
 Rscript inst/examples/example_three_families.R
+Rscript inst/examples/example_poisson.R
+Rscript inst/examples/example_bernoulli.R
 ```
