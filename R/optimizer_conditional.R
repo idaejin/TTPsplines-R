@@ -50,8 +50,10 @@
 #' Conditional core objective Q_k(g) = nll(intercept + Xk g) + (λ/2) g'P g.
 #' @keywords internal
 #' @noRd
-.tt_conditional_qk <- function(g, y, intercept, Xk, Pk, lambda_k, family) {
-  eta <- intercept + as.numeric(Xk %*% g)
+.tt_conditional_qk <- function(g, y, intercept, Xk, Pk, lambda_k, family,
+                               offset = NULL) {
+  offset <- normalize_offset(offset, length(y))
+  eta <- offset + intercept + as.numeric(Xk %*% g)
   nll <- .tt_glm_nll(y, eta, family)
   pen <- 0.5 * lambda_k * as.numeric(crossprod(g, Pk %*% g))
   list(value = nll + pen, nll = nll, penalty = pen, eta = eta)
@@ -60,8 +62,10 @@
 #' Conditional gradient ∇Q_k = -X'(y-μ) + λ P g  (equiv. X'(μ-y) + λPg).
 #' @keywords internal
 #' @noRd
-.tt_conditional_qk_grad <- function(g, y, intercept, Xk, Pk, lambda_k, family) {
-  eta <- intercept + as.numeric(Xk %*% g)
+.tt_conditional_qk_grad <- function(g, y, intercept, Xk, Pk, lambda_k, family,
+                                    offset = NULL) {
+  offset <- normalize_offset(offset, length(y))
+  eta <- offset + intercept + as.numeric(Xk %*% g)
   mw <- .tt_glm_mu_weight(y, eta, family)
   # score = y - mu; NLL grad_eta = -(y-mu); grad_g = X'(-(y-mu)) = X'(mu-y)
   grad_nll <- as.numeric(crossprod(Xk, mw$mu - y))
@@ -92,14 +96,14 @@
 #' @keywords internal
 #' @noRd
 .tt_damped_newton_core <- function(g, y, intercept, Xk, Pk, lambda_k, family,
-                                   control) {
+                                   control, offset = NULL) {
   c_arm <- control$dn_armijo_c %||% 1e-4
   rho <- control$dn_step_factor %||% control$step_factor %||% 0.5
   step_min <- control$dn_step_min %||% control$step_min %||% 1e-12
   ridge <- control$dn_ridge %||% 0
   # report ridge if used (non-silent via return)
-  q0 <- .tt_conditional_qk(g, y, intercept, Xk, Pk, lambda_k, family)
-  gi <- .tt_conditional_qk_grad(g, y, intercept, Xk, Pk, lambda_k, family)
+  q0 <- .tt_conditional_qk(g, y, intercept, Xk, Pk, lambda_k, family, offset = offset)
+  gi <- .tt_conditional_qk_grad(g, y, intercept, Xk, Pk, lambda_k, family, offset = offset)
   if (!is.finite(q0$value) || any(!is.finite(gi$grad))) {
     return(list(
       g = g, accepted = FALSE, alpha = 0, n_backtrack = 0L,
@@ -142,7 +146,7 @@
   q_new <- q0$value
   while (alpha + 1e-18 >= step_min) {
     g_try <- g + alpha * delta
-    q_try <- .tt_conditional_qk(g_try, y, intercept, Xk, Pk, lambda_k, family)
+    q_try <- .tt_conditional_qk(g_try, y, intercept, Xk, Pk, lambda_k, family, offset = offset)
     if (is.finite(q_try$value) &&
         q_try$value <= q0$value + c_arm * alpha * dir_deriv) {
       g_new <- g_try
@@ -172,14 +176,14 @@
 #' @keywords internal
 #' @noRd
 .tt_block_lbfgs_core <- function(g, y, intercept, Xk, Pk, lambda_k, family,
-                                control) {
+                                control, offset = NULL) {
   maxit <- as.integer(control$block_lbfgs_maxit %||% 50L)
-  q0 <- .tt_conditional_qk(g, y, intercept, Xk, Pk, lambda_k, family)
+  q0 <- .tt_conditional_qk(g, y, intercept, Xk, Pk, lambda_k, family, offset = offset)
   fn <- function(th) {
-    .tt_conditional_qk(th, y, intercept, Xk, Pk, lambda_k, family)$value
+    .tt_conditional_qk(th, y, intercept, Xk, Pk, lambda_k, family, offset = offset)$value
   }
   gr <- function(th) {
-    .tt_conditional_qk_grad(th, y, intercept, Xk, Pk, lambda_k, family)$grad
+    .tt_conditional_qk_grad(th, y, intercept, Xk, Pk, lambda_k, family, offset = offset)$grad
   }
   opt <- stats::optim(
     g, fn, gr,
@@ -191,7 +195,7 @@
       trace = 0L
     )
   )
-  q1 <- .tt_conditional_qk(opt$par, y, intercept, Xk, Pk, lambda_k, family)
+  q1 <- .tt_conditional_qk(opt$par, y, intercept, Xk, Pk, lambda_k, family, offset = offset)
   list(
     g = as.numeric(opt$par),
     q_before = q0$value,
@@ -209,7 +213,9 @@
 # ---------------------------------------------------------------------------
 
 .tt_conditional_init <- function(y, basis, ranks, lambda_spec, control,
-                                 penalty_order, init_cores, family) {
+                                 penalty_order, init_cores, family,
+                                 offset = NULL) {
+  offset <- normalize_offset(offset, length(y))
   d <- length(basis)
   p <- ncol(basis[[1]])
   method <- lambda_spec$method
@@ -228,10 +234,11 @@
     core_penalty(ranks[k], p, ranks[k + 1L], penalty_order)
   })
   fam <- normalize_family(family)
-  intercept <- init_intercept(fam, y)
+  intercept <- init_intercept(fam, y, offset = offset)
   list(
     d = d, p = p, ranks = ranks, cores = cores, penalties = penalties,
-    lambda = lambda, intercept = intercept, fam = fam, family = fam
+    lambda = lambda, intercept = intercept, fam = fam, family = fam,
+    offset = offset
   )
 }
 
@@ -245,10 +252,11 @@
 #' @noRd
 tt_damped_newton_als_fit <- function(y, basis, family, ranks, lambda_spec,
                                      control, penalty_order = 2,
-                                     init_cores = NULL) {
+                                     init_cores = NULL, offset = NULL) {
   t0 <- proc.time()[["elapsed"]]
   st <- .tt_conditional_init(
-    y, basis, ranks, lambda_spec, control, penalty_order, init_cores, family
+    y, basis, ranks, lambda_spec, control, penalty_order, init_cores, family,
+    offset = offset
   )
   cores <- st$cores
   intercept <- st$intercept
@@ -268,7 +276,9 @@ tt_damped_newton_als_fit <- function(y, basis, family, ranks, lambda_spec,
   reason <- "maxit"
   converged <- FALSE
 
-  obj <- tt_glm_penalized_objective(y, cores, intercept, basis, penalties, lambda, fam)
+  offset <- st$offset
+  obj <- tt_glm_penalized_objective(y, cores, intercept, basis, penalties, lambda, fam,
+                                    offset = offset)
 
   for (sw in seq_len(max_sweeps)) {
     obj_old <- obj
@@ -278,7 +288,8 @@ tt_damped_newton_als_fit <- function(y, basis, family, ranks, lambda_spec,
       Xk <- tt_design_core(L[[k]], R[[k]], basis[[k]])
       g <- as.numeric(cores[[k]])
       upd <- .tt_damped_newton_core(
-        g, y, intercept, Xk, penalties[[k]], lambda[k], fam, control
+        g, y, intercept, Xk, penalties[[k]], lambda[k], fam, control,
+        offset = offset
       )
       n_backtrack_total <- n_backtrack_total + upd$n_backtrack
       if (isTRUE(upd$accepted)) {
@@ -287,7 +298,8 @@ tt_damped_newton_als_fit <- function(y, basis, family, ranks, lambda_spec,
         alphas <- c(alphas, upd$alpha)
       }
     }
-    obj <- tt_glm_penalized_objective(y, cores, intercept, basis, penalties, lambda, fam)
+    obj <- tt_glm_penalized_objective(y, cores, intercept, basis, penalties, lambda, fam,
+                                      offset = offset)
     if (isTRUE(control$trace)) {
       cat(sprintf(
         "  DN-ALS sweep %2d | L=%.6g | max|eta|=%.3g\n",
@@ -357,10 +369,11 @@ tt_damped_newton_als_fit <- function(y, basis, family, ranks, lambda_spec,
 #' @keywords internal
 #' @noRd
 tt_lbfgs_als_fit <- function(y, basis, family, ranks, lambda_spec, control,
-                             penalty_order = 2, init_cores = NULL) {
+                             penalty_order = 2, init_cores = NULL, offset = NULL) {
   t0 <- proc.time()[["elapsed"]]
   st <- .tt_conditional_init(
-    y, basis, ranks, lambda_spec, control, penalty_order, init_cores, family
+    y, basis, ranks, lambda_spec, control, penalty_order, init_cores, family,
+    offset = offset
   )
   cores <- st$cores
   intercept <- st$intercept
@@ -379,7 +392,9 @@ tt_lbfgs_als_fit <- function(y, basis, family, ranks, lambda_spec, control,
   reason <- "maxit"
   converged <- FALSE
 
-  obj <- tt_glm_penalized_objective(y, cores, intercept, basis, penalties, lambda, fam)
+  offset <- st$offset
+  obj <- tt_glm_penalized_objective(y, cores, intercept, basis, penalties, lambda, fam,
+                                    offset = offset)
 
   for (sw in seq_len(max_sweeps)) {
     obj_old <- obj
@@ -389,7 +404,8 @@ tt_lbfgs_als_fit <- function(y, basis, family, ranks, lambda_spec, control,
       Xk <- tt_design_core(L[[k]], R[[k]], basis[[k]])
       g <- as.numeric(cores[[k]])
       upd <- .tt_block_lbfgs_core(
-        g, y, intercept, Xk, penalties[[k]], lambda[k], fam, control
+        g, y, intercept, Xk, penalties[[k]], lambda[k], fam, control,
+        offset = offset
       )
       n_opt_iter <- n_opt_iter + (upd$n_iter %||% 0L)
       if (isTRUE(upd$accepted) ||
@@ -398,7 +414,8 @@ tt_lbfgs_als_fit <- function(y, basis, family, ranks, lambda_spec, control,
         n_accepted <- n_accepted + 1L
       }
     }
-    obj <- tt_glm_penalized_objective(y, cores, intercept, basis, penalties, lambda, fam)
+    obj <- tt_glm_penalized_objective(y, cores, intercept, basis, penalties, lambda, fam,
+                                      offset = offset)
     if (isTRUE(control$trace)) {
       cat(sprintf(
         "  LBFGS-ALS sweep %2d | L=%.6g | max|eta|=%.3g\n",

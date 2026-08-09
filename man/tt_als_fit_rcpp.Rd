@@ -11,7 +11,8 @@ tt_als_fit_rcpp(
   lambda_spec,
   control,
   penalty_order = 2,
-  init_cores = NULL
+  init_cores = NULL,
+  offset = NULL
 )
 }
 \description{

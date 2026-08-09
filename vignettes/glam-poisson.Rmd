@@ -59,10 +59,9 @@ rmse_log(fit$mu, glam_poisson$mu)
 
 The same age × year cells can be treated as **scattered** observations and fit
 with `ttpspline()` (Poisson / `PIRLS-ALS`). Currie–Durbán–Eilers GLAM keeps the
-array structure and an exposure `offset`; TT compresses the coefficient tensor
-and (in v0) has **no offset argument**, so exposure is absorbed into the
-smooth. Same fixed \(\lambda\) and basis size \(k\) make the comparison useful
-for compression vs surface recovery.
+array algebra; TT compresses the coefficient tensor. Both accept an exposure
+`offset` on the linear predictor
+(\(\eta = \mathrm{offset} + \alpha + f(x)\)).
 
 ```{r tt-vs-glam}
 X <- as.matrix(expand.grid(
@@ -71,11 +70,13 @@ X <- as.matrix(expand.grid(
 ))
 y <- as.numeric(glam_poisson$Y)
 mu_true <- as.numeric(glam_poisson$mu)
+off <- log(as.numeric(glam_poisson$exposure))
 
 fit_tt <- ttpspline(
   y, X,
   family = poisson(),
   rank = 3, k = 10, lambda = c(10, 1),
+  offset = off,
   control = tt_control(
     pirls_maxit = 20, max_sweeps = 8,
     backend = "R", compute_edf = FALSE

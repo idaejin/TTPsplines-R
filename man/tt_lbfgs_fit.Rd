@@ -13,7 +13,8 @@ tt_lbfgs_fit(
   penalty_order = 2,
   init_cores = NULL,
   family = NULL,
-  intercept0 = NULL
+  intercept0 = NULL,
+  offset = NULL
 )
 }
 \description{

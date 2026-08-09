@@ -13,7 +13,8 @@ tt_cgcv_update_lambdas(
   lambda,
   control,
   weight = NULL,
-  z = NULL
+  z = NULL,
+  offset = NULL
 )
 }
 \description{

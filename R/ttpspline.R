@@ -48,6 +48,8 @@
 #' @param monitor If `TRUE`, print iteration progress (sets `control$trace`).
 #'   Convenient alias of `tt_control(monitor = TRUE)` / `tt_control(trace = TRUE)`.
 #' @param knots Optional list of knot vectors (advanced).
+#' @param offset Optional numeric vector of length `n` (or scalar) added to the
+#'   linear predictor, e.g. `log(exposure)` for Poisson. Default `NULL` (zeros).
 #'
 #' @return An object of class `"ttpspline"`.
 #'
@@ -109,7 +111,8 @@ ttpspline <- function(y,
                       init = NULL,
                       control = tt_control(),
                       monitor = FALSE,
-                      knots = NULL) {
+                      knots = NULL,
+                      offset = NULL) {
   cl <- match.call()
   fam <- normalize_family(family)
   y <- as.numeric(y)
@@ -127,6 +130,7 @@ ttpspline <- function(y,
   if (identical(key, "poisson") && any(y < 0)) {
     stop("poisson requires non-negative y.", call. = FALSE)
   }
+  offset <- normalize_offset(offset, length(y))
 
   if (!inherits(control, "tt_control")) {
     control <- do.call(tt_control, as.list(control))
@@ -202,7 +206,8 @@ ttpspline <- function(y,
     penalty_order = penalty_order,
     optimizer = optimizer,
     backend = backend,
-    init_cores = init
+    init_cores = init,
+    offset = offset
   )
 
   npar_tt <- tt_npar(p, ranks)
@@ -256,6 +261,7 @@ ttpspline <- function(y,
       lambda_boundary = lam_info$lambda_boundary,
       lambda_at_boundary = lam_info$lambda_at_boundary,
       intercept = raw$intercept,
+      offset = offset,
       fitted.values = raw$mu,
       linear.predictors = raw$eta,
       residuals = residuals_resp,
@@ -336,18 +342,20 @@ ttpspline <- function(y,
 #' @keywords internal
 .ttpspline_dispatch <- function(y, basis, fam, key, ranks, lambda_spec,
                                 control, penalty_order, optimizer, backend,
-                                init_cores) {
+                                init_cores, offset = NULL) {
+  offset <- normalize_offset(offset, length(y))
   if (identical(optimizer, "Adam")) {
     return(tt_adam_fit(
       y, basis, ranks, lambda_spec, control, penalty_order,
-      init_cores = init_cores, family = if (identical(key, "gaussian")) NULL else fam
+      init_cores = init_cores, family = if (identical(key, "gaussian")) NULL else fam,
+      offset = offset
     ))
   }
 
   if (identical(optimizer, "hybrid")) {
     return(tt_hybrid_fit(
       y, basis, fam, ranks, lambda_spec, control, penalty_order,
-      init_cores = init_cores
+      init_cores = init_cores, offset = offset
     ))
   }
 
@@ -355,7 +363,8 @@ ttpspline <- function(y,
     return(tt_lbfgs_fit(
       y, basis, ranks, lambda_spec, control, penalty_order,
       init_cores = init_cores,
-      family = if (identical(key, "gaussian")) NULL else fam
+      family = if (identical(key, "gaussian")) NULL else fam,
+      offset = offset
     ))
   }
 
@@ -363,7 +372,8 @@ ttpspline <- function(y,
     return(tt_gd_fit(
       y, basis, ranks, lambda_spec, control, penalty_order,
       init_cores = init_cores,
-      family = if (identical(key, "gaussian")) NULL else fam
+      family = if (identical(key, "gaussian")) NULL else fam,
+      offset = offset
     ))
   }
 
@@ -373,14 +383,14 @@ ttpspline <- function(y,
       warning("Damped-Newton-ALS on Gaussian uses the same path as ALS.",
               call. = FALSE)
       out <- tt_als_fit(y, basis, ranks, lambda_spec, control, penalty_order,
-                       init_cores = init_cores)
+                       init_cores = init_cores, offset = offset)
       out$optimizer <- "Damped-Newton-ALS"
       out$backend <- "R"
       return(out)
     }
     return(tt_damped_newton_als_fit(
       y, basis, fam, ranks, lambda_spec, control, penalty_order,
-      init_cores = init_cores
+      init_cores = init_cores, offset = offset
     ))
   }
 
@@ -389,14 +399,14 @@ ttpspline <- function(y,
       warning("LBFGS-ALS on Gaussian falls back to ALS (closed form).",
               call. = FALSE)
       out <- tt_als_fit(y, basis, ranks, lambda_spec, control, penalty_order,
-                       init_cores = init_cores)
+                       init_cores = init_cores, offset = offset)
       out$optimizer <- "LBFGS-ALS"
       out$backend <- "R"
       return(out)
     }
     return(tt_lbfgs_als_fit(
       y, basis, fam, ranks, lambda_spec, control, penalty_order,
-      init_cores = init_cores
+      init_cores = init_cores, offset = offset
     ))
   }
 
@@ -404,20 +414,20 @@ ttpspline <- function(y,
   if (identical(key, "gaussian")) {
     if (identical(backend, "Rcpp")) {
       tt_als_fit_rcpp(y, basis, ranks, lambda_spec, control, penalty_order,
-                      init_cores = init_cores)
+                      init_cores = init_cores, offset = offset)
     } else {
       out <- tt_als_fit(y, basis, ranks, lambda_spec, control, penalty_order,
-                       init_cores = init_cores)
+                       init_cores = init_cores, offset = offset)
       out$backend <- "R"
       out
     }
   } else {
     if (identical(backend, "Rcpp")) {
       tt_pirls_fit_rcpp(y, basis, fam, ranks, lambda_spec, control, penalty_order,
-                        init_cores = init_cores)
+                        init_cores = init_cores, offset = offset)
     } else {
       tt_pirls_fit(y, basis, fam, ranks, lambda_spec, control, penalty_order,
-                  init_cores = init_cores)
+                  init_cores = init_cores, offset = offset)
     }
   }
 }

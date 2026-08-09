@@ -24,7 +24,9 @@ tt_objective <- function(fit, X, y = NULL) {
     core_penalty(ranks[k], p, ranks[k + 1L], po)
   })
   fam <- fit$family %||% normalize_family(fit$family_key %||% "gaussian")
-  out <- tt_glm_penalized_objective(y, cores, intercept, basis, penalties, lambda, fam)
+  off <- normalize_offset(fit$offset, length(y))
+  out <- tt_glm_penalized_objective(y, cores, intercept, basis, penalties, lambda, fam,
+                                    offset = off)
   list(
     value = out$value,
     nll_or_sse = out$nll,

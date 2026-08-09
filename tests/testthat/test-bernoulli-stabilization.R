@@ -33,7 +33,7 @@ test_that("Bernoulli PIRLS accepted objectives are non-increasing", {
   }
   # eta consistent with cores
   basis <- eval_marginal_bases(X, fit$knots, fit$degree)
-  eta2 <- fit$intercept + tt_contraction(fit$cores, basis)
+  eta2 <- fit$offset + fit$intercept + tt_contraction(fit$cores, basis)
   expect_equal(fit$linear.predictors, eta2, tolerance = 1e-10)
   expect_true(!is.null(fit$convergence$pirls))
 })

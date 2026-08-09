@@ -29,7 +29,7 @@ test_that("GD uses same objective/grad machinery as LBFGS (Bernoulli)", {
   expect_true(max(abs(fit_gd$linear.predictors)) < 40)
   # eta consistent with cores
   basis <- eval_marginal_bases(X, fit_gd$knots, fit_gd$degree)
-  eta2 <- fit_gd$intercept + tt_contraction(fit_gd$cores, basis)
+  eta2 <- fit_gd$offset + fit_gd$intercept + tt_contraction(fit_gd$cores, basis)
   expect_equal(fit_gd$linear.predictors, eta2, tolerance = 1e-10)
 })
 

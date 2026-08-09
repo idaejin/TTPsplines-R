@@ -1,13 +1,14 @@
 #' Gaussian TT-ALS with fixed or cGCV λ (R backend).
 #' @keywords internal
 tt_als_fit <- function(y, basis, ranks, lambda_spec, control, penalty_order = 2,
-                       init_cores = NULL) {
+                       init_cores = NULL, offset = NULL) {
   d <- length(basis)
   p <- ncol(basis[[1]])
   method <- lambda_spec$method
   lambda <- lambda_spec$values %||% lambda_spec$lambda0
-  intercept <- mean(y)
-  yc <- y - intercept
+  offset <- normalize_offset(offset, length(y))
+  intercept <- mean(y - offset)
+  yc <- y - offset - intercept
   if (is.null(init_cores)) {
     cores <- initialize_tt_cores(p, ranks, seed = control$seed, sd = control$init_sd)
   } else {
@@ -41,7 +42,7 @@ tt_als_fit <- function(y, basis, ranks, lambda_spec, control, penalty_order = 2,
       n_eval <- n_eval + upd$n_eval
     }
     n_sweeps <- sw
-    eta <- intercept + tt_contraction(cores, basis)
+    eta <- tt_eta(offset, intercept, cores, basis)
     rss <- sum((y - eta)^2)
     # Full Gaussian penalized objective (same as LBFGS)
     pen_val <- 0
@@ -70,7 +71,7 @@ tt_als_fit <- function(y, basis, ranks, lambda_spec, control, penalty_order = 2,
     }
   }
 
-  eta <- intercept + tt_contraction(cores, basis)
+  eta <- tt_eta(offset, intercept, cores, basis)
   list(
     cores = cores,
     intercept = intercept,
@@ -94,7 +95,15 @@ tt_als_fit <- function(y, basis, ranks, lambda_spec, control, penalty_order = 2,
 #' Try Rcpp Gaussian cGCV / fixed-λ path.
 #' @keywords internal
 tt_als_fit_rcpp <- function(y, basis, ranks, lambda_spec, control, penalty_order = 2,
-                            init_cores = NULL) {
+                            init_cores = NULL, offset = NULL) {
+  offset <- normalize_offset(offset, length(y))
+  if (any(offset != 0)) {
+    # C++ path does not yet accept offsets
+    out <- tt_als_fit(y, basis, ranks, lambda_spec, control, penalty_order,
+                      init_cores = init_cores, offset = offset)
+    out$backend <- "R"
+    return(out)
+  }
   d <- length(basis)
   p <- ncol(basis[[1]])
   lambda0 <- lambda_spec$values %||% lambda_spec$lambda0
@@ -179,7 +188,7 @@ tt_als_fit_rcpp <- function(y, basis, ranks, lambda_spec, control, penalty_order
   }
   # fallback
   out <- tt_als_fit(y, basis, ranks, lambda_spec, control, penalty_order,
-                    init_cores = init_cores)
+                    init_cores = init_cores, offset = offset)
   out$backend <- "R"
   out
 }

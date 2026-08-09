@@ -98,7 +98,7 @@ print.tt_keras_status <- function(x, ...) {
 #' @keywords internal
 tt_adam_fit <- function(y, basis, ranks, lambda_spec, control,
                         penalty_order = 2, init_cores = NULL,
-                        family = NULL) {
+                        family = NULL, offset = NULL) {
   st <- tt_keras_status()
   msg <- paste0(
     "optimizer = \"Adam\" requires the optional Keras/TensorFlow backend ",

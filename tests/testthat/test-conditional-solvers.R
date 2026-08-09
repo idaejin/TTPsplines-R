@@ -132,7 +132,7 @@ test_that("Damped-Newton-ALS accepted steps are monotone in global objective", {
     expect_true(all(diff(vals) <= 1e-6 + 1e-8 * pmax(1, abs(vals[-length(vals)]))))
   }
   basis <- eval_marginal_bases(X, fit$knots, fit$degree)
-  expect_equal(fit$linear.predictors, fit$intercept + tt_contraction(fit$cores, basis),
+  expect_equal(fit$linear.predictors, fit$offset + fit$intercept + tt_contraction(fit$cores, basis),
                tolerance = 1e-10)
 })
 

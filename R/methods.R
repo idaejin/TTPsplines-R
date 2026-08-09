@@ -119,6 +119,7 @@ fitted.ttpspline <- function(object, ...) object$fitted.values
 predict.ttpspline <- function(object,
                               newdata = NULL,
                               type = c("link", "response"),
+                              offset = NULL,
                               ...) {
   type <- match.arg(type)
   if (is.null(newdata)) {
@@ -129,8 +130,9 @@ predict.ttpspline <- function(object,
       stop("newdata must have ", object$d, " columns.", call. = FALSE)
     }
     if (anyNA(Xnew)) stop("NA in newdata not supported.", call. = FALSE)
+    off <- normalize_offset(offset, nrow(Xnew))
     basis <- eval_marginal_bases(Xnew, object$knots, object$degree)
-    eta <- object$intercept + tt_contraction(object$cores, basis)
+    eta <- tt_eta(off, object$intercept, object$cores, basis)
   }
   if (identical(type, "link") || identical(object$family_key, "gaussian")) {
     return(eta)

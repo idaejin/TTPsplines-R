@@ -9,7 +9,9 @@
 #' @noRd
 .tt_gd_optimize_cores <- function(y, basis, ranks, lambda, control,
                                   penalty_order, init_cores,
-                                  family = NULL, intercept0 = NULL) {
+                                  family = NULL, intercept0 = NULL,
+                                  offset = NULL) {
+  offset <- normalize_offset(offset, length(y))
   d <- length(basis)
   p <- ncol(basis[[1]])
   if (is.null(init_cores)) {
@@ -25,15 +27,17 @@
 
   is_gauss <- is.null(family) || identical(family_key(family), "gaussian")
   if (is_gauss) {
-    intercept <- if (is.null(intercept0)) mean(y) else intercept0
+    intercept <- if (is.null(intercept0)) mean(y - offset) else intercept0
     eval_obj <- function(th) {
-      .tt_gaussian_objective(th, y, intercept, basis, template, penalties, lambda)
+      .tt_gaussian_objective(th, y, intercept, basis, template, penalties, lambda,
+                             offset = offset)
     }
   } else {
     fam <- normalize_family(family)
-    intercept <- if (is.null(intercept0)) init_intercept(fam, y) else intercept0
+    intercept <- if (is.null(intercept0)) init_intercept(fam, y, offset = offset) else intercept0
     eval_obj <- function(th) {
-      .tt_glm_objective(th, y, intercept, basis, template, penalties, lambda, fam)
+      .tt_glm_objective(th, y, intercept, basis, template, penalties, lambda, fam,
+                        offset = offset)
     }
   }
 
@@ -173,9 +177,10 @@
 #' @noRd
 tt_gd_fit <- function(y, basis, ranks, lambda_spec, control,
                       penalty_order = 2, init_cores = NULL,
-                      family = NULL, intercept0 = NULL) {
+                      family = NULL, intercept0 = NULL, offset = NULL) {
   method <- lambda_spec$method
   lambda <- lambda_spec$values %||% lambda_spec$lambda0
+  offset <- normalize_offset(offset, length(y))
   t0 <- proc.time()[["elapsed"]]
   n_eval <- 0L
   n_outer <- 0L
@@ -186,7 +191,7 @@ tt_gd_fit <- function(y, basis, ranks, lambda_spec, control,
   run_once <- function(lam, cores0, intercept0 = NULL) {
     .tt_gd_optimize_cores(
       y, basis, ranks, lam, control, penalty_order, cores0,
-      family = family, intercept0 = intercept0
+      family = family, intercept0 = intercept0, offset = offset
     )
   }
 
@@ -206,9 +211,9 @@ tt_gd_fit <- function(y, basis, ranks, lambda_spec, control,
     intercept <- if (!is.null(intercept0)) {
       intercept0
     } else if (is_gauss) {
-      mean(y)
+      mean(y - offset)
     } else {
-      init_intercept(normalize_family(family), y)
+      init_intercept(normalize_family(family), y, offset = offset)
     }
     penalties <- NULL
     prev_lam <- lambda
@@ -226,15 +231,15 @@ tt_gd_fit <- function(y, basis, ranks, lambda_spec, control,
 
       if (is_gauss) {
         upd <- tt_cgcv_update_lambdas(
-          y, cores, intercept, basis, penalties, lambda, control
+          y, cores, intercept, basis, penalties, lambda, control, offset = offset
         )
       } else {
         fam <- normalize_family(family)
-        eta_cur <- intercept + tt_contraction(cores, basis)
+        eta_cur <- offset + intercept + tt_contraction(cores, basis)
         work <- glm_working(fam, y, eta_cur)
         upd <- tt_cgcv_update_lambdas(
           y, cores, intercept, basis, penalties, lambda, control,
-          weight = work$weight, z = work$z
+          weight = work$weight, z = work$z, offset = offset
         )
       }
       cores <- upd$cores
@@ -254,12 +259,12 @@ tt_gd_fit <- function(y, basis, ranks, lambda_spec, control,
   }
 
   if (is_gauss) {
-    eta <- intercept + tt_contraction(cores, basis)
+    eta <- offset + intercept + tt_contraction(cores, basis)
     mu <- eta
     deviance <- sum((y - eta)^2)
   } else {
     fam <- normalize_family(family)
-    eta <- intercept + tt_contraction(cores, basis)
+    eta <- offset + intercept + tt_contraction(cores, basis)
     mu <- invlink_eta(fam, eta)
     deviance <- glm_deviance(fam, y, mu)
   }

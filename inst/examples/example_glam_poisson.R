@@ -43,18 +43,20 @@ cat(sprintf(
   fit$npar, fit$n_pirls, fit$deviance, rmse_log
 ))
 
-# Same grid as scattered data → TTPsplines (no offset API yet)
+# Same grid as scattered data → TTPsplines (shared exposure offset)
 X <- as.matrix(expand.grid(age = glam_poisson$age, year = glam_poisson$year))
 y <- as.numeric(glam_poisson$Y)
+off <- log(as.numeric(glam_poisson$exposure))
 fit_tt <- ttpspline(
   y, X, family = poisson(), rank = 3, k = 10, lambda = c(10, 1),
+  offset = off,
   control = tt_control(
     pirls_maxit = 20, max_sweeps = 8, backend = "R", compute_edf = FALSE
   )
 )
 rmse_tt <- sqrt(mean((log(fitted(fit_tt)) - log(as.numeric(glam_poisson$mu)))^2))
 cat(sprintf(
-  "TTPsplines rank-3: npar=%d (dense %d, CR %.1fx)  RMSE(log mu)=%.4g  vs GLAM=%.4g\n",
+  "TTPsplines rank-3 (+offset): npar=%d (dense %d, CR %.1fx)  RMSE(log mu)=%.4g  vs GLAM=%.4g\n",
   fit_tt$npar_tt, fit_tt$npar_dense, fit_tt$compression_ratio, rmse_tt,
   sqrt(mean((log(fitted(fit_tt)) - log(as.numeric(fit$mu)))^2))
 ))

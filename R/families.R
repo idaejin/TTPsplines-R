@@ -78,15 +78,20 @@ glm_deviance <- function(family, y, mu) {
   stop("Unsupported family")
 }
 
-init_intercept <- function(family, y) {
+init_intercept <- function(family, y, offset = NULL) {
   key <- family_key(family)
-  if (identical(key, "gaussian")) return(mean(y))
+  offset <- normalize_offset(offset, length(y))
+  if (identical(key, "gaussian")) return(mean(y - offset))
   if (identical(key, "bernoulli")) {
+    # offset on logit scale: initialise at mean residual logit
     p <- pmin(pmax(mean(y), 0.05), 0.95)
-    return(qlogis(p))
+    return(qlogis(p) - mean(offset))
   }
-  if (identical(key, "poisson")) return(log(max(mean(y), 0.1)))
-  mean(y)
+  if (identical(key, "poisson")) {
+    rate <- mean(y / pmax(exp(offset), 1e-12))
+    return(log(max(rate, 1e-8)))
+  }
+  mean(y - offset)
 }
 
 invlink_eta <- function(family, eta) {
@@ -97,12 +102,35 @@ invlink_eta <- function(family, eta) {
   eta
 }
 
+#' Full linear predictor η = offset + intercept + TT contraction.
+#' @keywords internal
+#' @noRd
+tt_eta <- function(offset, intercept, cores, basis) {
+  as.numeric(offset) + as.numeric(intercept) + tt_contraction(cores, basis)
+}
+
+#' Normalize a length-n offset (NULL → zeros).
+#' @keywords internal
+#' @noRd
+normalize_offset <- function(offset, n) {
+  n <- as.integer(n)
+  if (is.null(offset)) return(rep(0, n))
+  offset <- as.numeric(offset)
+  if (length(offset) == 1L) offset <- rep(offset, n)
+  if (length(offset) != n) {
+    stop("`offset` must have length 1 or length(y) = ", n, ".", call. = FALSE)
+  }
+  if (anyNA(offset)) stop("`offset` contains NA.", call. = FALSE)
+  offset
+}
+
 #' True GLM + TT penalty objective at (cores, intercept).
 #' @keywords internal
 tt_glm_penalized_objective <- function(y, cores, intercept, basis, penalties,
-                                       lambda, family) {
+                                       lambda, family, offset = NULL) {
   key <- family_key(family)
-  eta <- intercept + tt_contraction(cores, basis)
+  offset <- normalize_offset(offset, length(y))
+  eta <- tt_eta(offset, intercept, cores, basis)
   if (identical(key, "gaussian")) {
     rss <- sum((y - eta)^2)
     nll <- 0.5 * rss

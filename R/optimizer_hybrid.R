@@ -5,7 +5,8 @@
 #'
 #' @keywords internal
 tt_hybrid_fit <- function(y, basis, family, ranks, lambda_spec, control,
-                          penalty_order = 2, init_cores = NULL) {
+                          penalty_order = 2, init_cores = NULL, offset = NULL) {
+  offset <- normalize_offset(offset, length(y))
   t0 <- proc.time()[["elapsed"]]
   fam <- normalize_family(family)
   key <- family_key(fam)
@@ -13,12 +14,12 @@ tt_hybrid_fit <- function(y, basis, family, ranks, lambda_spec, control,
   als <- if (identical(key, "gaussian")) {
     tt_als_fit(
       y, basis, ranks, lambda_spec, control, penalty_order,
-      init_cores = init_cores
+      init_cores = init_cores, offset = offset
     )
   } else {
     tt_pirls_fit(
       y, basis, fam, ranks, lambda_spec, control, penalty_order,
-      init_cores = init_cores
+      init_cores = init_cores, offset = offset
     )
   }
 
@@ -29,7 +30,8 @@ tt_hybrid_fit <- function(y, basis, family, ranks, lambda_spec, control,
     y, basis, ranks, lambda_spec, polish_ctrl, penalty_order,
     init_cores = als$cores,
     family = if (identical(key, "gaussian")) NULL else fam,
-    intercept0 = als$intercept
+    intercept0 = als$intercept,
+    offset = offset
   )
 
   conv_als <- als$convergence %||% list(

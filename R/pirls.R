@@ -5,14 +5,15 @@
 #'
 #' @keywords internal
 tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
-                         penalty_order = 2, init_cores = NULL) {
+                         penalty_order = 2, init_cores = NULL, offset = NULL) {
   d <- length(basis)
   p <- ncol(basis[[1]])
   method <- lambda_spec$method
   lambda <- lambda_spec$values %||% lambda_spec$lambda0
   fam <- normalize_family(family)
   key <- family_key(fam)
-  intercept <- init_intercept(fam, y)
+  offset <- normalize_offset(offset, length(y))
+  intercept <- init_intercept(fam, y, offset = offset)
   if (is.null(init_cores)) {
     cores <- initialize_tt_cores(p, ranks, seed = control$seed, sd = control$init_sd)
     for (k in seq_len(d)) cores[[k]] <- cores[[k]] * 0.05
@@ -23,10 +24,10 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
     core_penalty(ranks[k], p, ranks[k + 1L], penalty_order)
   })
 
-  eta <- intercept + tt_contraction(cores, basis)
+  eta <- tt_eta(offset, intercept, cores, basis)
   mu <- invlink_eta(fam, eta)
   dev <- glm_deviance(fam, y, mu)
-  obj <- tt_glm_penalized_objective(y, cores, intercept, basis, penalties, lambda, fam)
+  obj <- tt_glm_penalized_objective(y, cores, intercept, basis, penalties, lambda, fam, offset = offset)
 
   hist_rows <- list()
   n_eval <- 0L
@@ -56,7 +57,7 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
 
     # --- inner weighted ALS ---
     for (sw in seq_len(control$als_sweeps_per_pirls)) {
-      zc <- z - intercept
+      zc <- z - offset - intercept
       for (k in seq_len(d)) {
         L <- left_interfaces(cores, basis)
         R <- right_interfaces(cores, basis)
@@ -72,15 +73,15 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
         n_eval <- n_eval + upd$n_eval
       }
       f <- tt_contraction(cores, basis)
-      intercept <- sum(w * (z - f)) / max(sum(w), 1e-12)
+      intercept <- sum(w * (z - offset - f)) / max(sum(w), 1e-12)
       n_als_sweeps_total <- n_als_sweeps_total + 1L
     }
 
     cores_cand <- cores
     intercept_cand <- intercept
-    eta_cand <- intercept_cand + tt_contraction(cores_cand, basis)
+    eta_cand <- tt_eta(offset, intercept_cand, cores_cand, basis)
     obj_cand <- tt_glm_penalized_objective(
-      y, cores_cand, intercept_cand, basis, penalties, lambda, fam
+      y, cores_cand, intercept_cand, basis, penalties, lambda, fam, offset = offset
     )
 
     accepted_step <- 1
@@ -99,7 +100,8 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
           cores_old, intercept_old, cores_cand, intercept_cand, alpha
         )
         obj_try <- tt_glm_penalized_objective(
-          y, blended$cores, blended$intercept, basis, penalties, lambda, fam
+          y, blended$cores, blended$intercept, basis, penalties, lambda, fam,
+          offset = offset
         )
         if (is.finite(obj_try$value) &&
             obj_try$value <= obj_old$value + accept_tol) {
@@ -261,13 +263,20 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
 #'
 #' @keywords internal
 tt_pirls_fit_rcpp <- function(y, basis, family, ranks, lambda_spec, control,
-                              penalty_order = 2, init_cores = NULL) {
+                              penalty_order = 2, init_cores = NULL, offset = NULL) {
+  offset <- normalize_offset(offset, length(y))
+  if (any(offset != 0)) {
+    out <- tt_pirls_fit(y, basis, family, ranks, lambda_spec, control,
+                        penalty_order, init_cores = init_cores, offset = offset)
+    out$backend <- "R"
+    return(out)
+  }
   key <- family_key(family)
   do_halving <- identical(key, "bernoulli") &&
     isTRUE(control$pirls_step_halving %||% control$damping %||% TRUE)
   if (do_halving || !exists("tt_glm_pirls_cgcv_cpp", mode = "function")) {
     return(tt_pirls_fit(y, basis, family, ranks, lambda_spec, control,
-                        penalty_order, init_cores = init_cores))
+                        penalty_order, init_cores = init_cores, offset = offset))
   }
   d <- length(basis)
   p <- ncol(basis[[1]])

@@ -19,7 +19,8 @@ ttpspline(
   init = NULL,
   control = tt_control(),
   monitor = FALSE,
-  knots = NULL
+  knots = NULL,
+  offset = NULL
 )
 }
 \arguments{
@@ -69,6 +70,9 @@ comparisons; \code{NULL} draws from \code{control$seed}.}
 Convenient alias of \code{tt_control(monitor = TRUE)} / \code{tt_control(trace = TRUE)}.}
 
 \item{knots}{Optional list of knot vectors (advanced).}
+
+\item{offset}{Optional numeric vector of length \code{n} (or scalar) added to the
+linear predictor, e.g. \code{log(exposure)} for Poisson. Default \code{NULL} (zeros).}
 }
 \value{
 An object of class \code{"ttpspline"}.
