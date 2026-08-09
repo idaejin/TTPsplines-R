@@ -1,4 +1,4 @@
-# Build packaged example datasets (Ishigami, Sobol-g, Friedman).
+# Build packaged example datasets (Ishigami, Sobol-g, Friedman, glam_poisson).
 #   Rscript data-raw/build_example_datasets.R
 
 fa <- grep("^--file=", commandArgs(FALSE), value = TRUE)
@@ -37,8 +37,11 @@ attr(friedman, "name") <- "friedman"
 attr(friedman, "sigma") <- 1
 attr(friedman, "seed") <- 3L
 
+glam_poisson <- simulate_glam_poisson(n_age = 41L, n_year = 31L, seed = 44L)
+
 dir.create(file.path(root, "data"), showWarnings = FALSE)
 save(ishigami, file = file.path(root, "data", "ishigami.rda"), compress = "xz")
 save(sobol_g, file = file.path(root, "data", "sobol_g.rda"), compress = "xz")
 save(friedman, file = file.path(root, "data", "friedman.rda"), compress = "xz")
-message("Wrote data/{ishigami,sobol_g,friedman}.rda under ", root)
+save(glam_poisson, file = file.path(root, "data", "glam_poisson.rda"), compress = "xz")
+message("Wrote data/{ishigami,sobol_g,friedman,glam_poisson}.rda under ", root)

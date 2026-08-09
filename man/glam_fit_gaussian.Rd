@@ -11,7 +11,9 @@ glam_fit_gaussian(Y, B_list, lambda = 1, penalty_order = 2L)
 
 \item{B_list}{Marginal bases (\verb{n_k × p_k}).}
 
-\item{lambda}{Fixed smoothing.}
+\item{lambda}{Fixed smoothing (scalar or length-\code{d}).}
+
+\item{penalty_order}{Difference penalty order.}
 }
 \description{
 Exposed for compression benchmarks; scattered-data users should

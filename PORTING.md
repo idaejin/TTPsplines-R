@@ -31,7 +31,7 @@ See `PACKAGE_STATUS.md`.
 | `tt_sop.R` / `tt_cstar_nd.R` / `experiment_tt_cfs_*` | → port TT-cFS / cREML when Paper 2 freezes API |
 | `sa_cab_lambda.R` / SOP/CSOP | stay lab-only until justified |
 | `experiment_*.R` (Paper 1) | prefer package API; fill `inst/benchmarks/` as needed |
-| `R/glam_array.R` GLM grid | optional extend `glam_fit_*` |
+| `R/glam_array.R` GLM grid | **done** — `glam_fit_poisson` + `glam_grid_bases` |
 | docs / lit / manuscript | remain in lab |
 
 ## Install (collaborators)

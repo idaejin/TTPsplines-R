@@ -58,3 +58,9 @@ predict(fit_b, X[1:5, ], type = "response")
 Automatic λ: `lambda = "cGCV"` (see `fit$lambda_boundary` if estimates hug
 the search bounds). Future versions may add `"cFS"` / `"cREML"` via the same
 argument.
+
+# Grid Poisson via GLAM
+
+For **regular arrays** (e.g. age × year counts with exposure), use
+`glam_fit_poisson()` instead of scattering the grid into `ttpspline()` —
+see `vignette("glam-poisson")` and `data(glam_poisson)`.

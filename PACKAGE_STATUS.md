@@ -48,7 +48,7 @@ inst/benchmarks/ *.R + python/benchmark_keras_tt.py (stubs)
 | `src/tt_pspline_nd.cpp` | copied → package Rcpp backend |
 | TT ALS / interfaces / designs | reimplemented cleanly in `R/tt_geometry.R`, `R/als.R` |
 | GLM PIRLS + cGCV ideas | `R/pirls.R`, `R/lambda.R` |
-| GLAM RH | `R/glam.R` (`glam_fit_gaussian`) |
+| GLAM RH | `R/glam.R` (`glam_fit_gaussian`, `glam_fit_poisson`) |
 | Bases / difference penalties | `R/basis.R`, `R/penalties.R` |
 
 Lab scripts/docs/outputs **not moved or deleted**. As of 2026-08-10 the lab **installs this package** for engine use; superseded lab cores are marked in-file.

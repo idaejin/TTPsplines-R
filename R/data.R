@@ -53,3 +53,29 @@
 #' fit <- ttpspline(friedman$y, X, rank = 3, k = 6, lambda = 1,
 #'                  control = tt_control(max_sweeps = 8, compute_edf = FALSE))
 "friedman"
+
+#' Currie-style Poisson age × year array
+#'
+#' Simulated mortality-style counts on a regular age–period grid with known
+#' smooth log-rate and exposures. Intended for [glam_fit_poisson()] demos
+#' (GLAM / Currie et al. array methods).
+#'
+#' @format A list with components:
+#' \describe{
+#'   \item{Y}{41 × 31 integer count array.}
+#'   \item{exposure}{Matching exposure array.}
+#'   \item{age, year}{Grid axes.}
+#'   \item{eta, mu}{True log-rate surface and mean counts.}
+#' }
+#' @seealso [simulate_glam_poisson()], [glam_fit_poisson()], [glam_grid_bases()]
+#' @references
+#' Currie, I. D., Durban, M. and Eilers, P. H. C. (2006).
+#' Generalized linear array models with applications to multidimensional
+#' smoothing. *JRSS-B*.
+#' @examples
+#' data(glam_poisson)
+#' bb <- glam_grid_bases(list(age = glam_poisson$age, year = glam_poisson$year), k = 8)
+#' fit <- glam_fit_poisson(glam_poisson$Y, bb$B, lambda = c(10, 1),
+#'                         offset = log(glam_poisson$exposure))
+#' fit$n_pirls
+"glam_poisson"

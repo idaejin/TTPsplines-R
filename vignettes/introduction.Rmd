@@ -48,5 +48,6 @@ c(
 ```
 
 Also available: `data(sobol_g)`, `data(friedman)`. See the vignette
-*Classic test surfaces* for Sobol-\(g\) and Friedman demos, and Poisson /
-Bernoulli usage in *Generalized TTPsplines*.
+*Classic test surfaces* for Sobol-\(g\) and Friedman demos, Poisson /
+Bernoulli usage in *Generalized TTPsplines*, and Currie-style grid Poisson
+in *GLAM Poisson (Currie array methods)* (`data(glam_poisson)`).

@@ -179,6 +179,23 @@ On-the-fly redraws: `simulate_ishigami()`, `simulate_sobol_g()`,
 Vignette: `vignette("test-surfaces", package = "TTPsplines")`.
 Script: `Rscript inst/examples/example_test_functions.R`.
 
+## GLAM Poisson (Currie array methods)
+
+On a regular age × year grid with exposures:
+
+```r
+data(glam_poisson)
+bb <- glam_grid_bases(list(age = glam_poisson$age, year = glam_poisson$year), k = 10)
+fit <- glam_fit_poisson(
+  glam_poisson$Y, bb$B, lambda = c(10, 1),
+  offset = log(glam_poisson$exposure)
+)
+```
+
+Also: `glam_fit_gaussian()`, `simulate_glam_poisson()`.
+Vignette: `vignette("glam-poisson", package = "TTPsplines")`.
+Script: `Rscript inst/examples/example_glam_poisson.R`.
+
 | In v0 | Not yet |
 |---|---|
 | TT-ALS / PIRLS / global L-BFGS | TT-cFS, cREML |
@@ -186,7 +203,7 @@ Script: `Rscript inst/examples/example_test_functions.R`.
 | Gaussian / Poisson / Bernoulli | SA-CAB, SOP, DMRG |
 | `lambda` fixed / `"cGCV"` | automatic rank |
 | Experimental: `GD`, `Damped-Newton-ALS`, `LBFGS-ALS` | mixed effects / TMB |
-| GLAM grid baseline helper | |
+| GLAM Gaussian + Poisson (fixed λ, d≤3) | higher-d GLAM / REML |
 
 ## License
 

@@ -1,0 +1,56 @@
+---
+title: "GLAM Poisson (Currie array methods)"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{GLAM Poisson (Currie array methods)}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+# Grid arrays vs scattered TT
+
+`ttpspline()` targets **scattered** covariates with a Tensor-Train coefficient
+array. When responses live on a **regular multiway grid**, Currie–Durbán–Eilers
+**GLAM** (generalized linear array models) evaluate the same tensor-product
+P-spline without forming the Kronecker design, via rotated-\(H\) algebra.
+
+This vignette shows fixed-\(\lambda\) **Poisson** GLAM with an exposure offset
+— the classical age × year mortality-style setting.
+
+```{r}
+library(TTPsplines)
+data(glam_poisson)
+str(glam_poisson[c("Y", "exposure", "age", "year")], vec.len = 2)
+```
+
+# Fit
+
+```{r fit}
+bb <- glam_grid_bases(
+  list(age = glam_poisson$age, year = glam_poisson$year),
+  k = 10
+)
+fit <- glam_fit_poisson(
+  glam_poisson$Y, bb$B,
+  lambda = c(10, 1),
+  offset = log(glam_poisson$exposure)
+)
+c(
+  npar = fit$npar,
+  n_pirls = fit$n_pirls,
+  deviance = round(fit$deviance, 2)
+)
+```
+
+Mean counts vs truth (log scale):
+
+```{r rmse}
+sqrt(mean((log(as.numeric(fit$mu)) - log(as.numeric(glam_poisson$mu)))^2))
+```
+
+Redraw a smaller grid on the fly with `simulate_glam_poisson()`.
+For scattered Poisson / Bernoulli, see the *Generalized TTPsplines* vignette.
