@@ -19,6 +19,13 @@ tt_control(
   outer_maxit = 20,
   outer_tol = 1e-05,
   lbfgs_maxit = 500,
+  gd_lr = 0.01,
+  gd_maxit = 5000L,
+  gd_tol = 1e-07,
+  gd_linesearch = TRUE,
+  gd_step_factor = 0.5,
+  gd_step_min = 1e-12,
+  gd_armijo_c = 1e-04,
   adam_lr = 0.001,
   adam_epochs = 1000,
   adam_batch_size = NULL,
@@ -35,6 +42,13 @@ tt_control(
   init_sd = 0.15,
   als_sweeps_per_pirls = 4,
   hybrid_lbfgs_maxit = 50L,
+  dn_max_sweeps = 40L,
+  dn_armijo_c = 1e-04,
+  dn_step_factor = 0.5,
+  dn_step_min = 1e-12,
+  dn_ridge = 0,
+  block_lbfgs_maxit = 50L,
+  block_lbfgs_sweeps = 40L,
   compute_edf = TRUE,
   edf_max_npar = 2500L
 )
@@ -68,6 +82,21 @@ tt_control(
 
 \item{lbfgs_maxit}{Max L-BFGS iterations.}
 
+\item{gd_lr}{Initial / nominal GD step size (start of Armijo search when
+\code{gd_linesearch = TRUE}).}
+
+\item{gd_maxit}{Maximum gradient-descent iterations.}
+
+\item{gd_tol}{Infinity-norm gradient tolerance for GD stopping.}
+
+\item{gd_linesearch}{Use Armijo backtracking (recommended; default TRUE).}
+
+\item{gd_step_factor}{Backtracking factor for GD line search (default 0.5).}
+
+\item{gd_step_min}{Smallest GD step before declaring line-search failure.}
+
+\item{gd_armijo_c}{Armijo sufficient-decrease constant (default 1e-4).}
+
 \item{adam_lr, adam_epochs, adam_batch_size, adam_patience}{Adam/Keras knobs
 (optional backend; \code{adam_batch_size = NULL} means full-batch).}
 
@@ -98,6 +127,21 @@ used in both \code{W} and \code{z}.}
 
 \item{hybrid_lbfgs_maxit}{Max L-BFGS iterations after ALS warm-start when
 \code{optimizer = "hybrid"} (experimental Bernoulli polish).}
+
+\item{dn_max_sweeps}{Max outer sweeps for Damped-Newton-ALS.}
+
+\item{dn_armijo_c}{Armijo constant for Damped-Newton-ALS.}
+
+\item{dn_step_factor}{Backtracking factor for Damped-Newton-ALS.}
+
+\item{dn_step_min}{Smallest Newton step before rejecting the update.}
+
+\item{dn_ridge}{Optional explicit ridge added to the conditional Hessian
+(separate from the P-spline penalty; default 0).}
+
+\item{block_lbfgs_maxit}{Max L-BFGS iterations per core for LBFGS-ALS.}
+
+\item{block_lbfgs_sweeps}{Max outer ALS sweeps for LBFGS-ALS.}
 
 \item{compute_edf}{Compute joint linearized EDF after fit (\code{TRUE}/\code{FALSE}).
 Skipped automatically when packed TT size exceeds \code{edf_max_npar}.}

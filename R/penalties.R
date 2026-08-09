@@ -28,6 +28,7 @@ block_penalty <- function(penalties, lambda) {
 
 #' Penalty value and per-core gradients: 0.5 sum_k λ_k g'P g.
 #' @keywords internal
+#' @noRd
 .tt_penalty_value_grad <- function(cores, penalties, lambda) {
   val <- 0
   grads <- vector("list", length(cores))

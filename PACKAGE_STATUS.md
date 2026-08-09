@@ -10,10 +10,15 @@
 ## API axes
 
 ```text
-optimizer ∈ {auto*, ALS, LBFGS, hybrid*, Adam*}
+optimizer ∈ {auto*, ALS, PIRLS-ALS, Damped-Newton-ALS*, LBFGS-ALS*, GD*, LBFGS, hybrid*, Adam*}
 lambda    ∈ {scalar, length-d, "cGCV"}   # cFS/cREML not implemented yet
 backend   ∈ {auto, R, Rcpp, keras*}
-* auto = LBFGS for Bernoulli, ALS otherwise; hybrid/Adam experimental/stub
+* auto (v1, documented): Gaussian→ALS, Poisson→PIRLS-ALS, binomial→LBFGS
+  Transparent: fit$optimizer_requested / optimizer_used / optimizer_reason
+  ALS / PIRLS-ALS = structure-aware conditional solves
+  GD / LBFGS / Adam = direct penalized likelihood (same objective; Adam stub)
+  Damped-Newton-ALS / LBFGS-ALS = experimental conditional solvers
+  hybrid = experimental ALS→LBFGS polish
 ```
 
 Public entry: `ttpspline(..., optimizer=, backend=, init=)` plus `tt_initialize()`.
@@ -60,7 +65,7 @@ Lab scripts/docs/outputs **not moved or deleted**.
 | Gaussian ALS fixed λ | **working** (R + Rcpp) |
 | Gaussian cGCV | **working** (R + Rcpp) |
 | Poisson PIRLS | **working** (R; Rcpp path available) |
-| Bernoulli (default) | **LBFGS via `optimizer="auto"`** — ALS available explicitly; see `BERNOULLI_PIRLS_STABILIZATION.md` |
+| Bernoulli (default) | **LBFGS via `auto`** (`optimizer_reason`: binomial family default); ALS/PIRLS overridable |
 | Bernoulli ALS/PIRLS | **working with caveats** (FIX1+FIX2; predictive gap vs LBFGS remains) |
 | cGCV for GLM | **working** via modular λ / Rcpp |
 | Joint EDF | **working** (linearized; size-guarded) |
@@ -93,12 +98,14 @@ update_lambda(method = ...)  # extend switch
 ```r
 devtools::load_all("01_PROJECTS/ttpsplines-pkg")
 
-# Gaussian
+# Gaussian  -> auto selects ALS
 fit <- ttpspline(y, X, family = gaussian(), rank = 3, k = 8, lambda = "cGCV")
 
-# Poisson
+# Poisson   -> auto selects PIRLS-ALS
 fit <- ttpspline(y, X, family = poisson(),  rank = 3, k = 8, lambda = 1)
 
-# Bernoulli
+# Bernoulli -> auto selects LBFGS
 fit <- ttpspline(y, X, family = binomial(), rank = 3, k = 8, lambda = 1)
+
+summary(fit)  # shows Requested / Selected / Reason
 ```

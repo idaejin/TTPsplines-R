@@ -6,9 +6,11 @@
 #'
 #' Three orthogonal choices:
 #' \itemize{
-#'   \item \code{optimizer}: how TT cores are estimated (`auto`, `ALS`, `LBFGS`,
-#'     `hybrid`, `Adam`). \code{auto} selects \strong{LBFGS} for Bernoulli and
-#'     \strong{ALS} otherwise (see Bernoulli stabilization gate).
+#'   \item \code{optimizer}: estimation philosophy —
+#'     structure-aware \code{ALS} / \code{PIRLS-ALS}, or direct penalized
+#'     likelihood \code{GD} / \code{LBFGS} / \code{Adam}.
+#'     \code{auto} is a simple family-aware default (Gaussian \(\to\) ALS,
+#'     Poisson \(\to\) PIRLS-ALS, binomial \(\to\) LBFGS); always overridable.
 #'   \item \code{lambda}: fixed isotropic/anisotropic or automatic `"cGCV"`
 #'   \item \code{backend}: computational engine (`auto` / `R` / `Rcpp` / `keras`)
 #' }
@@ -23,9 +25,20 @@
 #' @param penalty_order Difference penalty order.
 #' @param lambda Numeric (isotropic / anisotropic fixed) or `"cGCV"`.
 #'   `"cFS"` / `"cREML"` are not implemented yet.
-#' @param optimizer `"auto"` (default; LBFGS for Bernoulli, ALS otherwise),
-#'   `"ALS"`, `"LBFGS"`, `"hybrid"` (experimental ALS→LBFGS polish), or
-#'   `"Adam"` (optional Keras; not yet implemented).
+#' @param optimizer One of:
+#'   \itemize{
+#'     \item `"auto"` — documented family default:
+#'       Gaussian \(\to\) `"ALS"`, Poisson \(\to\) `"PIRLS-ALS"`,
+#'       binomial \(\to\) `"LBFGS"` (see `optimizer_requested` /
+#'       `optimizer_used` on the fit);
+#'     \item `"ALS"` / `"PIRLS-ALS"` — structure-aware ALS / PIRLS+ALS;
+#'     \item `"Damped-Newton-ALS"` — conditional Newton + Armijo on true \(Q_k\);
+#'     \item `"LBFGS-ALS"` — block/core-wise L-BFGS on each \(Q_k\) (≠ global LBFGS);
+#'     \item `"GD"` — global first-order on \(\mathcal L\) (diagnostic);
+#'     \item `"LBFGS"` — global quasi-Newton on \(\mathcal L\);
+#'     \item `"hybrid"` — experimental ALS→LBFGS polish;
+#'     \item `"Adam"` — optional Keras (not yet implemented).
+#'   }
 #' @param backend `"auto"`, `"R"`, `"Rcpp"`, or `"keras"`. Overridden by
 #'   `control$backend` only when this argument is `"auto"` and control is not;
 #'   prefer setting backend here or in [tt_control()].
@@ -44,6 +57,7 @@
 #' y <- f + rnorm(n, 0, 0.3)
 #' fit <- ttpspline(y, X, family = gaussian(), rank = 2, k = 6,
 #'                  lambda = 1, control = tt_control(max_sweeps = 8))
+#' summary(fit)   # Requested/Selected optimizer under auto
 #' tt_complexity(fit)
 #'
 #' @export
@@ -55,7 +69,9 @@ ttpspline <- function(y,
                       degree = 3,
                       penalty_order = 2,
                       lambda = "cGCV",
-                      optimizer = c("auto", "ALS", "LBFGS", "hybrid", "Adam"),
+                      optimizer = c("auto", "ALS", "PIRLS-ALS",
+                                    "Damped-Newton-ALS", "LBFGS-ALS",
+                                    "GD", "LBFGS", "hybrid", "Adam"),
                       backend = c("auto", "R", "Rcpp", "keras"),
                       init = NULL,
                       control = tt_control(),
@@ -81,12 +97,13 @@ ttpspline <- function(y,
   if (!inherits(control, "tt_control")) {
     control <- do.call(tt_control, as.list(control))
   }
-  optimizer <- match.arg(optimizer)
-  if (identical(optimizer, "auto")) {
-    # Gate (BERNOULLI_PIRLS_STABILIZATION): ALS/PIRLS remains default for
-    # Gaussian/Poisson; Bernoulli fixed-λ prediction is more reliable with LBFGS.
-    optimizer <- if (identical(key, "bernoulli")) "LBFGS" else "ALS"
-  }
+  opt_res <- .resolve_optimizer(match.arg(optimizer), key)
+  optimizer_requested <- opt_res$requested
+  optimizer_used <- opt_res$used
+  optimizer_reason <- opt_res$reason
+  optimizer_label <- optimizer_used
+  # Internal dispatch token (PIRLS-ALS shares the ALS/PIRLS code path).
+  optimizer <- opt_res$dispatch
   backend_arg <- match.arg(backend)
   # Prefer explicit ttpspline(backend=...) over control when not auto
   if (!identical(backend_arg, "auto")) {
@@ -193,7 +210,10 @@ ttpspline <- function(y,
         als = NA,
         reason = NA_character_
       ),
-      optimizer = raw$optimizer %||% optimizer,
+      optimizer = optimizer_used,
+      optimizer_requested = optimizer_requested,
+      optimizer_used = optimizer_used,
+      optimizer_reason = optimizer_reason,
       n_sweeps = raw$n_sweeps,
       n_pirls = raw$n_pirls,
       n_opt_iter = raw$n_opt_iter %||% NA_integer_,
@@ -208,6 +228,45 @@ ttpspline <- function(y,
       x_range = apply(X, 2, range)
     ),
     class = "ttpspline"
+  )
+}
+
+#' Resolve public optimizer choice to a dispatch token + transparency fields.
+#'
+#' Family-aware `auto` rules (v1; simple and documented):
+#' Gaussian → ALS; Poisson → PIRLS-ALS; binomial → LBFGS.
+#'
+#' @keywords internal
+#' @noRd
+.resolve_optimizer <- function(optimizer, family_key) {
+  requested <- optimizer
+  if (!identical(requested, "auto")) {
+    dispatch <- if (identical(requested, "PIRLS-ALS")) "ALS" else requested
+    return(list(
+      requested = requested,
+      used = requested,
+      reason = "user-specified",
+      dispatch = dispatch
+    ))
+  }
+  if (identical(family_key, "gaussian")) {
+    used <- "ALS"
+    reason <- "gaussian family default"
+  } else if (identical(family_key, "poisson")) {
+    used <- "PIRLS-ALS"
+    reason <- "poisson family default"
+  } else if (identical(family_key, "bernoulli")) {
+    used <- "LBFGS"
+    reason <- "binomial family default"
+  } else {
+    stop("Unsupported family for optimizer='auto'.", call. = FALSE)
+  }
+  dispatch <- if (identical(used, "PIRLS-ALS")) "ALS" else used
+  list(
+    requested = "auto",
+    used = used,
+    reason = reason,
+    dispatch = dispatch
   )
 }
 
@@ -237,7 +296,48 @@ ttpspline <- function(y,
     ))
   }
 
-  # ALS (default)
+  if (identical(optimizer, "GD")) {
+    return(tt_gd_fit(
+      y, basis, ranks, lambda_spec, control, penalty_order,
+      init_cores = init_cores,
+      family = if (identical(key, "gaussian")) NULL else fam
+    ))
+  }
+
+  if (identical(optimizer, "Damped-Newton-ALS")) {
+    if (identical(key, "gaussian")) {
+      # closed-form ALS is the natural Gaussian path; DN reduces to ridge ALS
+      warning("Damped-Newton-ALS on Gaussian uses the same path as ALS.",
+              call. = FALSE)
+      out <- tt_als_fit(y, basis, ranks, lambda_spec, control, penalty_order,
+                       init_cores = init_cores)
+      out$optimizer <- "Damped-Newton-ALS"
+      out$backend <- "R"
+      return(out)
+    }
+    return(tt_damped_newton_als_fit(
+      y, basis, fam, ranks, lambda_spec, control, penalty_order,
+      init_cores = init_cores
+    ))
+  }
+
+  if (identical(optimizer, "LBFGS-ALS")) {
+    if (identical(key, "gaussian")) {
+      warning("LBFGS-ALS on Gaussian falls back to ALS (closed form).",
+              call. = FALSE)
+      out <- tt_als_fit(y, basis, ranks, lambda_spec, control, penalty_order,
+                       init_cores = init_cores)
+      out$optimizer <- "LBFGS-ALS"
+      out$backend <- "R"
+      return(out)
+    }
+    return(tt_lbfgs_als_fit(
+      y, basis, fam, ranks, lambda_spec, control, penalty_order,
+      init_cores = init_cores
+    ))
+  }
+
+  # ALS / PIRLS-ALS (default structure-aware path)
   if (identical(key, "gaussian")) {
     if (identical(backend, "Rcpp")) {
       tt_als_fit_rcpp(y, basis, ranks, lambda_spec, control, penalty_order,

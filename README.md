@@ -37,8 +37,8 @@ y <- f + rnorm(n, sd = 0.25)
 fit <- ttpspline(
   y, X,
   family = gaussian(),
-  rank = 3,
-  k = 8,
+  rank = 2,
+  k = 10,
   lambda = "cGCV",
   control = tt_control(max_sweeps = 12, backend = "auto")
 )
@@ -48,24 +48,51 @@ tt_complexity(fit)
 predict(fit, X[1:5, ], type = "response")
 ```
 
-Poisson / Bernoulli:
+With `optimizer = "auto"` (default), `summary(fit)` reports the family rule explicitly, e.g.:
+
+```text
+Requested optimizer:    auto
+Selected optimizer:     ALS
+Reason:                 gaussian family default
+```
+
+## Family-aware `auto` (v1)
+
+| Family | Selected optimizer |
+|---|---|
+| Gaussian | `ALS` |
+| Poisson | `PIRLS-ALS` |
+| binomial | `LBFGS` |
+
+Always overridable:
 
 ```r
-# y ~ Poisson(exp(f));  y ~ Bernoulli(plogis(f))
-fit_p <- ttpspline(y, X, family = poisson(),  rank = 3, k = 8, lambda = 1)
-fit_b <- ttpspline(y, X, family = binomial(), rank = 3, k = 8, lambda = 1)
+# Poisson / Bernoulli with auto defaults
+fit_p <- ttpspline(yp, X, family = poisson(),  rank = 3, k = 8, lambda = 1)
+fit_b <- ttpspline(yb, X, family = binomial(), rank = 3, k = 8, lambda = 1)
+
+# Explicit overrides (research / benchmarking)
+fit_b_als <- ttpspline(yb, X, family = binomial(), rank = 3, k = 8, lambda = 1,
+                       optimizer = "PIRLS-ALS")
+fit_g_lb  <- ttpspline(y,  X, family = gaussian(), rank = 2, k = 8, lambda = 1,
+                       optimizer = "LBFGS")
 ```
 
 Fixed anisotropic λ: `lambda = c(1, 10, 0.5)`.
+
+Fit fields: `optimizer_requested`, `optimizer_used`, `optimizer_reason`
+(and `optimizer` ≡ `optimizer_used` for compatibility).
 
 ## Current scope
 
 | In v0 | Not yet |
 |---|---|
-| TT-ALS / PIRLS | TT-cFS, cREML |
+| TT-ALS / PIRLS / global L-BFGS | TT-cFS, cREML |
+| Family-aware `auto` optimizer | rank-/λ-adaptive `auto` |
 | Gaussian / Poisson / Bernoulli | SA-CAB, SOP, DMRG |
 | `lambda` fixed / `"cGCV"` | automatic rank |
-| GLAM grid baseline helper | mixed effects / TMB |
+| Experimental: `GD`, `Damped-Newton-ALS`, `LBFGS-ALS` | mixed effects / TMB |
+| GLAM grid baseline helper | |
 
 ## License
 

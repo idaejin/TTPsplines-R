@@ -13,7 +13,8 @@ ttpspline(
   degree = 3,
   penalty_order = 2,
   lambda = "cGCV",
-  optimizer = c("auto", "ALS", "LBFGS", "hybrid", "Adam"),
+  optimizer = c("auto", "ALS", "PIRLS-ALS", "Damped-Newton-ALS", "LBFGS-ALS", "GD",
+    "LBFGS", "hybrid", "Adam"),
   backend = c("auto", "R", "Rcpp", "keras"),
   init = NULL,
   control = tt_control(),
@@ -39,9 +40,20 @@ ttpspline(
 \item{lambda}{Numeric (isotropic / anisotropic fixed) or \code{"cGCV"}.
 \code{"cFS"} / \code{"cREML"} are not implemented yet.}
 
-\item{optimizer}{\code{"auto"} (default; LBFGS for Bernoulli, ALS otherwise),
-\code{"ALS"}, \code{"LBFGS"}, \code{"hybrid"} (experimental ALS→LBFGS polish), or
-\code{"Adam"} (optional Keras; not yet implemented).}
+\item{optimizer}{One of:
+\itemize{
+\item \code{"auto"} — documented family default:
+Gaussian \(\to\) \code{"ALS"}, Poisson \(\to\) \code{"PIRLS-ALS"},
+binomial \(\to\) \code{"LBFGS"} (see \code{optimizer_requested} /
+\code{optimizer_used} on the fit);
+\item \code{"ALS"} / \code{"PIRLS-ALS"} — structure-aware ALS / PIRLS+ALS;
+\item \code{"Damped-Newton-ALS"} — conditional Newton + Armijo on true \(Q_k\);
+\item \code{"LBFGS-ALS"} — block/core-wise L-BFGS on each \(Q_k\) (≠ global LBFGS);
+\item \code{"GD"} — global first-order on \(\mathcal L\) (diagnostic);
+\item \code{"LBFGS"} — global quasi-Newton on \(\mathcal L\);
+\item \code{"hybrid"} — experimental ALS→LBFGS polish;
+\item \code{"Adam"} — optional Keras (not yet implemented).
+}}
 
 \item{backend}{\code{"auto"}, \code{"R"}, \code{"Rcpp"}, or \code{"keras"}. Overridden by
 \code{control$backend} only when this argument is \code{"auto"} and control is not;
@@ -65,9 +77,11 @@ arbitrarily scattered in \eqn{[a,b]^d}; no data grid is required.
 \details{
 Three orthogonal choices:
 \itemize{
-\item \code{optimizer}: how TT cores are estimated (\code{auto}, \code{ALS}, \code{LBFGS},
-\code{hybrid}, \code{Adam}). \code{auto} selects \strong{LBFGS} for Bernoulli and
-\strong{ALS} otherwise (see Bernoulli stabilization gate).
+\item \code{optimizer}: estimation philosophy —
+structure-aware \code{ALS} / \code{PIRLS-ALS}, or direct penalized
+likelihood \code{GD} / \code{LBFGS} / \code{Adam}.
+\code{auto} is a simple family-aware default (Gaussian \(\to\) ALS,
+Poisson \(\to\) PIRLS-ALS, binomial \(\to\) LBFGS); always overridable.
 \item \code{lambda}: fixed isotropic/anisotropic or automatic \code{"cGCV"}
 \item \code{backend}: computational engine (\code{auto} / \code{R} / \code{Rcpp} / \code{keras})
 }
@@ -80,6 +94,7 @@ f <- sin(2 * pi * X[, 1]) * cos(2 * pi * X[, 2]) + X[, 3]
 y <- f + rnorm(n, 0, 0.3)
 fit <- ttpspline(y, X, family = gaussian(), rank = 2, k = 6,
                  lambda = 1, control = tt_control(max_sweeps = 8))
+summary(fit)   # Requested/Selected optimizer under auto
 tt_complexity(fit)
 
 }

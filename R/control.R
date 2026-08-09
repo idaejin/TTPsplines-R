@@ -18,6 +18,14 @@
 #' @param outer_maxit Outer alternation iters (LBFGS/Adam + cGCV).
 #' @param outer_tol Outer relative change tolerance.
 #' @param lbfgs_maxit Max L-BFGS iterations.
+#' @param gd_lr Initial / nominal GD step size (start of Armijo search when
+#'   `gd_linesearch = TRUE`).
+#' @param gd_maxit Maximum gradient-descent iterations.
+#' @param gd_tol Infinity-norm gradient tolerance for GD stopping.
+#' @param gd_linesearch Use Armijo backtracking (recommended; default TRUE).
+#' @param gd_step_factor Backtracking factor for GD line search (default 0.5).
+#' @param gd_step_min Smallest GD step before declaring line-search failure.
+#' @param gd_armijo_c Armijo sufficient-decrease constant (default 1e-4).
 #' @param adam_lr,adam_epochs,adam_batch_size,adam_patience Adam/Keras knobs
 #'   (optional backend; `adam_batch_size = NULL` means full-batch).
 #' @param trace Print iteration progress.
@@ -36,6 +44,14 @@
 #' @param als_sweeps_per_pirls Inner ALS sweeps per PIRLS iteration.
 #' @param hybrid_lbfgs_maxit Max L-BFGS iterations after ALS warm-start when
 #'   `optimizer = "hybrid"` (experimental Bernoulli polish).
+#' @param dn_max_sweeps Max outer sweeps for Damped-Newton-ALS.
+#' @param dn_armijo_c Armijo constant for Damped-Newton-ALS.
+#' @param dn_step_factor Backtracking factor for Damped-Newton-ALS.
+#' @param dn_step_min Smallest Newton step before rejecting the update.
+#' @param dn_ridge Optional explicit ridge added to the conditional Hessian
+#'   (separate from the P-spline penalty; default 0).
+#' @param block_lbfgs_maxit Max L-BFGS iterations per core for LBFGS-ALS.
+#' @param block_lbfgs_sweeps Max outer ALS sweeps for LBFGS-ALS.
 #' @param compute_edf Compute joint linearized EDF after fit (`TRUE`/`FALSE`).
 #'   Skipped automatically when packed TT size exceeds `edf_max_npar`.
 #' @param edf_max_npar Maximum packed TT parameters for joint EDF (memory guard).
@@ -55,6 +71,13 @@ tt_control <- function(max_sweeps = 50,
                        outer_maxit = 20,
                        outer_tol = 1e-5,
                        lbfgs_maxit = 500,
+                       gd_lr = 1e-2,
+                       gd_maxit = 5000L,
+                       gd_tol = 1e-7,
+                       gd_linesearch = TRUE,
+                       gd_step_factor = 0.5,
+                       gd_step_min = 1e-12,
+                       gd_armijo_c = 1e-4,
                        adam_lr = 1e-3,
                        adam_epochs = 1000,
                        adam_batch_size = NULL,
@@ -71,6 +94,13 @@ tt_control <- function(max_sweeps = 50,
                        init_sd = 0.15,
                        als_sweeps_per_pirls = 4,
                        hybrid_lbfgs_maxit = 50L,
+                       dn_max_sweeps = 40L,
+                       dn_armijo_c = 1e-4,
+                       dn_step_factor = 0.5,
+                       dn_step_min = 1e-12,
+                       dn_ridge = 0,
+                       block_lbfgs_maxit = 50L,
+                       block_lbfgs_sweeps = 40L,
                        compute_edf = TRUE,
                        edf_max_npar = 2500L) {
   backend <- match.arg(backend)
@@ -98,6 +128,13 @@ tt_control <- function(max_sweeps = 50,
       outer_maxit = as.integer(outer_maxit),
       outer_tol = as.numeric(outer_tol),
       lbfgs_maxit = as.integer(lbfgs_maxit),
+      gd_lr = as.numeric(gd_lr),
+      gd_maxit = as.integer(gd_maxit),
+      gd_tol = as.numeric(gd_tol),
+      gd_linesearch = isTRUE(gd_linesearch),
+      gd_step_factor = as.numeric(gd_step_factor),
+      gd_step_min = as.numeric(gd_step_min),
+      gd_armijo_c = as.numeric(gd_armijo_c),
       adam_lr = as.numeric(adam_lr),
       adam_epochs = as.integer(adam_epochs),
       adam_batch_size = if (is.null(adam_batch_size)) NULL else as.integer(adam_batch_size),
@@ -114,6 +151,13 @@ tt_control <- function(max_sweeps = 50,
       init_sd = as.numeric(init_sd),
       als_sweeps_per_pirls = as.integer(als_sweeps_per_pirls),
       hybrid_lbfgs_maxit = as.integer(hybrid_lbfgs_maxit),
+      dn_max_sweeps = as.integer(dn_max_sweeps),
+      dn_armijo_c = as.numeric(dn_armijo_c),
+      dn_step_factor = as.numeric(dn_step_factor),
+      dn_step_min = as.numeric(dn_step_min),
+      dn_ridge = as.numeric(dn_ridge),
+      block_lbfgs_maxit = as.integer(block_lbfgs_maxit),
+      block_lbfgs_sweeps = as.integer(block_lbfgs_sweeps),
       compute_edf = isTRUE(compute_edf),
       edf_max_npar = as.integer(edf_max_npar)
     ),
@@ -129,6 +173,11 @@ resolve_backend <- function(control, optimizer = "ALS") {
     if (identical(optimizer, "Adam")) {
       if (isTRUE(tt_has_keras())) return("keras")
       return("keras") # caller will error with install hint
+    }
+    # Direct / conditional-likelihood R paths
+    if (optimizer %in% c("LBFGS", "GD", "hybrid",
+                         "Damped-Newton-ALS", "LBFGS-ALS")) {
+      return("R")
     }
     if (.ttpsplines_has_rcpp()) return("Rcpp")
     return("R")

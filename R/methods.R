@@ -6,8 +6,14 @@ print.ttpspline <- function(x, ...) {
   cat(sprintf("  n = %d, d = %d, k = %d\n", x$n, x$d, x$k))
   cat(sprintf("  TT rank: %s | chain: %s\n",
               .tt_rank_label(x), paste(x$rank, collapse = "-")))
-  cat(sprintf("  Optimizer: %s | backend: %s\n",
-              x$optimizer %||% "ALS", x$backend))
+  opt_used <- x$optimizer_used %||% x$optimizer %||% "ALS"
+  opt_req <- x$optimizer_requested %||% opt_used
+  if (!identical(opt_req, opt_used)) {
+    cat(sprintf("  Optimizer: %s (requested: %s) | backend: %s\n",
+                opt_used, opt_req, x$backend))
+  } else {
+    cat(sprintf("  Optimizer: %s | backend: %s\n", opt_used, x$backend))
+  }
   cat(sprintf("  Lambda (%s): %s\n",
               x$lambda_method,
               paste(sprintf("%.4g", x$lambda), collapse = ", ")))
@@ -51,7 +57,14 @@ print.summary.ttpspline <- function(x, ...) {
   }
   cat(sprintf("Compression ratio:      %.2fx\n", x$compression_ratio))
   cat("\n")
-  cat(sprintf("Optimizer:              %s\n", x$optimizer %||% "ALS"))
+  opt_used <- x$optimizer_used %||% x$optimizer %||% "ALS"
+  opt_req <- x$optimizer_requested %||% opt_used
+  opt_reason <- x$optimizer_reason %||% NA_character_
+  cat(sprintf("Requested optimizer:    %s\n", opt_req))
+  cat(sprintf("Selected optimizer:     %s\n", opt_used))
+  if (!is.na(opt_reason) && nzchar(opt_reason)) {
+    cat(sprintf("Reason:                 %s\n", opt_reason))
+  }
   cat(sprintf("Backend:                %s\n", x$backend))
   cat(sprintf("Lambda method:          %s\n", x$lambda_method))
   cat(sprintf("Lambda:                 %s\n",
@@ -68,8 +81,7 @@ print.summary.ttpspline <- function(x, ...) {
   cat(sprintf("Converged:              %s\n", x$converged))
   cat(sprintf("ALS sweeps:             %s\n",
               if (is.na(x$n_sweeps)) "NA" else as.character(x$n_sweeps)))
-  cat(sprintf("PIRLS iterations:       %s\n",
-              if (is.na(x$n_pirls)) "NA" else as.character(x$n_pirls)))
+  cat(sprintf("PIRLS iterations:       %s\n", .fmt_pirls_iters(x)))
   cat(sprintf("Optimizer iterations:   %s\n",
               if (is.null(x$n_opt_iter) || is.na(x$n_opt_iter)) "NA"
               else as.character(x$n_opt_iter)))
@@ -219,6 +231,7 @@ plot.ttpspline <- function(x,
 
 #' Human-readable TT rank label (uniform r, or anisotropic).
 #' @keywords internal
+#' @noRd
 .tt_rank_label <- function(x) {
   ranks <- x$rank
   if (is.null(ranks) || length(ranks) < 3L) return("?")
@@ -228,5 +241,22 @@ plot.ttpspline <- function(x,
   } else {
     paste0("anisotropic (", paste(internal, collapse = "-"), ")")
   }
+}
+
+#' Format PIRLS iteration count for summary (NA = not used by this solver).
+#' @keywords internal
+#' @noRd
+.fmt_pirls_iters <- function(x) {
+  n <- x$n_pirls
+  if (!is.null(n) && !is.na(n)) return(as.character(n))
+  opt <- x$optimizer_used %||% x$optimizer %||% ""
+  key <- x$family_key %||% ""
+  if (identical(key, "gaussian") || identical(opt, "ALS")) {
+    return("NA (not used; Gaussian ALS)")
+  }
+  if (opt %in% c("LBFGS", "GD", "Adam", "Damped-Newton-ALS", "LBFGS-ALS")) {
+    return(sprintf("NA (not used; %s)", opt))
+  }
+  "NA (not used)"
 }
 
