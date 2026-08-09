@@ -35,8 +35,8 @@ LinkingTo:
     Rcpp,
     RcppArmadillo
 VignetteBuilder: knitr
-URL: https://github.com/idaejin/TTPsplines
-BugReports: https://github.com/idaejin/TTPsplines/issues
+URL: https://github.com/idaejin/TTPsplines-R
+BugReports: https://github.com/idaejin/TTPsplines-R/issues
 Config/testthat/edition: 3
 Collate:
     'TTPsplines-package.R'

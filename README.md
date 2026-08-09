@@ -12,8 +12,8 @@ The TT factorization compresses the **coefficient tensor** of a tensor-product P
 
 ```r
 # install.packages("pak")
-pak::pak("idaejin/TTPsplines")
-# or: remotes::install_github("idaejin/TTPsplines")
+pak::pak("idaejin/TTPsplines-R")
+# or: remotes::install_github("idaejin/TTPsplines-R")
 ```
 
 Local (development folder `ttpsplines-pkg/`):
