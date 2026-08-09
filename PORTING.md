@@ -1,16 +1,25 @@
-# Porting map (lab → package)
+# Porting map (lab ↔ package)
 
-**Lab:** `../TTPsplines/` (unchanged)  
-**Package folder:** `ttpsplines-pkg/` · **R package:** `TTPsplines`
+**Lab:** `../TTPsplines/` (private `idaejin/TTPsplines`) — papers, lit, manuscript, Paper-2 prototypes.  
+**Package folder:** `ttpsplines-pkg/` · **R package:** `TTPsplines` · **GitHub:** `idaejin/TTPsplines-R`
+
+## Architecture (DECISION 2026-08-10)
+
+- **Package** owns the fitting engine and unit tests.
+- **Lab consumes** the installed package for Paper-1 engine demos (`library(TTPsplines)` / `R/00_load_package.R`).
+- Lab retains Paper-2 prototypes (TT-cFS / cREML / SA-CAB / SOP) until they are ported here.
+- Lab `R/tt_pspline_nd.R`, `tt_glm_pirls.R`, `tt_cgcv.R`, `pspline_tt_complete.R`, and lab `src/` are **SUPERSEDED as the engine** (kept for history / Paper-2 scaffolding).
 
 ## Done in v0 prototype
 
 - Public API `ttpspline()` / controls / rank / complexity / S3  
 - Gaussian ALS + cGCV (R + Rcpp)  
-- Poisson / Bernoulli PIRLS  
+- Poisson / Bernoulli PIRLS (+ family-aware `optimizer="auto"`)  
+- Conditional experimental solvers (Damped-Newton-ALS, LBFGS-ALS, GD)  
+- Example surfaces: Ishigami / Sobol-g / Friedman (`simulate_*`, `data(...)`)  
 - Modular `update_lambda()` (`fixed`, `cGCV`; stubs for `cFS`/`cREML`)  
 - GLAM Gaussian grid helper  
-- testthat smoke (15 tests)  
+- testthat suite  
 - vignette + benchmark stubs  
 
 See `PACKAGE_STATUS.md`.
@@ -19,13 +28,15 @@ See `PACKAGE_STATUS.md`.
 
 | Lab | Note |
 |---|---|
-| `experiment_*.R` | → fill `inst/benchmarks/` |
+| `tt_sop.R` / `tt_cstar_nd.R` / `experiment_tt_cfs_*` | → port TT-cFS / cREML when Paper 2 freezes API |
+| `sa_cab_lambda.R` / SOP/CSOP | stay lab-only until justified |
+| `experiment_*.R` (Paper 1) | prefer package API; fill `inst/benchmarks/` as needed |
 | `R/glam_array.R` GLM grid | optional extend `glam_fit_*` |
-| docs | keep in lab; cite from vignettes |
+| docs / lit / manuscript | remain in lab |
 
-## Before GitHub
+## Install (collaborators)
 
-1. Replace `OWNER` in DESCRIPTION/README  
-2. `devtools::document()`  
-3. `devtools::check()`  
-4. `usethis::use_git(); usethis::use_github()` on **this folder only**
+```r
+pak::pak("idaejin/TTPsplines-R")
+library(TTPsplines)
+```

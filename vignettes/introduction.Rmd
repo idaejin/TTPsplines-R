@@ -8,7 +8,7 @@ vignette: >
 ---
 
 ```{r, include = FALSE}
-knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
 
 # Scattered data, tensor coefficients, TT compression
@@ -25,8 +25,28 @@ arbitrarily scattered — **no data grid** is required.
 
 ```{r}
 library(TTPsplines)
-# fit <- ttpspline(y, X, family = gaussian(), rank = 3, k = 8, lambda = "cGCV")
-# tt_complexity(fit)
+data(ishigami)
+X <- as.matrix(ishigami[, c("x1", "x2", "x3")])
+fit <- ttpspline(
+  ishigami$y, X,
+  family = gaussian(),
+  rank = 2, k = 8, lambda = 1,
+  control = tt_control(max_sweeps = 10, backend = "R", compute_edf = TRUE)
+)
+summary(fit)
+tt_complexity(fit)
 ```
 
-See the package README for a full example.
+Family-aware default solver (`optimizer = "auto"`):
+
+```{r}
+c(
+  requested = fit$optimizer_requested,
+  used = fit$optimizer_used,
+  reason = fit$optimizer_reason
+)
+```
+
+Also available: `data(sobol_g)`, `data(friedman)`. See the vignette
+*Classic test surfaces* for Sobol-\(g\) and Friedman demos, and Poisson /
+Bernoulli usage in *Generalized TTPsplines*.

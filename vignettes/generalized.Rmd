@@ -8,15 +8,53 @@ vignette: >
 ---
 
 ```{r, include = FALSE}
-knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
 
-Gaussian uses ALS; Poisson / Bernoulli use PIRLS + weighted TT-ALS.
+# Family-aware `auto`
+
+With `optimizer = "auto"` (default):
+
+| Family | Selected optimizer |
+|--------|--------------------|
+| Gaussian | `ALS` |
+| Poisson | `PIRLS-ALS` |
+| binomial | `LBFGS` |
 
 ```{r}
-# ttpspline(y, X, family = poisson(),  rank = 3, lambda = 1)
-# ttpspline(y, X, family = binomial(), rank = 3, lambda = 1)
+library(TTPsplines)
+data(ishigami)
+X <- as.matrix(ishigami[, c("x1", "x2", "x3")])
 ```
 
-Automatic λ: `lambda = "cGCV"`. Future versions may add `"cFS"` / `"cREML"` via the
-same argument.
+# Poisson
+
+```{r poisson}
+set.seed(2)
+eta <- ishigami$f - mean(ishigami$f) + log(3)
+y_p <- rpois(nrow(ishigami), exp(eta))
+fit_p <- ttpspline(
+  y_p, X, family = poisson(), rank = 2, k = 6, lambda = 1,
+  control = tt_control(pirls_maxit = 20, backend = "R", compute_edf = FALSE)
+)
+c(used = fit_p$optimizer_used, reason = fit_p$optimizer_reason)
+predict(fit_p, X[1:5, ], type = "response")
+```
+
+# Bernoulli
+
+```{r bernoulli}
+set.seed(3)
+eta_b <- 1.2 * scale(ishigami$f)[, 1]
+y_b <- rbinom(nrow(ishigami), 1, plogis(eta_b))
+fit_b <- ttpspline(
+  y_b, X, family = binomial(), rank = 2, k = 6, lambda = 5,
+  control = tt_control(lbfgs_maxit = 150, backend = "R", compute_edf = FALSE)
+)
+c(used = fit_b$optimizer_used, reason = fit_b$optimizer_reason)
+predict(fit_b, X[1:5, ], type = "response")
+```
+
+Automatic λ: `lambda = "cGCV"` (see `fit$lambda_boundary` if estimates hug
+the search bounds). Future versions may add `"cFS"` / `"cREML"` via the same
+argument.

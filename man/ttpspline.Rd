@@ -91,6 +91,17 @@ Poisson \(\to\) PIRLS-ALS, binomial \(\to\) LBFGS); always overridable.
 }
 }
 \examples{
+## Packaged classic surfaces
+data(ishigami)
+X <- as.matrix(ishigami[, c("x1", "x2", "x3")])
+fit <- ttpspline(ishigami$y, X, rank = 2, k = 6, lambda = 1,
+                 control = tt_control(max_sweeps = 6, compute_edf = FALSE))
+summary(fit)
+
+data(sobol_g)
+data(friedman)
+
+## On-the-fly simulation (Gaussian / Poisson / Bernoulli)
 set.seed(1)
 n <- 400
 X <- matrix(runif(n * 3), n, 3)
@@ -98,10 +109,9 @@ f <- sin(2 * pi * X[, 1]) * cos(2 * pi * X[, 2]) + X[, 3]
 
 ## Gaussian (auto -> ALS)
 y <- f + rnorm(n, 0, 0.3)
-fit <- ttpspline(y, X, family = gaussian(), rank = 2, k = 6,
-                 lambda = 1, control = tt_control(max_sweeps = 8))
-summary(fit)
-tt_complexity(fit)
+fit_g <- ttpspline(y, X, family = gaussian(), rank = 2, k = 6,
+                   lambda = 1, control = tt_control(max_sweeps = 8))
+tt_complexity(fit_g)
 
 ## Poisson (auto -> PIRLS-ALS)
 yp <- rpois(n, exp(f - mean(f) + log(2)))
@@ -118,7 +128,7 @@ predict(fit_b, X[1:3, ], type = "response")
 
 ## Watch iteration progress
 \dontrun{
-fit_m <- ttpspline(y, X, family = gaussian(), rank = 2, k = 6, lambda = 1,
+fit_m <- ttpspline(ishigami$y, X, rank = 2, k = 6, lambda = 1,
                    monitor = TRUE, control = tt_control(max_sweeps = 8))
 }
 

@@ -1,0 +1,159 @@
+---
+title: "Classic test surfaces (Ishigami, Sobol-g, Friedman)"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Classic test surfaces (Ishigami, Sobol-g, Friedman)}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 6,
+  fig.height = 4
+)
+```
+
+# Why these datasets?
+
+`TTPsplines` targets **non-additive** multidimensional smoothing. Classic UQ
+response surfaces are convenient demos: known truth, strong interactions, and
+increasing dimension.
+
+Packaged samples (each `n = 800`) load with the usual R idiom:
+
+```{r}
+library(TTPsplines)
+data(ishigami)
+data(sobol_g)
+data(friedman)
+```
+
+| Dataset | \(d\) | Domain | Role |
+|---------|------:|--------|------|
+| `ishigami` | 3 | \([-\pi,\pi]^3\) | Strong interaction / anisotropy |
+| `sobol_g` | 4 | \([0,1]^4\) | Declining coordinate importance |
+| `friedman` | 5 | \([0,1]^5\) | Mixed interaction + main effects |
+
+These are **regression surfaces**, not Sobol-index estimators. To redraw
+samples with different `n` / noise, use `simulate_ishigami()`,
+`simulate_sobol_g()`, and `simulate_friedman()`.
+
+# Ishigami (\(d=3\))
+
+```{r ishigami-fit}
+data(ishigami)
+X_i <- as.matrix(ishigami[, c("x1", "x2", "x3")])
+fit_i <- ttpspline(
+  ishigami$y, X_i,
+  family = gaussian(),
+  rank = 2, k = 8, lambda = 1,
+  control = tt_control(max_sweeps = 10, backend = "R", compute_edf = TRUE)
+)
+summary(fit_i)
+tt_complexity(fit_i)
+```
+
+True surface vs fitted predictor:
+
+```{r ishigami-rmse}
+rmse <- function(a, b) sqrt(mean((a - b)^2))
+c(
+  RMSE_y = rmse(fitted(fit_i), ishigami$y),
+  RMSE_f = rmse(fitted(fit_i), ishigami$f)
+)
+```
+
+Compression story on this fit:
+
+```{r ishigami-layers}
+c(
+  full_tensor = fit_i$npar_dense,
+  TT_stored = fit_i$npar_tt,
+  TT_intrinsic = fit_i$npar_tt_intrinsic,
+  EDF = fit_i$edf
+)
+```
+
+# Sobol \(g\)-function (\(d=4\))
+
+With \(a=(0,0.5,3,9)\), earlier coordinates dominate.
+
+```{r sobol-fit}
+data(sobol_g)
+X_s <- as.matrix(sobol_g[, paste0("x", 1:4)])
+fit_s <- ttpspline(
+  sobol_g$y, X_s,
+  family = gaussian(),
+  rank = 2, k = 6, lambda = 1,
+  control = tt_control(max_sweeps = 8, backend = "R", compute_edf = FALSE)
+)
+fit_s$optimizer_used
+fit_s$compression_ratio
+rmse(fitted(fit_s), sobol_g$f)
+```
+
+Anisotropic cGCV often pushes directional \(\lambda\) apart (and sometimes onto
+search bounds — see `fit$lambda_boundary` when `lambda = "cGCV"`).
+
+```{r sobol-cgcv, warning=TRUE}
+fit_s_cgcv <- ttpspline(
+  sobol_g$y, X_s,
+  family = gaussian(),
+  rank = 2, k = 6, lambda = "cGCV",
+  control = tt_control(
+    max_sweeps = 8, backend = "R", compute_edf = FALSE,
+    warn_lambda_boundary = TRUE
+  )
+)
+fit_s_cgcv$lambda
+fit_s_cgcv$lambda_boundary
+```
+
+# Friedman #1 (\(d=5\))
+
+```{r friedman-fit}
+data(friedman)
+X_f <- as.matrix(friedman[, paste0("x", 1:5)])
+fit_f <- ttpspline(
+  friedman$y, X_f,
+  family = gaussian(),
+  rank = 3, k = 5, lambda = 1,
+  control = tt_control(max_sweeps = 8, backend = "R", compute_edf = FALSE)
+)
+summary(fit_f)
+rmse(fitted(fit_f), friedman$f)
+predict(fit_f, X_f[1:5, ], type = "response")
+```
+
+# Family-aware `auto` on a test surface
+
+Same Ishigami covariates, binomial response from the latent surface:
+
+```{r ishigami-bern}
+set.seed(11)
+eta <- 1.2 * scale(ishigami$f)[, 1]
+y_b <- rbinom(nrow(ishigami), 1, plogis(eta))
+fit_b <- ttpspline(
+  y_b, X_i,
+  family = binomial(),
+  rank = 2, k = 6, lambda = 5,
+  control = tt_control(lbfgs_maxit = 150, backend = "R", compute_edf = FALSE)
+)
+c(
+  requested = fit_b$optimizer_requested,
+  used = fit_b$optimizer_used,
+  reason = fit_b$optimizer_reason
+)
+predict(fit_b, X_i[1:5, ], type = "response")
+```
+
+# Regenerating the packaged samples
+
+```{r regen, eval = FALSE}
+# Rscript data-raw/build_example_datasets.R
+dat <- simulate_ishigami(n = 2000, sigma = 0.1, seed = 99)
+fit <- ttpspline(dat$y, dat$X, rank = 3, k = 10, lambda = "cGCV")
+```

@@ -5,7 +5,10 @@
 **Folder:** `01_PROJECTS/ttpsplines-pkg/` (avoids macOS case-clash with lab `TTPsplines/`)  
 **Package name:** `TTPsplines`  
 **Version:** `0.0.0.9000`  
-**Lab (unchanged source of truth for sims):** `01_PROJECTS/TTPsplines/`
+**GitHub:** https://github.com/idaejin/TTPsplines-R  
+**Lab:** `01_PROJECTS/TTPsplines/` — consumes this package for the engine; retains Paper-2 prototypes (TT-cFS / SOP / SA-CAB) until ported.
+
+**DECISION (2026-08-10):** package = sole home of engine unit tests; lab does not re-validate via `test_ttglam.R`.
 
 ## API axes
 
@@ -48,7 +51,7 @@ inst/benchmarks/ *.R + python/benchmark_keras_tt.py (stubs)
 | GLAM RH | `R/glam.R` (`glam_fit_gaussian`) |
 | Bases / difference penalties | `R/basis.R`, `R/penalties.R` |
 
-Lab scripts/docs/outputs **not moved or deleted**.
+Lab scripts/docs/outputs **not moved or deleted**. As of 2026-08-10 the lab **installs this package** for engine use; superseded lab cores are marked in-file.
 
 ## 3. API implemented
 

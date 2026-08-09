@@ -161,28 +161,22 @@ and (unless `warn_lambda_boundary = FALSE`) emits a soft warning. Fields: `fit$l
 
 ## Example datasets (Ishigami / Sobol-g / Friedman)
 
-Classic UQ test surfaces for multidimensional smoothing demos
-(response surfaces — **not** Sobol-index estimation):
-
 ```r
 library(TTPsplines)
+data(ishigami)   # d=3
+data(sobol_g)    # d=4
+data(friedman)   # d=5
 
-# On-the-fly simulation
-dat <- simulate_ishigami(n = 800, sigma = 0.15, seed = 1)
-fit <- ttpspline(dat$y, dat$X, rank = 2, k = 8, lambda = 1)
-
-dat <- simulate_sobol_g(n = 800, d = 4, a = c(0, 0.5, 3, 9), seed = 2)
-dat <- simulate_friedman(n = 800, sigma = 1, seed = 3)
-
-# Or load packaged samples (n = 800 each)
-data(ishigami)
-data(sobol_g)
-data(friedman)
 X <- as.matrix(ishigami[, c("x1", "x2", "x3")])
-fit <- ttpspline(ishigami$y, X, rank = 2, k = 8, lambda = "cGCV")
+fit <- ttpspline(ishigami$y, X, rank = 2, k = 8, lambda = 1)
+summary(fit)
 ```
 
-Truth evaluators: `f_ishigami()`, `f_sobol_g()`, `f_friedman()`.  
+On-the-fly redraws: `simulate_ishigami()`, `simulate_sobol_g()`,
+`simulate_friedman()`. Truth helpers: `f_ishigami()`, `f_sobol_g()`,
+`f_friedman()`.
+
+Vignette: `vignette("test-surfaces", package = "TTPsplines")`.
 Script: `Rscript inst/examples/example_test_functions.R`.
 
 | In v0 | Not yet |
