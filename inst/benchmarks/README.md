@@ -27,6 +27,11 @@
 # | `benchmark_bernoulli.R` | Scattered Bernoulli; ranks × {fixed, cGCV} |
 # | `benchmark_rank.R` | `tt_rank_profile` + test RMSE |
 # | `benchmark_glam.R` | Grid GLAM vs TT, **same fixed λ** (compression) |
+# | `benchmark_optimizers_fixed.R` | ALS vs LBFGS vs Adam stub; fixed λ; same init |
+# | `benchmark_optimizers_cgcv.R` | ALS vs LBFGS vs Adam stub; cGCV; same init |
 # | `python/benchmark_keras_tt.py` | Optional autodiff comparator (no TF dependency) |
 #
 # Shared DGP / metrics: `helpers.R`.
+#
+# Optimizer fair protocol: same data, bases, knots, rank, λ (or same cGCV),
+# same `tt_initialize()` cores. Compare η/μ/deviance/time — not TT cores.

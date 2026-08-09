@@ -48,7 +48,9 @@ all_scripts <- c(
   poisson = "benchmark_poisson.R",
   bernoulli = "benchmark_bernoulli.R",
   rank = "benchmark_rank.R",
-  glam = "benchmark_glam.R"
+  glam = "benchmark_glam.R",
+  optimizers_fixed = "benchmark_optimizers_fixed.R",
+  optimizers_cgcv = "benchmark_optimizers_cgcv.R"
 )
 if (identical(which, "all")) {
   todo <- unname(all_scripts)
