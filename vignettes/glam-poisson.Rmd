@@ -51,17 +51,73 @@ c(
 Mean counts vs truth (log scale):
 
 ```{r rmse}
-sqrt(mean((log(as.numeric(fit$mu)) - log(as.numeric(glam_poisson$mu)))^2))
+rmse_log <- function(a, b) sqrt(mean((log(as.numeric(a)) - log(as.numeric(b)))^2))
+rmse_log(fit$mu, glam_poisson$mu)
 ```
 
+# Comparison with TTPsplines
+
+The same age × year cells can be treated as **scattered** observations and fit
+with `ttpspline()` (Poisson / `PIRLS-ALS`). Currie–Durbán–Eilers GLAM keeps the
+array structure and an exposure `offset`; TT compresses the coefficient tensor
+and (in v0) has **no offset argument**, so exposure is absorbed into the
+smooth. Same fixed \(\lambda\) and basis size \(k\) make the comparison useful
+for compression vs surface recovery.
+
+```{r tt-vs-glam}
+X <- as.matrix(expand.grid(
+  age = glam_poisson$age,
+  year = glam_poisson$year
+))
+y <- as.numeric(glam_poisson$Y)
+mu_true <- as.numeric(glam_poisson$mu)
+
+fit_tt <- ttpspline(
+  y, X,
+  family = poisson(),
+  rank = 3, k = 10, lambda = c(10, 1),
+  control = tt_control(
+    pirls_maxit = 20, max_sweeps = 8,
+    backend = "R", compute_edf = FALSE
+  )
+)
+
+cmp <- data.frame(
+  method = c("GLAM (Currie–Durbán–Eilers)", "TTPsplines (rank 3)"),
+  npar = c(fit$npar, fit_tt$npar_tt),
+  npar_dense = c(fit$npar, fit_tt$npar_dense),
+  compression = c(1, round(fit_tt$compression_ratio, 2)),
+  RMSE_log_mu = c(
+    rmse_log(fit$mu, mu_true),
+    rmse_log(fitted(fit_tt), mu_true)
+  ),
+  RMSE_vs_GLAM = c(
+    0,
+    rmse_log(fitted(fit_tt), fit$mu)
+  ),
+  optimizer = c(fit$method, fit_tt$optimizer_used),
+  stringsAsFactors = FALSE
+)
+print(cmp, row.names = FALSE)
+```
+
+```{r tt-complexity}
+tt_complexity(fit_tt)
+```
+
+GLAM uses the full \(k\times k\) coefficient array; TT stores fewer parameters
+at modest rank while staying close to the GLAM mean surface on this example.
+For scattered Poisson / Bernoulli (no grid), prefer `ttpspline()` directly —
+see `vignette("generalized")`.
+
 Redraw a smaller grid on the fly with `simulate_glam_poisson()`.
-For scattered Poisson / Bernoulli, see the *Generalized TTPsplines* vignette.
 
 # See also
 
 - `vignette("generalized", package = "TTPsplines")` — scattered Poisson / Bernoulli
 - `vignette("getting-started", package = "TTPsplines")` — packaged test surfaces
 - `vignette("introduction", package = "TTPsplines")`
+- `vignette("rank-compression", package = "TTPsplines")` — ranks and EDF layers
 
 # References
 
@@ -79,3 +135,8 @@ Eilers, P. H. C. and Marx, B. D. (1996).
 Flexible smoothing with \(B\)-splines and penalties.
 *Statistical Science*, **11**, 89–121.
 <https://doi.org/10.1214/ss/1038425655>
+
+Oseledets, I. V. (2011).
+Tensor-train decomposition.
+*SIAM Journal on Scientific Computing*, **33**, 2295–2317.
+<https://doi.org/10.1137/090752286>
