@@ -11,3 +11,4 @@
 ^cran-comments\.md$
 ^Meta$
 ^doc$
+^data-raw$

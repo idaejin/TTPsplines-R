@@ -39,6 +39,7 @@ VignetteBuilder: knitr
 URL: https://github.com/idaejin/TTPsplines-R
 BugReports: https://github.com/idaejin/TTPsplines-R/issues
 Config/testthat/edition: 3
+LazyData: true
 Collate:
     'TTPsplines-package.R'
     'linalg.R'
@@ -64,4 +65,6 @@ Collate:
     'methods.R'
     'rank_profile.R'
     'glam.R'
+    'test_functions.R'
+    'data.R'
     'RcppExports.R'
