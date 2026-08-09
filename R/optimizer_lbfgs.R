@@ -15,18 +15,7 @@
   out
 }
 
-.tt_penalty_value_grad <- function(cores, penalties, lambda) {
-  val <- 0
-  grads <- vector("list", length(cores))
-  for (k in seq_along(cores)) {
-    g <- as.numeric(cores[[k]])
-    Pk <- penalties[[k]]
-    Pg <- as.numeric(Pk %*% g)
-    val <- val + 0.5 * lambda[k] * sum(g * Pg)
-    grads[[k]] <- array(lambda[k] * Pg, dim(cores[[k]]))
-  }
-  list(value = val, grads = grads)
-}
+# .tt_penalty_value_grad lives in penalties.R (shared with PIRLS objective)
 
 .tt_sse_grad_cores <- function(resid, cores, basis) {
   # resid = y - intercept - f  (or working residual for GLM score)
@@ -185,13 +174,14 @@ tt_cgcv_update_lambdas <- function(y, cores, intercept, basis, penalties, lambda
 #' @keywords internal
 tt_lbfgs_fit <- function(y, basis, ranks, lambda_spec, control,
                          penalty_order = 2, init_cores = NULL,
-                         family = NULL) {
+                         family = NULL, intercept0 = NULL) {
   method <- lambda_spec$method
   lambda <- lambda_spec$values %||% lambda_spec$lambda0
   t0 <- proc.time()[["elapsed"]]
   n_eval <- 0L
   n_outer <- 0L
   history <- list()
+  opt_convergence <- NA_integer_
 
   is_gauss <- is.null(family) || identical(family_key(family), "gaussian")
 
@@ -203,17 +193,25 @@ tt_lbfgs_fit <- function(y, basis, ranks, lambda_spec, control,
   }
 
   if (identical(method, "fixed")) {
-    fit0 <- run_once(lambda, init_cores)
+    fit0 <- run_once(lambda, init_cores, intercept0 = intercept0)
     cores <- fit0$cores
     intercept <- fit0$intercept
     penalties <- fit0$penalties
     n_iter <- fit0$opt$counts[["function"]]
-    converged <- fit0$opt$convergence == 0L
+    opt_convergence <- fit0$opt$convergence
+    # 0 = converged; 1 = maxit — accept if finite objective
+    converged <- opt_convergence %in% c(0L, 1L)
     n_outer <- 1L
   } else {
     # Outer alternation: LBFGS cores <-> conditional cGCV λ
     cores <- init_cores
-    intercept <- if (is_gauss) mean(y) else init_intercept(normalize_family(family), y)
+    intercept <- if (!is.null(intercept0)) {
+      intercept0
+    } else if (is_gauss) {
+      mean(y)
+    } else {
+      init_intercept(normalize_family(family), y)
+    }
     penalties <- NULL
     prev_lam <- lambda
     converged <- FALSE
@@ -224,6 +222,7 @@ tt_lbfgs_fit <- function(y, basis, ranks, lambda_spec, control,
       intercept <- fit0$intercept
       penalties <- fit0$penalties
       n_iter <- n_iter + fit0$opt$counts[["function"]]
+      opt_convergence <- fit0$opt$convergence
 
       if (is_gauss) {
         upd <- tt_cgcv_update_lambdas(
@@ -284,7 +283,25 @@ tt_lbfgs_fit <- function(y, basis, ranks, lambda_spec, control,
     history = history,
     penalties = penalties,
     elapsed = proc.time()[["elapsed"]] - t0,
-    converged = isTRUE(converged),
+    converged = isTRUE(converged) && is.finite(deviance),
+    convergence = list(
+      overall = isTRUE(converged) && is.finite(deviance),
+      pirls = NA,
+      als = NA,
+      reason = if (isTRUE(converged)) {
+        if (isTRUE(opt_convergence == 1L)) {
+          "L-BFGS maxit (finite objective)"
+        } else {
+          "L-BFGS"
+        }
+      } else {
+        "L-BFGS did not report convergence"
+      },
+      n_pirls = NA_integer_,
+      n_als_sweeps = NA_integer_,
+      n_step_halvings = 0L,
+      n_opt_iter = as.integer(n_iter)
+    ),
     method_lambda = method,
     optimizer = "LBFGS",
     backend = "R"

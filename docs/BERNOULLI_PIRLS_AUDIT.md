@@ -1,11 +1,41 @@
 # Bernoulli PIRLS audit — ALS vs L-BFGS (fixed λ)
 
-**Status:** diagnostic only — main algorithm **not** changed.  
+**Status:** diagnostic complete. Minimal FIX1+FIX2 + gate → `docs/BERNOULLI_PIRLS_STABILIZATION.md` (Outcome B).  
 **Script:** `inst/benchmarks/benchmark_bernoulli_audit.R` (`--quick` / `--full`)  
-**Results:** `inst/benchmarks/results/bernoulli_audit/`  
+**Results:** `inst/benchmarks/results/bernoulli_audit/` (do not overwrite)  
 **Run:** 2026-08-09 (`--quick`: n=500, d=3, k=6, ranks 2–3)
 
-Final question answered at §14–15.
+Final technical question answered at §14–16.  
+**Paper framing:** §−1 below; hub [[TTPsplines]] / [[TTPsplines-Paper-1]].
+
+---
+
+## −1. Epistemic framing (**DECISION** — how to write this)
+
+**Do not sell:** “We discover an instability of Bernoulli TT models.”
+
+**ESTABLISHED (logistic / IRLS literature):** extreme fitted probabilities can collapse PIRLS weights \(W_i=p_i(1-p_i)\to 0\) (complete / quasi-complete separation, near-separation, overconfident fits). Classical remedies: step-halving, trust regions, stronger regularization, Firth / bias-reduced likelihood.
+
+**What is TT-specific (PRELIMINARY → interesting HYPOTHESIS):** that known mechanism interacts with flexible coefficient-TT structure and P-spline smoothing:
+
+\[
+\boxed{r \times \boldsymbol\lambda \times \text{logistic likelihood}}.
+\]
+
+In TT-P-splines this need not be classical separation in the original design; it can be **near-separation / overconfident fitting** from a flexible \(\Theta_{\mathrm{TT}}\). Higher \(r\) raises capacity; lower \(\lambda\) raises local freedom → \(|\eta|\gg 0\), \(p\simeq 0/1\), \(W\simeq 0\).
+
+Two superimposed layers:
+
+1. separation / extreme \(p\) / IRLS instability — **known**;  
+2. nonconvex TT factorization + rank + directional smoothing — **TTPsplines-specific**, shapes *which* extreme-logit regions are reachable.
+
+**Optimizer implication of this audit:** L-BFGS does **not** eliminate the statistical extreme-\(p\) problem; it follows a **different trajectory** in TT-core space and may generalize better even when ALS train \(L\) is similar or slightly better. FIX1 (consistent \(W/z\)) + FIX2 (true-objective step-halving) are **natural PIRLS stabilizations**, not TT hacks.
+
+**POSITIONING prose:**
+
+> As is well known for logistic regression, extreme fitted probabilities can lead to degenerating IRLS weights. In the TT-P-spline setting, this phenomenon interacts with the TT rank and the strength of smoothness regularization, requiring appropriate stabilization of the PIRLS updates.
+
+**Worth pursuing later (not a headline claim yet):** \(r\uparrow,\lambda\downarrow\) ⇒ greater propensity to extreme-logit solutions — characterize *modulation*, do not rediscover IRLS pathology.
 
 ---
 
@@ -255,24 +285,17 @@ Conditional working EDF vs λ (core-wise, final ALS weights) decreases with λ a
 
 ---
 
-## 15. Recommended minimal fixes (not applied yet)
+## 15. Recommended minimal fixes
 
-Priority order for a **small** correction before re-running the original optimizer benchmark:
+**Applied** in package (see `BERNOULLI_PIRLS_STABILIZATION.md`): (1) true-objective step-halving; (2) consistent \(W/z\); richer `convergence`. Gate = Outcome B. Package default: Bernoulli → LBFGS via `optimizer="auto"`.
 
-1. **Replace soft deviance abort** with outer **step-halving on true Bernoulli \(L\)** (and optionally on max\|η\|).
-2. **Make z and W use the same variance** after flooring (fix Q2 inconsistency).
-3. **Bernoulli-specific η guard** (e.g. reject / damp steps that push max\|η\| beyond a bound, or stronger default λ / init shrink when `init` is supplied).
-4. **Optional hybrid** (document, not force): ALS/PIRLS warm-start → short L-BFGS polish for binomial.
-5. **Expose** `convergence$pirls` / `als` / `reason` separately.
+Still optional / not forced as headline:
 
-Do **not** “fix” Bernoulli by switching the headline optimizer to L-BFGS without documenting why PIRLS fails.
+3. Bernoulli-specific η **diagnostic** logging (done) vs hard η cap (**not** first-line; deferred).
+4. Hybrid ALS→LBFGS (**experimental**; did not close gap in gate).
+5. Dedicated study of propensity for extreme-logit solutions as \(r\uparrow,\lambda\downarrow\) (**NEXT** scientific angle — §−1).
 
-After implementing (1)–(2), re-run:
-
-```bash
-TTPSPLINES_BENCH_WHICH=optimizers_fixed Rscript inst/benchmarks/run_all.R
-Rscript inst/benchmarks/benchmark_bernoulli_audit.R --quick
-```
+Do **not** “fix” Bernoulli rhetorically by switching to LBFGS without documenting the PIRLS × rank × λ interaction.
 
 ---
 

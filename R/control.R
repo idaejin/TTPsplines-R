@@ -21,10 +21,21 @@
 #' @param adam_lr,adam_epochs,adam_batch_size,adam_patience Adam/Keras knobs
 #'   (optional backend; `adam_batch_size = NULL` means full-batch).
 #' @param trace Print iteration progress.
-#' @param damping Deviance step control for Bernoulli PIRLS.
+#' @param damping Legacy alias: for Bernoulli, enables `pirls_step_halving`
+#'   when `pirls_step_halving` is left at default.
+#' @param pirls_step_halving Bernoulli outer line search on the true penalized
+#'   Bernoulli objective (parameter-space blend of TT cores).
+#' @param step_factor Multiplicative factor for step-halving (default 0.5).
+#' @param step_min Smallest accepted step size (default 1/128).
+#' @param objective_tol Absolute tolerance for accepting a non-increasing step.
+#' @param binomial_mu_eps Clip Bernoulli mean away from 0/1 in PIRLS.
+#' @param binomial_weight_floor Shared floor for Bernoulli working variance
+#'   used in both `W` and `z`.
 #' @param seed RNG seed for TT core initialization.
 #' @param init_sd SD for random TT initialization.
 #' @param als_sweeps_per_pirls Inner ALS sweeps per PIRLS iteration.
+#' @param hybrid_lbfgs_maxit Max L-BFGS iterations after ALS warm-start when
+#'   `optimizer = "hybrid"` (experimental Bernoulli polish).
 #' @param compute_edf Compute joint linearized EDF after fit (`TRUE`/`FALSE`).
 #'   Skipped automatically when packed TT size exceeds `edf_max_npar`.
 #' @param edf_max_npar Maximum packed TT parameters for joint EDF (memory guard).
@@ -50,9 +61,16 @@ tt_control <- function(max_sweeps = 50,
                        adam_patience = 30,
                        trace = FALSE,
                        damping = TRUE,
+                       pirls_step_halving = NULL,
+                       step_factor = 0.5,
+                       step_min = 1 / 128,
+                       objective_tol = 1e-10,
+                       binomial_mu_eps = 1e-5,
+                       binomial_weight_floor = 1e-4,
                        seed = 1,
                        init_sd = 0.15,
                        als_sweeps_per_pirls = 4,
+                       hybrid_lbfgs_maxit = 50L,
                        compute_edf = TRUE,
                        edf_max_npar = 2500L) {
   backend <- match.arg(backend)
@@ -60,11 +78,11 @@ tt_control <- function(max_sweeps = 50,
     sparse <- match.arg(sparse, c("auto", "TRUE", "FALSE", "true", "false"))
     if (sparse %in% c("TRUE", "true")) sparse <- TRUE
     else if (sparse %in% c("FALSE", "false")) sparse <- FALSE
-    # else "auto"
   } else if (!is.logical(sparse) && !identical(sparse, "auto")) {
     sparse <- "auto"
   }
   if (!is.null(lambda_tol)) tol_lambda <- lambda_tol
+  if (is.null(pirls_step_halving)) pirls_step_halving <- isTRUE(damping)
   structure(
     list(
       max_sweeps = as.integer(max_sweeps),
@@ -86,9 +104,16 @@ tt_control <- function(max_sweeps = 50,
       adam_patience = as.integer(adam_patience),
       trace = isTRUE(trace),
       damping = isTRUE(damping),
+      pirls_step_halving = isTRUE(pirls_step_halving),
+      step_factor = as.numeric(step_factor),
+      step_min = as.numeric(step_min),
+      objective_tol = as.numeric(objective_tol),
+      binomial_mu_eps = as.numeric(binomial_mu_eps),
+      binomial_weight_floor = as.numeric(binomial_weight_floor),
       seed = as.integer(seed),
       init_sd = as.numeric(init_sd),
       als_sweeps_per_pirls = as.integer(als_sweeps_per_pirls),
+      hybrid_lbfgs_maxit = as.integer(hybrid_lbfgs_maxit),
       compute_edf = isTRUE(compute_edf),
       edf_max_npar = as.integer(edf_max_npar)
     ),

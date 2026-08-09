@@ -10,10 +10,10 @@
 ## API axes
 
 ```text
-optimizer ∈ {ALS, LBFGS, Adam*}
+optimizer ∈ {auto*, ALS, LBFGS, hybrid*, Adam*}
 lambda    ∈ {scalar, length-d, "cGCV"}   # cFS/cREML not implemented yet
 backend   ∈ {auto, R, Rcpp, keras*}
-* Adam/keras = optional stub
+* auto = LBFGS for Bernoulli, ALS otherwise; hybrid/Adam experimental/stub
 ```
 
 Public entry: `ttpspline(..., optimizer=, backend=, init=)` plus `tt_initialize()`.
@@ -60,7 +60,8 @@ Lab scripts/docs/outputs **not moved or deleted**.
 | Gaussian ALS fixed λ | **working** (R + Rcpp) |
 | Gaussian cGCV | **working** (R + Rcpp) |
 | Poisson PIRLS | **working** (R; Rcpp path available) |
-| Bernoulli PIRLS | **working** (R; soft damping) |
+| Bernoulli (default) | **LBFGS via `optimizer="auto"`** — ALS available explicitly; see `BERNOULLI_PIRLS_STABILIZATION.md` |
+| Bernoulli ALS/PIRLS | **working with caveats** (FIX1+FIX2; predictive gap vs LBFGS remains) |
 | cGCV for GLM | **working** via modular λ / Rcpp |
 | Joint EDF | **working** (linearized; size-guarded) |
 | Complexity layers | **working** (`tt_complexity`) |
@@ -72,7 +73,7 @@ Lab scripts/docs/outputs **not moved or deleted**.
 
 ## 9. Remaining blockers
 
-1. Stronger Bernoulli line-search; document λ bounds for separation  
+1. Bernoulli cGCV under default LBFGS path; document λ bounds for separation  
 2. Optional: sparse B-spline storage; matrix-free \(S_k\)  
 3. Parity suite: lab scripts vs package on shared seeds  
 4. `devtools::document()` for Rd pages  

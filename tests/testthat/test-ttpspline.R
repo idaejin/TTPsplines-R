@@ -52,7 +52,7 @@ test_that("poisson PIRLS finite", {
   expect_true(is.finite(fit$deviance))
 })
 
-test_that("bernoulli probabilities in (0,1)", {
+test_that("bernoulli auto uses LBFGS and stays numerically stable", {
   set.seed(5)
   n <- 350
   X <- matrix(runif(n * 3), n, 3)
@@ -60,12 +60,30 @@ test_that("bernoulli probabilities in (0,1)", {
   y <- rbinom(n, 1, plogis(eta))
   fit <- ttpspline(
     y, X, family = binomial(), rank = 2, k = 6, lambda = 5,
-    control = tt_control(pirls_maxit = 12, als_sweeps_per_pirls = 2,
-                         backend = "R", seed = 4, damping = TRUE)
+    control = tt_control(backend = "R", lbfgs_maxit = 200L, seed = 4,
+                         compute_edf = FALSE)
   )
+  expect_equal(fit$optimizer, "LBFGS")
   p <- predict(fit, type = "response")
   expect_true(all(p > 0 & p < 1))
   expect_true(is.finite(fit$deviance))
+  expect_true(max(abs(fit$linear.predictors)) < 20)
+})
+
+test_that("bernoulli can still request ALS explicitly", {
+  set.seed(5)
+  n <- 200
+  X <- matrix(runif(n * 3), n, 3)
+  y <- rbinom(n, 1, plogis(sin(2 * pi * X[, 1])))
+  fit <- ttpspline(
+    y, X, family = binomial(), rank = 2, k = 5, lambda = 5,
+    optimizer = "ALS",
+    control = tt_control(backend = "R", pirls_maxit = 15L,
+                         als_sweeps_per_pirls = 2L, compute_edf = FALSE)
+  )
+  expect_equal(fit$optimizer, "ALS")
+  expect_true(all(predict(fit, type = "response") > 0 &
+                    predict(fit, type = "response") < 1))
 })
 
 test_that("unimplemented lambda methods are reserved", {

@@ -24,25 +24,37 @@ family_key <- function(family) {
 }
 
 #' Working weights / response for PIRLS (canonical links).
+#'
+#' For Bernoulli, `W` and `z` share one floored working variance
+#' (`binomial_weight_floor`); μ clipping uses `binomial_mu_eps`.
+#'
 #' @keywords internal
-glm_working <- function(family, y, eta) {
+glm_working <- function(family, y, eta, control = NULL) {
   key <- family_key(family)
   if (identical(key, "gaussian")) {
-    return(list(mu = eta, weight = rep(1, length(y)), z = y))
+    return(list(mu = eta, weight = rep(1, length(y)), z = y,
+                var_work = rep(1, length(y))))
   }
   if (identical(key, "bernoulli")) {
-    mu <- plogis(eta)
-    mu <- pmin(pmax(mu, 1e-5), 1 - 1e-5)
-    var <- mu * (1 - mu)
-    w <- pmax(var, 1e-4)
-    z <- eta + (y - mu) / var
-    return(list(mu = mu, weight = w, z = z))
+    mu_eps <- if (!is.null(control$binomial_mu_eps)) control$binomial_mu_eps else 1e-5
+    w_floor <- if (!is.null(control$binomial_weight_floor)) {
+      control$binomial_weight_floor
+    } else {
+      1e-4
+    }
+    mu <- stats::plogis(eta)
+    mu <- pmin(pmax(mu, mu_eps), 1 - mu_eps)
+    var_raw <- mu * (1 - mu)
+    var_work <- pmax(var_raw, w_floor)
+    w <- var_work
+    z <- eta + (y - mu) / var_work
+    return(list(mu = mu, weight = w, z = z, var_raw = var_raw, var_work = var_work))
   }
   if (identical(key, "poisson")) {
     et <- pmin(pmax(eta, -20), 20)
     mu <- pmax(exp(et), 1e-8)
     z <- et + (y - mu) / mu
-    return(list(mu = mu, weight = mu, z = z))
+    return(list(mu = mu, weight = mu, z = z, var_work = mu))
   }
   stop("Unsupported family key: ", key)
 }
@@ -83,4 +95,43 @@ invlink_eta <- function(family, eta) {
   if (identical(key, "bernoulli")) return(plogis(eta))
   if (identical(key, "poisson")) return(exp(pmin(pmax(eta, -20), 20)))
   eta
+}
+
+#' True GLM + TT penalty objective at (cores, intercept).
+#' @keywords internal
+tt_glm_penalized_objective <- function(y, cores, intercept, basis, penalties,
+                                       lambda, family) {
+  key <- family_key(family)
+  eta <- intercept + tt_contraction(cores, basis)
+  if (identical(key, "gaussian")) {
+    rss <- sum((y - eta)^2)
+    nll <- 0.5 * rss
+  } else if (identical(key, "bernoulli")) {
+    mu <- pmin(pmax(plogis(eta), 1e-12), 1 - 1e-12)
+    nll <- -sum(y * log(mu) + (1 - y) * log(1 - mu))
+  } else if (identical(key, "poisson")) {
+    mu <- pmax(exp(pmin(pmax(eta, -20), 20)), 1e-12)
+    nll <- sum(mu - y * log(mu))
+  } else {
+    stop("Unsupported family in tt_glm_penalized_objective", call. = FALSE)
+  }
+  pen <- .tt_penalty_value_grad(cores, penalties, lambda)$value
+  list(value = nll + pen, nll = nll, penalty = pen, eta = eta)
+}
+
+#' Linear blend of TT cores + intercept (parameter space).
+#'
+#' No gauge alignment is applied: current R ALS does not re-orthogonalize
+#' cores between outer iterates, so old/candidate share a continuous ALS path.
+#' If future ALS adds canonicalization, align before blending.
+#'
+#' @keywords internal
+tt_blend_params <- function(cores_old, intercept_old, cores_new, intercept_new, alpha) {
+  cores <- lapply(seq_along(cores_old), function(k) {
+    cores_old[[k]] + alpha * (cores_new[[k]] - cores_old[[k]])
+  })
+  list(
+    cores = cores,
+    intercept = intercept_old + alpha * (intercept_new - intercept_old)
+  )
 }

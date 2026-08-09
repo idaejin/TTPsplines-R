@@ -1,12 +1,9 @@
 #' Training penalized objective (same definition for ALS and L-BFGS).
 #'
-#' Gaussian:
-#' \deqn{\tfrac12\|y-\alpha-\hat f\|^2 + \tfrac12\sum_k \lambda_k\, g_k^\top P_k g_k.}
-#'
 #' @param fit A [ttpspline()] object.
 #' @param X Training covariates used to build bases (required).
 #' @param y Optional response (defaults to `fit$y`).
-#' @return List with `value`, `nll_or_sse`, `penalty`, `rss`.
+#' @return List with `value`, `nll_or_sse`, `penalty`, `rss`, `eta`.
 #' @export
 tt_objective <- function(fit, X, y = NULL) {
   if (is.null(y)) y <- fit$y
@@ -26,35 +23,13 @@ tt_objective <- function(fit, X, y = NULL) {
   penalties <- lapply(seq_len(d), function(k) {
     core_penalty(ranks[k], p, ranks[k + 1L], po)
   })
-  f <- tt_contraction(cores, basis)
-  eta <- intercept + f
-  key <- fit$family_key %||% "gaussian"
-  if (identical(key, "gaussian")) {
-    rss <- sum((y - eta)^2)
-    nll <- 0.5 * rss
-  } else {
-    fam <- fit$family
-    mu <- invlink_eta(fam, eta)
-    nll <- switch(
-      key,
-      poisson = {
-        mu <- pmax(mu, 1e-12)
-        sum(mu - y * log(mu))
-      },
-      bernoulli = {
-        mu <- pmin(pmax(mu, 1e-12), 1 - 1e-12)
-        -sum(y * log(mu) + (1 - y) * log(1 - mu))
-      },
-      stop("Unsupported family for tt_objective.", call. = FALSE)
-    )
-    rss <- NA_real_
-  }
-  pen <- .tt_penalty_value_grad(cores, penalties, lambda)$value
+  fam <- fit$family %||% normalize_family(fit$family_key %||% "gaussian")
+  out <- tt_glm_penalized_objective(y, cores, intercept, basis, penalties, lambda, fam)
   list(
-    value = nll + pen,
-    nll_or_sse = nll,
-    penalty = pen,
-    rss = rss,
-    eta = eta
+    value = out$value,
+    nll_or_sse = out$nll,
+    penalty = out$penalty,
+    rss = if (identical(family_key(fam), "gaussian")) 2 * out$nll else NA_real_,
+    eta = out$eta
   )
 }

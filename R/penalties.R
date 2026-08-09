@@ -25,3 +25,18 @@ block_penalty <- function(penalties, lambda) {
   }
   out
 }
+
+#' Penalty value and per-core gradients: 0.5 sum_k λ_k g'P g.
+#' @keywords internal
+.tt_penalty_value_grad <- function(cores, penalties, lambda) {
+  val <- 0
+  grads <- vector("list", length(cores))
+  for (k in seq_along(cores)) {
+    g <- as.numeric(cores[[k]])
+    Pk <- penalties[[k]]
+    Pg <- as.numeric(Pk %*% g)
+    val <- val + 0.5 * lambda[k] * sum(g * Pg)
+    grads[[k]] <- array(lambda[k] * Pg, dim(cores[[k]]))
+  }
+  list(value = val, grads = grads)
+}

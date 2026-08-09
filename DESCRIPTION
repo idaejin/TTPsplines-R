@@ -53,6 +53,7 @@ Collate:
     'als.R'
     'pirls.R'
     'optimizer_lbfgs.R'
+    'optimizer_hybrid.R'
     'optimizer_adam.R'
     'objective.R'
     'ttpspline.R'

@@ -6,7 +6,9 @@
 #'
 #' Three orthogonal choices:
 #' \itemize{
-#'   \item \code{optimizer}: how TT cores are estimated (`ALS`, `LBFGS`, `Adam`)
+#'   \item \code{optimizer}: how TT cores are estimated (`auto`, `ALS`, `LBFGS`,
+#'     `hybrid`, `Adam`). \code{auto} selects \strong{LBFGS} for Bernoulli and
+#'     \strong{ALS} otherwise (see Bernoulli stabilization gate).
 #'   \item \code{lambda}: fixed isotropic/anisotropic or automatic `"cGCV"`
 #'   \item \code{backend}: computational engine (`auto` / `R` / `Rcpp` / `keras`)
 #' }
@@ -21,8 +23,9 @@
 #' @param penalty_order Difference penalty order.
 #' @param lambda Numeric (isotropic / anisotropic fixed) or `"cGCV"`.
 #'   `"cFS"` / `"cREML"` are not implemented yet.
-#' @param optimizer `"ALS"` (default), `"LBFGS"`, or `"Adam"` (optional Keras;
-#'   not yet implemented — use ALS or LBFGS).
+#' @param optimizer `"auto"` (default; LBFGS for Bernoulli, ALS otherwise),
+#'   `"ALS"`, `"LBFGS"`, `"hybrid"` (experimental ALS→LBFGS polish), or
+#'   `"Adam"` (optional Keras; not yet implemented).
 #' @param backend `"auto"`, `"R"`, `"Rcpp"`, or `"keras"`. Overridden by
 #'   `control$backend` only when this argument is `"auto"` and control is not;
 #'   prefer setting backend here or in [tt_control()].
@@ -52,7 +55,7 @@ ttpspline <- function(y,
                       degree = 3,
                       penalty_order = 2,
                       lambda = "cGCV",
-                      optimizer = c("ALS", "LBFGS", "Adam"),
+                      optimizer = c("auto", "ALS", "LBFGS", "hybrid", "Adam"),
                       backend = c("auto", "R", "Rcpp", "keras"),
                       init = NULL,
                       control = tt_control(),
@@ -79,6 +82,11 @@ ttpspline <- function(y,
     control <- do.call(tt_control, as.list(control))
   }
   optimizer <- match.arg(optimizer)
+  if (identical(optimizer, "auto")) {
+    # Gate (BERNOULLI_PIRLS_STABILIZATION): ALS/PIRLS remains default for
+    # Gaussian/Poisson; Bernoulli fixed-λ prediction is more reliable with LBFGS.
+    optimizer <- if (identical(key, "bernoulli")) "LBFGS" else "ALS"
+  }
   backend_arg <- match.arg(backend)
   # Prefer explicit ttpspline(backend=...) over control when not auto
   if (!identical(backend_arg, "auto")) {
@@ -179,6 +187,12 @@ ttpspline <- function(y,
       npar_dense = npar_full,
       compression_ratio = npar_full / max(npar_tt, 1),
       converged = isTRUE(raw$converged),
+      convergence = raw$convergence %||% list(
+        overall = isTRUE(raw$converged),
+        pirls = NA,
+        als = NA,
+        reason = NA_character_
+      ),
       optimizer = raw$optimizer %||% optimizer,
       n_sweeps = raw$n_sweeps,
       n_pirls = raw$n_pirls,
@@ -205,6 +219,13 @@ ttpspline <- function(y,
     return(tt_adam_fit(
       y, basis, ranks, lambda_spec, control, penalty_order,
       init_cores = init_cores, family = if (identical(key, "gaussian")) NULL else fam
+    ))
+  }
+
+  if (identical(optimizer, "hybrid")) {
+    return(tt_hybrid_fit(
+      y, basis, fam, ranks, lambda_spec, control, penalty_order,
+      init_cores = init_cores
     ))
   }
 
