@@ -13,7 +13,8 @@ tt_als_fit(
   penalty_order = 2,
   init_cores = NULL,
   offset = NULL,
-  weights = NULL
+  weights = NULL,
+  linear = NULL
 )
 }
 \description{

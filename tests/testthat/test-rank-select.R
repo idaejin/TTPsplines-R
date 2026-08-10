@@ -267,3 +267,44 @@ test_that("diagnostics record lambda, convergence, and n_starts", {
   expect_equal(dim(sel$cvraw), c(2L, 3L))
   expect_true(all(c("n_finite_folds", "n_inf_folds") %in% names(sel$cv_results)))
 })
+
+test_that("tt_rank_select shares full-X knots by default (no fold OOD warnings)", {
+  set.seed(42)
+  n <- 60
+  X <- matrix(runif(n * 2), n, 2)
+  # Global extreme only in fold 1 → train-only knots would warn on predict
+  X[1, 1] <- 10
+  y <- rnorm(n)
+  foldid <- rep(1:3, length.out = n)
+  foldid[1] <- 1L
+  ctrl <- tt_control(max_sweeps = 2L, compute_edf = FALSE)
+
+  expect_no_warning(
+    sel <- tt_rank_select(
+      y, X, ranks = 1, k = 5, lambda = 1, foldid = foldid,
+      control = ctrl
+    )
+  )
+  expect_identical(sel$knots_source, "full_X")
+  expect_false(isTRUE(sel$fold_knots))
+  expect_true(!is.null(sel$fit_args$knots))
+  kn_full <- build_marginal_bases(X, k = 5, degree = 3)$knots
+  expect_equal(sel$fit_args$knots[[1]], kn_full[[1]], tolerance = 1e-12)
+
+  # Escape hatch: per-fold knots recreate the extrapolation warning
+  expect_warning(
+    tt_rank_select(
+      y, X, ranks = 1, k = 5, lambda = 1, foldid = foldid,
+      fold_knots = TRUE, control = ctrl
+    ),
+    "outside knot span"
+  )
+
+  expect_error(
+    tt_rank_select(
+      y, X, ranks = 1, k = 5, lambda = 1, foldid = foldid,
+      knots = kn_full, fold_knots = TRUE, control = ctrl
+    ),
+    "fold_knots = TRUE"
+  )
+})

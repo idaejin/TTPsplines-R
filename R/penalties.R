@@ -665,10 +665,11 @@ tt_core_penalty_full <- function(...) tt_conditional_penalty_full(...)
 tt_gaussian_Q <- function(y, cores, intercept, basis, lambda,
                           offset = NULL, weights = NULL,
                           penalty_order = 2L, cyclic = NULL,
-                          penalty_mode = "global") {
+                          penalty_mode = "global",
+                          linear = NULL, beta = NULL) {
   offset <- normalize_offset(offset, length(y))
   w <- normalize_weights(weights, length(y))
-  eta <- tt_eta(offset, intercept, cores, basis)
+  eta <- tt_eta(offset, intercept, cores, basis, linear = linear, beta = beta)
   rss <- sum(w * (y - eta)^2)
   normalize_penalty_mode(penalty_mode)
   pen <- tt_global_penalty_value(

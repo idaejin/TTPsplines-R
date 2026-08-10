@@ -409,6 +409,7 @@ predict.ttpspline <- function(object,
                               newdata = NULL,
                               type = c("link", "response"),
                               offset = NULL,
+                              linear = NULL,
                               se.fit = FALSE,
                               interval = c("none", "confidence"),
                               level = 0.95,
@@ -422,6 +423,7 @@ predict.ttpspline <- function(object,
     stop("full_cov = TRUE is not implemented; use diagonal SE only.", call. = FALSE)
   }
   want_se <- isTRUE(se.fit) || identical(interval, "confidence")
+  has_lin <- !is.null(object$linear) && length(object$beta %||% numeric(0)) > 0L
 
   if (is.null(newdata)) {
     eta <- object$linear.predictors
@@ -437,9 +439,26 @@ predict.ttpspline <- function(object,
     }
     if (anyNA(Xnew)) stop("NA in newdata not supported.", call. = FALSE)
     off <- normalize_offset(offset, nrow(Xnew))
+    if (has_lin) {
+      if (is.null(linear)) {
+        stop(
+          "This fit has parametric `linear` terms; pass matching `linear=` ",
+          "for newdata (same columns as fit$linear).",
+          call. = FALSE
+        )
+      }
+      linear <- normalize_linear(linear, nrow(Xnew))
+      if (ncol(linear) != length(object$beta)) {
+        stop("`linear` must have ", length(object$beta), " columns.",
+             call. = FALSE)
+      }
+    } else {
+      linear <- NULL
+    }
     basis <- eval_marginal_bases(Xnew, object$knots, object$degree,
                                  cyclic = object$cyclic)
-    eta <- tt_eta(off, object$intercept, object$cores, basis)
+    eta <- tt_eta(off, object$intercept, object$cores, basis,
+                  linear = linear, beta = object$beta)
   }
 
   if (!want_se) {
@@ -447,6 +466,14 @@ predict.ttpspline <- function(object,
       return(eta)
     }
     return(invlink_eta(object$family, eta))
+  }
+
+  if (has_lin) {
+    stop(
+      "se.fit / interval with parametric `linear` terms is not implemented yet; ",
+      "use se.fit = FALSE.",
+      call. = FALSE
+    )
   }
 
   object <- tt_prepare_inference(object)

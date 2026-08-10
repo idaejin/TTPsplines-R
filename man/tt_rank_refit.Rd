@@ -2,20 +2,27 @@
 % Please edit documentation in R/rank_select.R
 \name{tt_rank_refit}
 \alias{tt_rank_refit}
+\alias{refit.tt_rank_selection}
+\alias{refit.cv.ttps}
 \title{Refit \code{\link[=ttps]{ttps()}} on all data at the selected TT rank.}
 \usage{
 tt_rank_refit(object, y = NULL, X = NULL, rank = NULL, control = NULL, ...)
+
+\method{refit}{tt_rank_selection}(object, rank = "1se", ...)
+
+\method{refit}{cv.ttps}(object, rank = "1se", ...)
 }
 \arguments{
-\item{object}{A \code{"tt_rank_selection"} from \code{\link[=tt_rank_select]{tt_rank_select()}}.}
+\item{object}{A \code{"tt_rank_selection"} / \code{"cv.ttps"} from \code{\link[=tt_rank_select]{tt_rank_select()}}
+or \code{\link[=cv.ttps]{cv.ttps()}}.}
 
 \item{y, X}{Optional override data (default: data stored on \code{object}).}
 
-\item{rank}{Rank to refit (default: \code{object$selected_rank}).}
+\item{rank}{Rank to refit (default: \code{object$selected_rank}). For \code{\link[=refit]{refit()}},
+may also be \code{"1se"}, \code{"min"}, or an integer.}
 
-\item{control}{Optional \code{\link[=tt_control]{tt_control()}} override (default: selection control,
-but \code{compute_edf} restored to the stored value / \code{TRUE} if you pass a new
-control).}
+\item{control}{Optional \code{\link[=tt_control]{tt_control()}} override. If \code{NULL}, uses the
+selection control with \code{compute_edf = TRUE}.}
 
 \item{...}{Passed to \code{\link[=ttps]{ttps()}} (override stored args).}
 }
@@ -25,5 +32,10 @@ A \code{"ttpspline"} fit.
 \description{
 Uses the fitting arguments stored on a \code{"tt_rank_selection"} object.
 Does \strong{not} change \code{\link[=ttps]{ttps()}} defaults: this is the explicit final fit
-after model selection.
+after model selection. Lambda is re-estimated on the full dataset when
+\code{lambda = "cGCV"}; fold-specific lambdas are never averaged.
+}
+\details{
+By default \code{compute_edf} is restored to \code{TRUE} for the final fit (CV
+itself disables EDF for speed).
 }

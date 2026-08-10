@@ -14,7 +14,8 @@ tt_pirls_fit_rcpp(
   penalty_order = 2,
   init_cores = NULL,
   offset = NULL,
-  weights = NULL
+  weights = NULL,
+  linear = NULL
 )
 }
 \description{

@@ -2,9 +2,17 @@
 % Please edit documentation in R/families.R
 \name{tt_blend_params}
 \alias{tt_blend_params}
-\title{Linear blend of TT cores + intercept (parameter space).}
+\title{Linear blend of TT cores + intercept (+ optional beta).}
 \usage{
-tt_blend_params(cores_old, intercept_old, cores_new, intercept_new, alpha)
+tt_blend_params(
+  cores_old,
+  intercept_old,
+  cores_new,
+  intercept_new,
+  alpha,
+  beta_old = NULL,
+  beta_new = NULL
+)
 }
 \description{
 No gauge alignment is applied: current R ALS does not re-orthogonalize

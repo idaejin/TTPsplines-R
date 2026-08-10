@@ -12,7 +12,7 @@
 #'
 #' @param y Numeric response.
 #' @param X Covariate matrix (`n × d`).
-#' @param family,rank,k,degree,penalty_order,lambda,optimizer,backend,control,monitor,knots,offset,weights,cyclic,period
+#' @param family,rank,k,degree,penalty_order,lambda,optimizer,backend,control,monitor,knots,offset,linear,weights,cyclic,period
 #'   Passed to [ttps()].
 #' @param n_starts Number of random TT initializations (default `10`).
 #' @param seed Base RNG seed; start `s` uses `seed + s - 1`.
@@ -59,6 +59,7 @@ ttps_multistart <- function(y,
                             monitor = FALSE,
                             knots = NULL,
                             offset = NULL,
+                            linear = NULL,
                             weights = NULL,
                             cyclic = NULL,
                             period = NULL,
@@ -112,6 +113,7 @@ ttps_multistart <- function(y,
         monitor = monitor,
         knots = knots,
         offset = offset,
+        linear = linear,
         weights = weights,
         cyclic = cyclic,
         period = period

@@ -17,13 +17,17 @@ tt_rank_select(
   backend = "auto",
   control = tt_control(),
   folds = 5L,
+  foldid = NULL,
   rule = c("1se", "min"),
-  metric = c("auto", "rmse", "poisson_deviance", "logloss"),
+  metric = c("auto", "mse", "rmse", "deviance", "poisson_deviance", "binomial_deviance",
+    "logloss"),
   n_starts = 1L,
   seed = NULL,
   keep_fits = FALSE,
   knots = NULL,
+  fold_knots = FALSE,
   offset = NULL,
+  linear = NULL,
   weights = NULL,
   rank_chain = NULL,
   ...
@@ -34,50 +38,80 @@ tt_rank_select(
 
 \item{ranks}{Integer vector of candidate \strong{uniform} ranks (default \code{1:5}).}
 
-\item{family, k, degree, penalty_order, lambda, optimizer, backend, control, knots, offset, weights}{Passed through to \code{\link[=ttps]{ttps()}} on each fold (and on final refit).}
+\item{family, k, degree, penalty_order, lambda, optimizer, backend, control, offset, weights, linear}{Passed through to \code{\link[=ttps]{ttps()}} on each fold (and on final refit).}
 
-\item{folds}{Number of CV folds (default 5).}
+\item{folds}{Number of CV folds (default 5). Ignored when \code{foldid} is supplied.}
+
+\item{foldid}{Optional integer vector of length \code{n} giving the fold of each
+observation (cv.glmnet-style). When supplied, folds are taken from
+\code{foldid} (remapped to \code{1:K} if needed) and shared across all ranks.}
 
 \item{rule}{\code{"1se"} (default, parsimonious) or \code{"min"} (minimum mean CV).}
 
-\item{metric}{\code{"auto"} (family-aware) or one of \code{"rmse"}, \code{"poisson_deviance"},
-\code{"logloss"}.}
+\item{metric}{\code{"auto"} (family-aware) or one of \code{"mse"}, \code{"rmse"},
+\code{"deviance"}, \code{"poisson_deviance"}, \code{"binomial_deviance"}, \code{"logloss"}.
+Defaults: Gaussian → MSE; Poisson → mean Poisson deviance;
+Bernoulli → mean binomial deviance.}
 
 \item{n_starts}{Number of random TT initializations per fold×rank (default \code{1}).
 When \verb{>1}, each fold keeps the start with best \strong{training} objective among
 converged fits (else best objective) for validation scoring. Recommended
 when ALS at low rank is init-sensitive (e.g. Ishigami at \code{r=2}).}
 
-\item{seed}{Optional RNG seed for fold assignment and multi-start inits.}
+\item{seed}{Optional RNG seed for fold assignment (when \code{foldid} is \code{NULL})
+and multi-start inits.}
 
 \item{keep_fits}{If \code{TRUE}, store fold fits (large); default \code{FALSE}.}
+
+\item{knots}{Optional list of knot vectors (as in \code{\link[=ttps]{ttps()}}). Default \code{NULL}
+builds knots once from the \strong{full} \code{X} (shared across folds and stored for
+\code{\link[=tt_rank_refit]{tt_rank_refit()}}), avoiding B-spline extrapolation warnings when a test
+fold has extremes outside a train-only knot span. Set \code{fold_knots = TRUE}
+to restore per-fold knot construction from the training subset only.}
+
+\item{fold_knots}{If \code{TRUE}, ignore the full-\code{X} default and let each fold
+rebuild knots from its training rows (\code{knots} must be \code{NULL}). Default
+\code{FALSE}.}
 
 \item{rank_chain}{Reserved for future non-uniform rank search; must be \code{NULL}
 in this version.}
 
-\item{...}{Currently unused (reserved).}
+\item{...}{Currently unused in \code{\link[=tt_rank_select]{tt_rank_select()}} (reserved). For \code{\link[=cv.ttps]{cv.ttps()}},
+further arguments are passed to \code{\link[=tt_rank_select]{tt_rank_select()}}.}
 }
 \value{
-An object of class \code{"tt_rank_selection"}. With \code{n_starts>1},
-\code{cv_results} adds \code{objective_best}, \code{objective_median}, \code{objective_sd},
-\code{start_gap} (median−best), and \code{start_convergence_rate}.
+An object of class \code{c("cv.ttps", "tt_rank_selection")} with
+glmnet-style aliases \code{cvm}, \code{cvsd}, \code{cvraw}, \code{foldid}, \code{rank.min},
+\code{rank.1se}, plus \code{variable_order}. With \code{n_starts>1}, \code{cv_results} adds
+\code{objective_best}, \code{objective_median}, \code{objective_sd}, \code{start_gap}
+(median−best), and \code{start_convergence_rate}.
 }
 \description{
 Chooses a uniform TT rank \(r\) (chain \verb{(1,r,...,r,1)}) using out-of-sample
 predictive loss only — never simulation truth. Fitting stays separate:
-\code{\link[=ttps]{ttps()}} still requires an explicit \code{rank}; use \code{\link[=tt_rank_refit]{tt_rank_refit()}} after
-selection to fit on all data at the chosen rank.
+\code{\link[=ttps]{ttps()}} still requires an explicit \code{rank}; use \code{\link[=tt_rank_refit]{tt_rank_refit()}} /
+\code{\link[=refit]{refit()}} after selection to fit on all data at the chosen rank.
 }
 \details{
 Inner smoothing (\code{lambda} fixed or \code{"cGCV"}) is estimated \strong{only} on each
 fold's training portion (no validation leakage into cGCV).
+
+Selected ranks are a \strong{predictive / working structural capacity} conditional
+on the covariate ordering in \code{X} — not an estimate of a latent “true TT rank”.
 }
 \section{Complexity layers}{
 
-Rank \(r\) = structural capacity; \(\lambda\) = directional smoothness;
-EDF = effective fitted flexibility. These are not interchangeable:
+Rank \(r\) = structural / interaction capacity; \(\lambda\) = directional
+smoothness; EDF = effective fitted flexibility. These are not interchangeable:
 \(r \neq \lambda \neq \mathrm{EDF}\). A modestly larger \(r\) can also
 improve \strong{optimization robustness}.
+}
+
+\section{Failed folds}{
+
+Non-finite fold losses are retained in the mean CV (\code{Inf} ⇒ \code{cvm = Inf}).
+The SE uses only finite folds (\code{sd / sqrt(K_finite)} when \code{K_finite >= 2});
+it is never computed by silently dropping failures from the mean.
 }
 
 \examples{
@@ -93,6 +127,6 @@ fit <- tt_rank_refit(sel)
 
 }
 \seealso{
-\code{\link[=tt_rank_refit]{tt_rank_refit()}}, \code{\link[=ttps]{ttps()}}, \code{\link[=tt_truncate_rank]{tt_truncate_rank()}}, \code{\link[=tt_rank_profile]{tt_rank_profile()}}
-(in-sample rank diagnostic, not CV).
+\code{\link[=cv.ttps]{cv.ttps()}}, \code{\link[=tt_rank_refit]{tt_rank_refit()}}, \code{\link[=refit]{refit()}}, \code{\link[=ttps]{ttps()}},
+\code{\link[=tt_truncate_rank]{tt_truncate_rank()}}, \code{\link[=tt_rank_profile]{tt_rank_profile()}} (in-sample rank diagnostic, not CV).
 }

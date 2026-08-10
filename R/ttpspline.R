@@ -55,6 +55,11 @@
 #' @param knots Optional list of knot vectors (advanced).
 #' @param offset Optional numeric vector of length `n` (or scalar) added to the
 #'   linear predictor, e.g. `log(exposure)` for Poisson. Default `NULL` (zeros).
+#' @param linear Optional unpenalized parametric design matrix (`n × p`), e.g.
+#'   `model.matrix(~ 0 + dow + ns(time, df), data)`. Do **not** include an
+#'   intercept column (`ttps` already estimates one). Estimated jointly with the
+#'   TT smooth via block-coordinate updates (ALS / PIRLS-ALS). Currently
+#'   unsupported for LBFGS / GD / hybrid / Adam / LBFGS-ALS / DN-ALS (error).
 #' @param weights Optional non-negative observation weights of length `n`
 #'   (or scalar). `NULL` means all ones. Zero weights exclude observations from
 #'   the likelihood (useful for masking empty array cells).
@@ -126,6 +131,7 @@ ttps <- function(y,
                       monitor = FALSE,
                       knots = NULL,
                       offset = NULL,
+                      linear = NULL,
                       weights = NULL,
                       cyclic = NULL,
                       period = NULL) {
@@ -148,6 +154,7 @@ ttps <- function(y,
   }
   offset <- normalize_offset(offset, length(y))
   weights <- normalize_weights(weights, length(y))
+  linear <- normalize_linear(linear, length(y))
 
   if (!inherits(control, "tt_control")) {
     control <- do.call(tt_control, as.list(control))
@@ -160,13 +167,40 @@ ttps <- function(y,
   optimizer_requested <- opt_res$requested
   optimizer_used <- opt_res$used
   optimizer_reason <- opt_res$reason
-  optimizer_label <- optimizer_used
-  # Internal dispatch token (PIRLS-ALS shares the ALS/PIRLS code path).
   optimizer <- opt_res$dispatch
+  # linear= forces structure-aware ALS/PIRLS (incl. binomial auto→LBFGS)
+  if (!is.null(linear)) {
+    unsupported <- c("LBFGS", "GD", "hybrid", "Adam",
+                     "Damped-Newton-ALS", "LBFGS-ALS")
+    if (identical(optimizer_requested, "auto") &&
+        identical(optimizer_used, "LBFGS")) {
+      optimizer_used <- "PIRLS-ALS"
+      optimizer_reason <- paste(
+        "linear= uses PIRLS-ALS for binomial",
+        "(LBFGS path not extended yet)"
+      )
+      optimizer <- "ALS"
+    } else if (optimizer_used %in% unsupported) {
+      stop(
+        "`linear=` is currently supported only with optimizer in ",
+        "{'auto','ALS','PIRLS-ALS'} (structure-aware path).",
+        call. = FALSE
+      )
+    }
+  }
+  optimizer_label <- optimizer_used
   backend_arg <- match.arg(backend)
   # Prefer explicit ttps(backend=...) over control when not auto
   if (!identical(backend_arg, "auto")) {
     control$backend <- backend_arg
+  }
+  # linear= is implemented on the R ALS/PIRLS path
+  if (!is.null(linear) &&
+      (identical(backend_arg, "Rcpp") || identical(control$backend, "Rcpp"))) {
+    warning("`linear=` uses the R backend; ignoring backend='Rcpp'.",
+            call. = FALSE)
+    control$backend <- "R"
+    backend_arg <- "R"
   }
   # Detailed ALS/PIRLS logs live on the R path; with monitor + backend=auto,
   # prefer R so iteration lines actually appear.
@@ -227,7 +261,8 @@ ttps <- function(y,
     backend = backend,
     init_cores = init,
     offset = offset,
-    weights = weights
+    weights = weights,
+    linear = linear
   )
 
   npar_tt <- tt_npar(p, ranks)
@@ -286,7 +321,9 @@ ttps <- function(y,
       lambda_bounds = lam_info$lambda_bounds,
       lambda_boundary = lam_info$lambda_boundary,
       lambda_at_boundary = lam_info$lambda_at_boundary,
-      intercept = raw$intercept,
+      intercept = raw$intercept %||% 0,
+      beta = raw$beta %||% numeric(0),
+      linear = linear,
       offset = offset,
       weights = weights,
       fitted.values = raw$mu,
@@ -377,9 +414,19 @@ ttpspline <- ttps
 #' @keywords internal
 .ttpspline_dispatch <- function(y, basis, fam, key, ranks, lambda_spec,
                                 control, penalty_order, optimizer, backend,
-                                init_cores, offset = NULL, weights = NULL) {
+                                init_cores, offset = NULL, weights = NULL,
+                                linear = NULL) {
   offset <- normalize_offset(offset, length(y))
   weights <- normalize_weights(weights, length(y))
+  linear <- normalize_linear(linear, length(y))
+  if (!is.null(linear) &&
+      optimizer %in% c("Adam", "hybrid", "LBFGS", "GD",
+                       "Damped-Newton-ALS", "LBFGS-ALS")) {
+    stop(
+      "`linear=` is not supported with optimizer='", optimizer, "'.",
+      call. = FALSE
+    )
+  }
   if (identical(optimizer, "Adam")) {
     return(tt_adam_fit(
       y, basis, ranks, lambda_spec, control, penalty_order,
@@ -419,7 +466,8 @@ ttpspline <- ttps
       warning("Damped-Newton-ALS on Gaussian uses the same path as ALS.",
               call. = FALSE)
       out <- tt_als_fit(y, basis, ranks, lambda_spec, control, penalty_order,
-                       init_cores = init_cores, offset = offset, weights = weights)
+                       init_cores = init_cores, offset = offset, weights = weights,
+                       linear = linear)
       out$optimizer <- "Damped-Newton-ALS"
       out$backend <- "R"
       return(out)
@@ -435,7 +483,8 @@ ttpspline <- ttps
       warning("LBFGS-ALS on Gaussian falls back to ALS (closed form).",
               call. = FALSE)
       out <- tt_als_fit(y, basis, ranks, lambda_spec, control, penalty_order,
-                       init_cores = init_cores, offset = offset, weights = weights)
+                       init_cores = init_cores, offset = offset, weights = weights,
+                       linear = linear)
       out$optimizer <- "LBFGS-ALS"
       out$backend <- "R"
       return(out)
@@ -448,22 +497,26 @@ ttpspline <- ttps
 
   # ALS / PIRLS-ALS (default structure-aware path)
   if (identical(key, "gaussian")) {
-    if (identical(backend, "Rcpp")) {
+    if (identical(backend, "Rcpp") && is.null(linear)) {
       tt_als_fit_rcpp(y, basis, ranks, lambda_spec, control, penalty_order,
-                      init_cores = init_cores, offset = offset, weights = weights)
+                      init_cores = init_cores, offset = offset, weights = weights,
+                      linear = linear)
     } else {
       out <- tt_als_fit(y, basis, ranks, lambda_spec, control, penalty_order,
-                       init_cores = init_cores, offset = offset, weights = weights)
+                       init_cores = init_cores, offset = offset, weights = weights,
+                       linear = linear)
       out$backend <- "R"
       out
     }
   } else {
-    if (identical(backend, "Rcpp")) {
+    if (identical(backend, "Rcpp") && is.null(linear)) {
       tt_pirls_fit_rcpp(y, basis, fam, ranks, lambda_spec, control, penalty_order,
-                        init_cores = init_cores, offset = offset, weights = weights)
+                        init_cores = init_cores, offset = offset, weights = weights,
+                        linear = linear)
     } else {
       tt_pirls_fit(y, basis, fam, ranks, lambda_spec, control, penalty_order,
-                  init_cores = init_cores, offset = offset, weights = weights)
+                  init_cores = init_cores, offset = offset, weights = weights,
+                  linear = linear)
     }
   }
 }

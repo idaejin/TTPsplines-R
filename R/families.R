@@ -106,11 +106,105 @@ invlink_eta <- function(family, eta) {
   eta
 }
 
-#' Full linear predictor η = offset + intercept + TT contraction.
+#' Parametric contribution linear %*% beta (0 if absent).
 #' @keywords internal
 #' @noRd
-tt_eta <- function(offset, intercept, cores, basis) {
-  as.numeric(offset) + as.numeric(intercept) + tt_contraction(cores, basis)
+tt_linear_contrib <- function(linear, beta) {
+  if (is.null(linear) || is.null(beta) || length(beta) == 0L ||
+      ncol(as.matrix(linear)) == 0L) {
+    return(0)
+  }
+  as.numeric(as.matrix(linear) %*% as.numeric(beta))
+}
+
+#' Full linear predictor η = offset + intercept + linear β + TT contraction.
+#' @keywords internal
+#' @noRd
+tt_eta <- function(offset, intercept, cores, basis,
+                   linear = NULL, beta = NULL) {
+  as.numeric(offset) + as.numeric(intercept) +
+    tt_linear_contrib(linear, beta) +
+    tt_contraction(cores, basis)
+}
+
+#' Normalize unpenalized parametric design (NULL → NULL).
+#'
+#' Do **not** include an intercept column: [ttps()] already estimates one.
+#'
+#' @keywords internal
+#' @noRd
+normalize_linear <- function(linear, n) {
+  n <- as.integer(n)
+  if (is.null(linear)) return(NULL)
+  if (is.vector(linear) && !is.list(linear)) {
+    linear <- matrix(as.numeric(linear), ncol = 1L)
+  }
+  linear <- as.matrix(linear)
+  storage.mode(linear) <- "double"
+  if (nrow(linear) != n) {
+    stop("`linear` must have ", n, " rows (same as length(y)).", call. = FALSE)
+  }
+  if (anyNA(linear)) stop("`linear` contains NA.", call. = FALSE)
+  if (ncol(linear) == 0L) return(NULL)
+  # Detect a literal intercept column (all ones)
+  for (j in seq_len(ncol(linear))) {
+    zj <- linear[, j]
+    if (max(abs(zj - 1)) < 1e-10) {
+      warning(
+        "`linear` column ", j, " looks like an intercept; ",
+        "omit it — ttps() already has an intercept.",
+        call. = FALSE
+      )
+      break
+    }
+  }
+  colnames(linear) <- if (is.null(colnames(linear))) {
+    paste0("linear", seq_len(ncol(linear)))
+  } else {
+    colnames(linear)
+  }
+  linear
+}
+
+#' Weighted OLS update of (intercept, beta) given TT surface f.
+#'
+#' Solves min_α,β ||√w (target − offset − f − α − linear β)||².
+#' When `linear` is NULL, reduces to a weighted mean for the intercept.
+#'
+#' @keywords internal
+#' @noRd
+tt_update_intercept_beta <- function(target, offset, f, linear = NULL,
+                                     weights = NULL) {
+  target <- as.numeric(target)
+  n <- length(target)
+  offset <- normalize_offset(offset, n)
+  f <- if (length(f) == 1L) rep(as.numeric(f), n) else as.numeric(f)
+  if (length(f) != n) stop("f must have length n.", call. = FALSE)
+  w <- normalize_weights(weights, n)
+  r <- target - offset - f
+  if (is.null(linear) || ncol(linear) == 0L) {
+    return(list(
+      intercept = sum(w * r) / max(sum(w), 1e-12),
+      beta = numeric(0)
+    ))
+  }
+  L <- as.matrix(linear)
+  Xb <- cbind(1, L)
+  sw <- sqrt(w)
+  Xw <- Xb * sw
+  rw <- r * sw
+  fit <- tryCatch(stats::lm.fit(Xw, rw), error = function(e) NULL)
+  if (is.null(fit)) {
+    xtx <- crossprod(Xw)
+    diag(xtx) <- diag(xtx) + 1e-8
+    coef <- as.numeric(solve(xtx, crossprod(Xw, rw)))
+  } else {
+    coef <- as.numeric(fit$coefficients)
+    coef[is.na(coef)] <- 0
+  }
+  beta <- coef[-1L]
+  names(beta) <- colnames(L)
+  list(intercept = coef[1L], beta = beta)
 }
 
 #' Normalize a length-n offset (NULL → zeros).
@@ -145,17 +239,18 @@ normalize_weights <- function(weights, n) {
   weights
 }
 
-#' True GLM + TT penalty objective at (cores, intercept).
+#' True GLM + TT penalty objective at (cores, intercept[, beta]).
 #' @keywords internal
 tt_glm_penalized_objective <- function(y, cores, intercept, basis, penalties,
                                        lambda, family, offset = NULL,
                                        weights = NULL,
                                        penalty_mode = "global",
-                                       penalty_order = 2L) {
+                                       penalty_order = 2L,
+                                       linear = NULL, beta = NULL) {
   key <- family_key(family)
   offset <- normalize_offset(offset, length(y))
   w <- normalize_weights(weights, length(y))
-  eta <- tt_eta(offset, intercept, cores, basis)
+  eta <- tt_eta(offset, intercept, cores, basis, linear = linear, beta = beta)
   if (identical(key, "gaussian")) {
     rss <- sum(w * (y - eta)^2)
     nll <- 0.5 * rss
@@ -177,19 +272,34 @@ tt_glm_penalized_objective <- function(y, cores, intercept, basis, penalties,
   list(value = nll + pen, nll = nll, penalty = pen, eta = eta)
 }
 
-#' Linear blend of TT cores + intercept (parameter space).
+#' Linear blend of TT cores + intercept (+ optional beta).
 #'
 #' No gauge alignment is applied: current R ALS does not re-orthogonalize
 #' cores between outer iterates, so old/candidate share a continuous ALS path.
 #' If future ALS adds canonicalization, align before blending.
 #'
 #' @keywords internal
-tt_blend_params <- function(cores_old, intercept_old, cores_new, intercept_new, alpha) {
+tt_blend_params <- function(cores_old, intercept_old, cores_new, intercept_new,
+                            alpha, beta_old = NULL, beta_new = NULL) {
   cores <- lapply(seq_along(cores_old), function(k) {
     cores_old[[k]] + alpha * (cores_new[[k]] - cores_old[[k]])
   })
-  list(
+  out <- list(
     cores = cores,
     intercept = intercept_old + alpha * (intercept_new - intercept_old)
   )
+  if (!is.null(beta_old) || !is.null(beta_new)) {
+    b0 <- if (is.null(beta_old)) numeric(0) else as.numeric(beta_old)
+    b1 <- if (is.null(beta_new)) numeric(0) else as.numeric(beta_new)
+    if (length(b0) == 0L && length(b1) == 0L) {
+      out$beta <- numeric(0)
+    } else if (length(b0) == length(b1)) {
+      out$beta <- b0 + alpha * (b1 - b0)
+      if (!is.null(names(b1))) names(out$beta) <- names(b1)
+      else if (!is.null(names(b0))) names(out$beta) <- names(b0)
+    } else {
+      out$beta <- b1
+    }
+  }
+  out
 }

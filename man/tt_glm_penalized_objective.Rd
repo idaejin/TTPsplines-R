@@ -2,7 +2,7 @@
 % Please edit documentation in R/families.R
 \name{tt_glm_penalized_objective}
 \alias{tt_glm_penalized_objective}
-\title{True GLM + TT penalty objective at (cores, intercept).}
+\title{True GLM + TT penalty objective at (cores, intercept\link{, beta}).}
 \usage{
 tt_glm_penalized_objective(
   y,
@@ -15,10 +15,12 @@ tt_glm_penalized_objective(
   offset = NULL,
   weights = NULL,
   penalty_mode = "global",
-  penalty_order = 2L
+  penalty_order = 2L,
+  linear = NULL,
+  beta = NULL
 )
 }
 \description{
-True GLM + TT penalty objective at (cores, intercept).
+True GLM + TT penalty objective at (cores, intercept\link{, beta}).
 }
 \keyword{internal}

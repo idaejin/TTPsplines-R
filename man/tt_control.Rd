@@ -41,7 +41,9 @@ tt_control(
   binomial_weight_floor = 1e-04,
   seed = 1,
   init_sd = 0.15,
-  als_sweeps_per_pirls = 4,
+  als_sweeps_per_pirls = 1,
+  als_sweeps_adaptive = TRUE,
+  als_sweeps_per_pirls_max = 3L,
   hybrid_lbfgs_maxit = 50L,
   dn_max_sweeps = 40L,
   dn_armijo_c = 1e-04,
@@ -137,7 +139,15 @@ used in both \code{W} and \code{z}.}
 
 \item{init_sd}{SD for random TT initialization.}
 
-\item{als_sweeps_per_pirls}{Inner ALS sweeps per PIRLS iteration.}
+\item{als_sweeps_per_pirls}{Inner ALS sweeps per PIRLS iteration (default
+\code{1}). Extra inner sweeps multiply \code{P_k^{full}} builds; on Chicago Poisson
+\(r=3\), \code{1} matched deviance of \code{3} at ~5–6× lower wall time.}
+
+\item{als_sweeps_adaptive}{If \code{TRUE} (default), allow additional inner ALS
+sweeps up to \code{als_sweeps_per_pirls_max} when the working predictor is still
+moving after the base sweep count.}
+
+\item{als_sweeps_per_pirls_max}{Cap on adaptive inner sweeps (default \code{3}).}
 
 \item{hybrid_lbfgs_maxit}{Max L-BFGS iterations after ALS warm-start when
 \code{optimizer = "hybrid"} (experimental Bernoulli polish).}

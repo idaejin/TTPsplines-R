@@ -22,6 +22,7 @@ ttps(
   monitor = FALSE,
   knots = NULL,
   offset = NULL,
+  linear = NULL,
   weights = NULL,
   cyclic = NULL,
   period = NULL
@@ -44,6 +45,7 @@ ttpspline(
   monitor = FALSE,
   knots = NULL,
   offset = NULL,
+  linear = NULL,
   weights = NULL,
   cyclic = NULL,
   period = NULL
@@ -101,6 +103,12 @@ Convenient alias of \code{tt_control(monitor = TRUE)} / \code{tt_control(trace =
 
 \item{offset}{Optional numeric vector of length \code{n} (or scalar) added to the
 linear predictor, e.g. \code{log(exposure)} for Poisson. Default \code{NULL} (zeros).}
+
+\item{linear}{Optional unpenalized parametric design matrix (\verb{n × p}), e.g.
+\code{model.matrix(~ 0 + dow + ns(time, df), data)}. Do \strong{not} include an
+intercept column (\code{ttps} already estimates one). Estimated jointly with the
+TT smooth via block-coordinate updates (ALS / PIRLS-ALS). Currently
+unsupported for LBFGS / GD / hybrid / Adam / LBFGS-ALS / DN-ALS (error).}
 
 \item{weights}{Optional non-negative observation weights of length \code{n}
 (or scalar). \code{NULL} means all ones. Zero weights exclude observations from

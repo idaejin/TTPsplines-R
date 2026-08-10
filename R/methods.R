@@ -71,6 +71,12 @@ print.summary.ttpspline <- function(x, ...) {
   cat(sprintf("Lambda method:          %s\n", x$lambda_method))
   cat(sprintf("Lambda:                 %s\n",
               paste(sprintf("%.6g", x$lambda), collapse = ", ")))
+  if (!is.null(x$beta) && length(x$beta) > 0L) {
+    cat(sprintf("Linear coef (beta):     %s\n",
+                paste(sprintf("%s=%.4g", names(x$beta) %||% seq_along(x$beta),
+                              x$beta),
+                      collapse = ", ")))
+  }
   if (!is.null(x$lambda_boundary) && length(x$lambda_boundary) &&
       (identical(x$lambda_method, "cGCV") || isTRUE(x$lambda_at_boundary))) {
     cat(sprintf("Lambda boundary:        %s\n",
@@ -186,10 +192,16 @@ residuals.ttpspline <- function(object,
 coef.ttpspline <- function(object, full = FALSE, ...) {
   if (isTRUE(full)) {
     Theta <- tt_full_theta(object$cores)
-    return(list(intercept = object$intercept, Theta = Theta, cores = object$cores))
+    return(list(
+      intercept = object$intercept,
+      beta = object$beta %||% numeric(0),
+      Theta = Theta,
+      cores = object$cores
+    ))
   }
   list(
     intercept = object$intercept,
+    beta = object$beta %||% numeric(0),
     cores = object$cores,
     rank = object$rank,
     lambda = object$lambda
@@ -245,7 +257,16 @@ plot.ttpspline <- function(x,
   for (j in seq_len(x$d)) {
     if (!j %in% dims) Xfull[, j] <- fixed[j]
   }
-  eta <- predict(x, Xfull, type = "link")
+  eta <- {
+    if (!is.null(x$linear) && length(x$beta %||% numeric(0)) > 0L) {
+      lin_g <- matrix(colMeans(x$linear), nrow(Xfull), ncol(x$linear),
+                      byrow = TRUE)
+      colnames(lin_g) <- colnames(x$linear)
+      predict(x, Xfull, type = "link", linear = lin_g)
+    } else {
+      predict(x, Xfull, type = "link")
+    }
+  }
   z <- matrix(eta, n_grid, n_grid)
   image(g1, g2, z,
         xlab = paste0("x", dims[1]), ylab = paste0("x", dims[2]),

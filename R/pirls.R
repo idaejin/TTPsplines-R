@@ -6,18 +6,20 @@
 #' @keywords internal
 tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
                          penalty_order = 2, init_cores = NULL, offset = NULL,
-                         weights = NULL) {
+                         weights = NULL, linear = NULL) {
   method <- lambda_spec$method
   if (identical(method, "cGCV") &&
       identical(.cgcv_update_mode(control), "outer_simultaneous")) {
     return(tt_pirls_fit_cgcv_outer(
       y, basis, family, ranks, lambda_spec, control, penalty_order,
-      init_cores = init_cores, offset = offset, weights = weights
+      init_cores = init_cores, offset = offset, weights = weights,
+      linear = linear
     ))
   }
   tt_pirls_fit_sequential(
     y, basis, family, ranks, lambda_spec, control, penalty_order,
-    init_cores = init_cores, offset = offset, weights = weights
+    init_cores = init_cores, offset = offset, weights = weights,
+    linear = linear
   )
 }
 
@@ -26,7 +28,8 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
 #' @noRd
 tt_pirls_fit_sequential <- function(y, basis, family, ranks, lambda_spec, control,
                                     penalty_order = 2, init_cores = NULL,
-                                    offset = NULL, weights = NULL) {
+                                    offset = NULL, weights = NULL,
+                                    linear = NULL) {
   d <- length(basis)
   p <- ncol(basis[[1]])
   method <- lambda_spec$method
@@ -35,7 +38,13 @@ tt_pirls_fit_sequential <- function(y, basis, family, ranks, lambda_spec, contro
   key <- family_key(fam)
   offset <- normalize_offset(offset, length(y))
   w_obs <- normalize_weights(weights, length(y))
+  linear <- normalize_linear(linear, length(y))
   intercept <- init_intercept(fam, y, offset = offset, weights = w_obs)
+  beta <- if (is.null(linear)) numeric(0) else {
+    b <- rep(0, ncol(linear))
+    names(b) <- colnames(linear)
+    b
+  }
   if (is.null(init_cores)) {
     cores <- initialize_tt_cores(p, ranks, seed = control$seed, sd = control$init_sd)
     for (k in seq_len(d)) cores[[k]] <- cores[[k]] * 0.05
@@ -79,6 +88,7 @@ tt_pirls_fit_sequential <- function(y, basis, family, ranks, lambda_spec, contro
   for (it in seq_len(control$pirls_maxit)) {
     cores_old <- cores
     intercept_old <- intercept
+    beta_old <- beta
     eta_old <- eta
     obj_old <- obj
     work <- glm_working(fam, y, eta, control = control)
@@ -93,8 +103,12 @@ tt_pirls_fit_sequential <- function(y, basis, family, ranks, lambda_spec, contro
       base_sw
     }
     for (sw in seq_len(max_sw)) {
-      zc <- z - offset - intercept
-      eta_before <- if (sw >= base_sw) tt_eta(offset, intercept, cores, basis) else NULL
+      zc <- z - offset - intercept - tt_linear_contrib(linear, beta)
+      eta_before <- if (sw >= base_sw) {
+        tt_eta(offset, intercept, cores, basis, linear = linear, beta = beta)
+      } else {
+        NULL
+      }
       for (k in margin_order) {
         built <- .cgcv_core_workspace(
           cores, k, lambda, basis, zc, ranks, control,
@@ -168,21 +182,27 @@ tt_pirls_fit_sequential <- function(y, basis, family, ranks, lambda_spec, contro
         }
       }
       f <- tt_contraction(cores, basis)
-      intercept <- sum(w * (z - offset - f)) / max(sum(w), 1e-12)
+      ab <- tt_update_intercept_beta(z, offset, f, linear = linear, weights = w)
+      intercept <- ab$intercept
+      beta <- ab$beta
       n_als_sweeps_total <- n_als_sweeps_total + 1L
       if (sw >= base_sw && !is.null(eta_before)) {
-        eta_after <- tt_eta(offset, intercept, cores, basis)
+        eta_after <- tt_eta(offset, intercept, cores, basis,
+                            linear = linear, beta = beta)
         if (max(abs(eta_after - eta_before)) < control$tol) break
       }
     }
 
     cores_cand <- cores
     intercept_cand <- intercept
-    eta_cand <- tt_eta(offset, intercept_cand, cores_cand, basis)
+    beta_cand <- beta
+    eta_cand <- tt_eta(offset, intercept_cand, cores_cand, basis,
+                       linear = linear, beta = beta_cand)
     obj_cand <- tt_glm_penalized_objective(
       y, cores_cand, intercept_cand, basis, penalties, lambda, fam,
       offset = offset, weights = w_obs,
-      penalty_mode = penalty_mode, penalty_order = penalty_order
+      penalty_mode = penalty_mode, penalty_order = penalty_order,
+      linear = linear, beta = beta_cand
     )
 
     accepted_step <- 1
@@ -198,17 +218,20 @@ tt_pirls_fit_sequential <- function(y, basis, family, ranks, lambda_spec, contro
       alpha <- 1
       while (alpha + 1e-15 >= step_min) {
         blended <- tt_blend_params(
-          cores_old, intercept_old, cores_cand, intercept_cand, alpha
+          cores_old, intercept_old, cores_cand, intercept_cand, alpha,
+          beta_old = beta_old, beta_new = beta_cand
         )
         obj_try <- tt_glm_penalized_objective(
           y, blended$cores, blended$intercept, basis, penalties, lambda, fam,
           offset = offset, weights = w_obs,
-          penalty_mode = penalty_mode, penalty_order = penalty_order
+          penalty_mode = penalty_mode, penalty_order = penalty_order,
+          linear = linear, beta = blended$beta
         )
         if (is.finite(obj_try$value) &&
             obj_try$value <= obj_old$value + accept_tol) {
           cores <- blended$cores
           intercept <- blended$intercept
+          beta <- blended$beta %||% beta_cand
           eta <- obj_try$eta
           obj <- obj_try
           accepted_step <- alpha
@@ -222,6 +245,7 @@ tt_pirls_fit_sequential <- function(y, basis, family, ranks, lambda_spec, contro
         # restore last valid iterate
         cores <- cores_old
         intercept <- intercept_old
+        beta <- beta_old
         eta <- eta_old
         obj <- obj_old
         line_ok <- FALSE
@@ -253,6 +277,7 @@ tt_pirls_fit_sequential <- function(y, basis, family, ranks, lambda_spec, contro
       # Gaussian / Poisson / Bernoulli without halving: accept candidate
       cores <- cores_cand
       intercept <- intercept_cand
+      beta <- beta_cand
       eta <- eta_cand
       obj <- obj_cand
       accepted_step <- 1
@@ -317,6 +342,8 @@ tt_pirls_fit_sequential <- function(y, basis, family, ranks, lambda_spec, contro
   list(
     cores = cores,
     intercept = intercept,
+    beta = beta,
+    linear = linear,
     lambda = lambda,
     ranks = ranks,
     eta = eta,
@@ -356,12 +383,13 @@ tt_pirls_fit_sequential <- function(y, basis, family, ranks, lambda_spec, contro
 tt_pirls_fit_cgcv_outer <- function(y, basis, family, ranks, lambda_spec,
                                     control, penalty_order = 2,
                                     init_cores = NULL, offset = NULL,
-                                    weights = NULL) {
+                                    weights = NULL, linear = NULL) {
   d <- length(basis)
   lambda <- as.numeric(lambda_spec$values %||% lambda_spec$lambda0)
   fam <- normalize_family(family)
   offset <- normalize_offset(offset, length(y))
   w_obs <- normalize_weights(weights, length(y))
+  linear <- normalize_linear(linear, length(y))
   rho <- control$cgcv_damping %||% 1
   delta <- control$cgcv_max_log10_step %||% Inf
   param <- .cgcv_parameterization(control)
@@ -397,14 +425,15 @@ tt_pirls_fit_cgcv_outer <- function(y, basis, family, ranks, lambda_spec,
                        lambda0 = lambda)
     fit_last <- tt_pirls_fit_sequential(
       y, basis, fam, ranks, fixed_spec, control, penalty_order,
-      init_cores = cores, offset = offset, weights = w_obs
+      init_cores = cores, offset = offset, weights = w_obs, linear = linear
     )
     cores <- fit_last$cores
     intercept <- fit_last$intercept
+    beta <- fit_last$beta
     eta <- fit_last$eta
     work <- glm_working(fam, y, eta, control = control)
     w <- work$weight * w_obs
-    zc <- work$z - offset - intercept
+    zc <- work$z - offset - intercept - tt_linear_contrib(linear, beta)
 
     step <- .cgcv_simultaneous_step(
       cores, lambda, basis, zc, ranks, control,
@@ -441,7 +470,7 @@ tt_pirls_fit_cgcv_outer <- function(y, basis, family, ranks, lambda_spec,
                      lambda0 = lambda)
   fit_final <- tt_pirls_fit_sequential(
     y, basis, fam, ranks, fixed_spec, control, penalty_order,
-    init_cores = cores, offset = offset, weights = w_obs
+    init_cores = cores, offset = offset, weights = w_obs, linear = linear
   )
 
   lambda0_table <- NULL
@@ -457,7 +486,8 @@ tt_pirls_fit_cgcv_outer <- function(y, basis, family, ranks, lambda_spec,
       fs <- list(method = "fixed", values = lam, automatic = FALSE, lambda0 = lam)
       ff <- tt_pirls_fit_sequential(
         y, basis, fam, ranks, fs, control, penalty_order,
-        init_cores = fit_final$cores, offset = offset, weights = w_obs
+        init_cores = fit_final$cores, offset = offset, weights = w_obs,
+        linear = linear
       )
       list(criterion = ff$deviance, fit = ff)
     })
@@ -466,7 +496,8 @@ tt_pirls_fit_cgcv_outer <- function(y, basis, family, ranks, lambda_spec,
                lambda0 = sel$lambda)
     fit_final <- tt_pirls_fit_sequential(
       y, basis, fam, ranks, fs, control, penalty_order,
-      init_cores = fit_final$cores, offset = offset, weights = w_obs
+      init_cores = fit_final$cores, offset = offset, weights = w_obs,
+      linear = linear
     )
   }
 
@@ -519,16 +550,19 @@ tt_pirls_fit_cgcv_outer <- function(y, basis, family, ranks, lambda_spec,
 #' @keywords internal
 tt_pirls_fit_rcpp <- function(y, basis, family, ranks, lambda_spec, control,
                               penalty_order = 2, init_cores = NULL, offset = NULL,
-                              weights = NULL) {
+                              weights = NULL, linear = NULL) {
   offset <- normalize_offset(offset, length(y))
   w <- normalize_weights(weights, length(y))
+  linear <- normalize_linear(linear, length(y))
   key <- family_key(family)
   do_halving <- identical(key, "bernoulli") &&
     isTRUE(control$pirls_step_halving %||% control$damping %||% TRUE)
-  if (do_halving || !exists("tt_glm_pirls_cgcv_cpp", mode = "function")) {
+  # linear= is R-path only for now
+  if (!is.null(linear) || do_halving ||
+      !exists("tt_glm_pirls_cgcv_cpp", mode = "function")) {
     return(tt_pirls_fit(y, basis, family, ranks, lambda_spec, control,
                         penalty_order, init_cores = init_cores,
-                        offset = offset, weights = w))
+                        offset = offset, weights = w, linear = linear))
   }
   d <- length(basis)
   p <- ncol(basis[[1]])

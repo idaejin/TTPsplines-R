@@ -13,8 +13,16 @@
 #'
 #' @param y,X Response and covariate matrix (as in [ttps()]).
 #' @param ranks Integer vector of candidate **uniform** ranks (default `1:5`).
-#' @param family,k,degree,penalty_order,lambda,optimizer,backend,control,knots,offset,weights
+#' @param family,k,degree,penalty_order,lambda,optimizer,backend,control,offset,weights,linear
 #'   Passed through to [ttps()] on each fold (and on final refit).
+#' @param knots Optional list of knot vectors (as in [ttps()]). Default `NULL`
+#'   builds knots once from the **full** `X` (shared across folds and stored for
+#'   [tt_rank_refit()]), avoiding B-spline extrapolation warnings when a test
+#'   fold has extremes outside a train-only knot span. Set `fold_knots = TRUE`
+#'   to restore per-fold knot construction from the training subset only.
+#' @param fold_knots If `TRUE`, ignore the full-`X` default and let each fold
+#'   rebuild knots from its training rows (`knots` must be `NULL`). Default
+#'   `FALSE`.
 #' @param folds Number of CV folds (default 5). Ignored when `foldid` is supplied.
 #' @param foldid Optional integer vector of length `n` giving the fold of each
 #'   observation (cv.glmnet-style). When supplied, folds are taken from
@@ -89,7 +97,9 @@ tt_rank_select <- function(y,
                            seed = NULL,
                            keep_fits = FALSE,
                            knots = NULL,
+                           fold_knots = FALSE,
                            offset = NULL,
+                           linear = NULL,
                            weights = NULL,
                            rank_chain = NULL,
                            ...) {
@@ -131,6 +141,22 @@ tt_rank_select <- function(y,
 
   offset_full <- normalize_offset(offset, n)
   weights_full <- normalize_weights(weights, n)
+  linear_full <- normalize_linear(linear, n)
+
+  fold_knots <- isTRUE(fold_knots)
+  if (fold_knots && !is.null(knots)) {
+    stop("`fold_knots = TRUE` requires `knots = NULL`.", call. = FALSE)
+  }
+  # Shared full-X knots by default: train/test use the same B-spline domain so
+  # fold extremes do not fall outside train-only knot spans (predict warnings).
+  knots_source <- if (!is.null(knots)) {
+    "user"
+  } else if (fold_knots) {
+    "fold"
+  } else {
+    knots <- build_marginal_bases(X, k = k, degree = degree)$knots
+    "full_X"
+  }
 
   if (!is.null(foldid)) {
     fold_id <- .tt_normalize_foldid(foldid, n)
@@ -159,7 +185,8 @@ tt_rank_select <- function(y,
     optimizer = optimizer,
     backend = backend,
     control = ctrl,
-    knots = knots
+    knots = knots,
+    linear = linear_full
   )
   lambda_method <- if (is.character(lambda) && identical(lambda, "cGCV")) {
     "cGCV"
@@ -200,6 +227,8 @@ tt_rank_select <- function(y,
       off_te <- offset_full[test]
       w_tr <- weights_full[train]
       w_te <- weights_full[test]
+      lin_tr <- if (is.null(linear_full)) NULL else linear_full[train, , drop = FALSE]
+      lin_te <- if (is.null(linear_full)) NULL else linear_full[test, , drop = FALSE]
       y_tr <- y[train]
       X_tr <- X[train, , drop = FALSE]
       X_te <- X[test, , drop = FALSE]
@@ -233,6 +262,7 @@ tt_rank_select <- function(y,
             control = ctrl_s,
             knots = knots,
             offset = off_tr,
+            linear = lin_tr,
             weights = w_tr
           ),
           error = function(e) e
@@ -271,7 +301,8 @@ tt_rank_select <- function(y,
         next
       }
       mu <- tryCatch(
-        predict(best_fit, newdata = X_te, type = "response", offset = off_te),
+        predict(best_fit, newdata = X_te, type = "response",
+                offset = off_te, linear = lin_te),
         error = function(e) NULL
       )
       if (is.null(mu) || anyNA(mu) || !all(is.finite(mu))) {
@@ -336,7 +367,10 @@ tt_rank_select <- function(y,
       X = X,
       variable_order = colnames(X),
       offset = offset_full,
+      linear = linear_full,
       weights = weights_full,
+      knots_source = knots_source,
+      fold_knots = fold_knots,
       call = cl,
       timings = list(
         total_s = sum(time_mat, na.rm = TRUE),
@@ -438,6 +472,14 @@ tt_rank_refit <- function(object,
     object$offset
   }
   extra$offset <- NULL
+  args$linear <- if ("linear" %in% names(extra)) {
+    extra$linear
+  } else if (!is.null(object$linear)) {
+    object$linear
+  } else {
+    args$linear
+  }
+  extra$linear <- NULL
   args$weights <- if ("weights" %in% names(extra)) {
     extra$weights
   } else {
@@ -687,7 +729,14 @@ print.tt_rank_selection <- function(x, digits = 3, ...) {
   } else {
     as.character(x$lambda)
   }
-  cat(sprintf("Lambda:             %s\n\n", lam_lab))
+  cat(sprintf("Lambda:             %s\n", lam_lab))
+  ks <- x$knots_source %||% if (isTRUE(x$fold_knots)) "fold" else "full_X"
+  cat(sprintf("Knots:              %s\n\n",
+              switch(ks,
+                     full_X = "shared (full X)",
+                     fold = "per-fold (train only)",
+                     user = "user-supplied",
+                     ks)))
 
   tab <- x$cv_results
   show <- data.frame(
