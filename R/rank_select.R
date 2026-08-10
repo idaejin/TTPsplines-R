@@ -2,42 +2,59 @@
 #'
 #' Chooses a uniform TT rank \(r\) (chain `(1,r,...,r,1)`) using out-of-sample
 #' predictive loss only — never simulation truth. Fitting stays separate:
-#' [ttps()] still requires an explicit `rank`; use [tt_rank_refit()] after
-#' selection to fit on all data at the chosen rank.
+#' [ttps()] still requires an explicit `rank`; use [tt_rank_refit()] /
+#' [refit()] after selection to fit on all data at the chosen rank.
 #'
 #' Inner smoothing (`lambda` fixed or `"cGCV"`) is estimated **only** on each
 #' fold's training portion (no validation leakage into cGCV).
+#'
+#' Selected ranks are a **predictive / working structural capacity** conditional
+#' on the covariate ordering in `X` — not an estimate of a latent “true TT rank”.
 #'
 #' @param y,X Response and covariate matrix (as in [ttps()]).
 #' @param ranks Integer vector of candidate **uniform** ranks (default `1:5`).
 #' @param family,k,degree,penalty_order,lambda,optimizer,backend,control,knots,offset,weights
 #'   Passed through to [ttps()] on each fold (and on final refit).
-#' @param folds Number of CV folds (default 5).
+#' @param folds Number of CV folds (default 5). Ignored when `foldid` is supplied.
+#' @param foldid Optional integer vector of length `n` giving the fold of each
+#'   observation (cv.glmnet-style). When supplied, folds are taken from
+#'   `foldid` (remapped to `1:K` if needed) and shared across all ranks.
 #' @param rule `"1se"` (default, parsimonious) or `"min"` (minimum mean CV).
-#' @param metric `"auto"` (family-aware) or one of `"rmse"`, `"poisson_deviance"`,
-#'   `"logloss"`.
+#' @param metric `"auto"` (family-aware) or one of `"mse"`, `"rmse"`,
+#'   `"deviance"`, `"poisson_deviance"`, `"binomial_deviance"`, `"logloss"`.
+#'   Defaults: Gaussian → MSE; Poisson → mean Poisson deviance;
+#'   Bernoulli → mean binomial deviance.
 #' @param n_starts Number of random TT initializations per fold×rank (default `1`).
 #'   When `>1`, each fold keeps the start with best **training** objective among
 #'   converged fits (else best objective) for validation scoring. Recommended
 #'   when ALS at low rank is init-sensitive (e.g. Ishigami at `r=2`).
-#' @param seed Optional RNG seed for fold assignment and multi-start inits.
+#' @param seed Optional RNG seed for fold assignment (when `foldid` is `NULL`)
+#'   and multi-start inits.
 #' @param keep_fits If `TRUE`, store fold fits (large); default `FALSE`.
 #' @param rank_chain Reserved for future non-uniform rank search; must be `NULL`
 #'   in this version.
-#' @param ... Currently unused (reserved).
+#' @param ... Currently unused in [tt_rank_select()] (reserved). For [cv.ttps()],
+#'   further arguments are passed to [tt_rank_select()].
 #'
-#' @return An object of class `"tt_rank_selection"`. With `n_starts>1`,
-#'   `cv_results` adds `objective_best`, `objective_median`, `objective_sd`,
-#'   `start_gap` (median−best), and `start_convergence_rate`.
+#' @return An object of class `c("cv.ttps", "tt_rank_selection")` with
+#'   glmnet-style aliases `cvm`, `cvsd`, `cvraw`, `foldid`, `rank.min`,
+#'   `rank.1se`, plus `variable_order`. With `n_starts>1`, `cv_results` adds
+#'   `objective_best`, `objective_median`, `objective_sd`, `start_gap`
+#'   (median−best), and `start_convergence_rate`.
 #'
 #' @section Complexity layers:
-#' Rank \(r\) = structural capacity; \(\lambda\) = directional smoothness;
-#' EDF = effective fitted flexibility. These are not interchangeable:
+#' Rank \(r\) = structural / interaction capacity; \(\lambda\) = directional
+#' smoothness; EDF = effective fitted flexibility. These are not interchangeable:
 #' \(r \neq \lambda \neq \mathrm{EDF}\). A modestly larger \(r\) can also
 #' improve **optimization robustness**.
 #'
-#' @seealso [tt_rank_refit()], [ttps()], [tt_truncate_rank()], [tt_rank_profile()]
-#'   (in-sample rank diagnostic, not CV).
+#' @section Failed folds:
+#' Non-finite fold losses are retained in the mean CV (`Inf` ⇒ `cvm = Inf`).
+#' The SE uses only finite folds (`sd / sqrt(K_finite)` when `K_finite >= 2`);
+#' it is never computed by silently dropping failures from the mean.
+#'
+#' @seealso [cv.ttps()], [tt_rank_refit()], [refit()], [ttps()],
+#'   [tt_truncate_rank()], [tt_rank_profile()] (in-sample rank diagnostic, not CV).
 #'
 #' @examples
 #' data(friedman)
@@ -63,8 +80,11 @@ tt_rank_select <- function(y,
                            backend = "auto",
                            control = tt_control(),
                            folds = 5L,
+                           foldid = NULL,
                            rule = c("1se", "min"),
-                           metric = c("auto", "rmse", "poisson_deviance", "logloss"),
+                           metric = c("auto", "mse", "rmse", "deviance",
+                                      "poisson_deviance", "binomial_deviance",
+                                      "logloss"),
                            n_starts = 1L,
                            seed = NULL,
                            keep_fits = FALSE,
@@ -104,10 +124,6 @@ tt_rank_select <- function(y,
   if (!length(ranks) || any(ranks < 1L)) {
     stop("`ranks` must be positive integers.", call. = FALSE)
   }
-  folds <- as.integer(folds)[1L]
-  if (folds < 2L || folds > n) {
-    stop("`folds` must satisfy 2 <= folds <= n.", call. = FALSE)
-  }
   n_starts <- as.integer(n_starts)[1L]
   if (!is.finite(n_starts) || n_starts < 1L) {
     stop("`n_starts` must be a positive integer.", call. = FALSE)
@@ -115,7 +131,17 @@ tt_rank_select <- function(y,
 
   offset_full <- normalize_offset(offset, n)
   weights_full <- normalize_weights(weights, n)
-  fold_id <- .tt_make_fold_id(n, folds, seed)
+
+  if (!is.null(foldid)) {
+    fold_id <- .tt_normalize_foldid(foldid, n)
+    folds <- length(unique(fold_id))
+  } else {
+    folds <- as.integer(folds)[1L]
+    if (folds < 2L || folds > n) {
+      stop("`folds` must satisfy 2 <= folds <= n.", call. = FALSE)
+    }
+    fold_id <- .tt_make_fold_id(n, folds, seed)
+  }
   seed0 <- if (is.null(seed)) 1L else as.integer(seed)[1L]
 
   # CV fits: skip EDF (costly / irrelevant for selection)
@@ -280,7 +306,7 @@ tt_rank_select <- function(y,
   rank_1se <- .tt_rank_1se(cv_results, rank_min)
   selected <- if (identical(rule, "min")) rank_min else rank_1se
 
-  structure(
+  out <- structure(
     list(
       ranks = ranks,
       metric = metric,
@@ -288,6 +314,7 @@ tt_rank_select <- function(y,
       folds = folds,
       n_starts = n_starts,
       fold_id = fold_id,
+      foldid = fold_id,
       cv_results = cv_results,
       loss_by_fold = loss_mat,
       time_by_fold = time_mat,
@@ -298,6 +325,7 @@ tt_rank_select <- function(y,
       rank_min = rank_min,
       rank_1se = rank_1se,
       selected_rank = selected,
+      selected = selected,
       rule = rule,
       family = fam,
       family_key = key,
@@ -306,6 +334,7 @@ tt_rank_select <- function(y,
       fit_args = fit_args,
       y = y,
       X = X,
+      variable_order = colnames(X),
       offset = offset_full,
       weights = weights_full,
       call = cl,
@@ -316,7 +345,46 @@ tt_rank_select <- function(y,
       keep_fits = isTRUE(keep_fits),
       fits = fold_fits
     ),
-    class = "tt_rank_selection"
+    class = c("cv.ttps", "tt_rank_selection")
+  )
+  .tt_attach_cv_aliases(out)
+}
+
+#' cv.glmnet-style alias for [tt_rank_select()].
+#'
+#' @inheritParams tt_rank_select
+#' @param type.measure Synonym of `metric` in [tt_rank_select()].
+#' @param nfolds Synonym of `folds` (ignored when `foldid` is supplied).
+#' @param ... Passed to [tt_rank_select()] (`k`, `lambda`, `control`, …).
+#' @return Same as [tt_rank_select()].
+#' @export
+cv.ttps <- function(y,
+                    X,
+                    ranks = 1:5,
+                    family = stats::gaussian(),
+                    type.measure = c("auto", "mse", "rmse", "deviance",
+                                     "poisson_deviance", "binomial_deviance",
+                                     "logloss"),
+                    nfolds = 5L,
+                    foldid = NULL,
+                    rule = c("1se", "min"),
+                    n_starts = 1L,
+                    seed = NULL,
+                    ...) {
+  type.measure <- match.arg(type.measure)
+  rule <- match.arg(rule)
+  tt_rank_select(
+    y = y,
+    X = X,
+    ranks = ranks,
+    family = family,
+    folds = nfolds,
+    foldid = foldid,
+    rule = rule,
+    metric = type.measure,
+    n_starts = n_starts,
+    seed = seed,
+    ...
   )
 }
 
@@ -324,14 +392,19 @@ tt_rank_select <- function(y,
 #'
 #' Uses the fitting arguments stored on a `"tt_rank_selection"` object.
 #' Does **not** change [ttps()] defaults: this is the explicit final fit
-#' after model selection.
+#' after model selection. Lambda is re-estimated on the full dataset when
+#' `lambda = "cGCV"`; fold-specific lambdas are never averaged.
 #'
-#' @param object A `"tt_rank_selection"` from [tt_rank_select()].
+#' By default `compute_edf` is restored to `TRUE` for the final fit (CV
+#' itself disables EDF for speed).
+#'
+#' @param object A `"tt_rank_selection"` / `"cv.ttps"` from [tt_rank_select()]
+#'   or [cv.ttps()].
 #' @param y,X Optional override data (default: data stored on `object`).
-#' @param rank Rank to refit (default: `object$selected_rank`).
-#' @param control Optional [tt_control()] override (default: selection control,
-#'   but `compute_edf` restored to the stored value / `TRUE` if you pass a new
-#'   control).
+#' @param rank Rank to refit (default: `object$selected_rank`). For [refit()],
+#'   may also be `"1se"`, `"min"`, or an integer.
+#' @param control Optional [tt_control()] override. If `NULL`, uses the
+#'   selection control with `compute_edf = TRUE`.
 #' @param ... Passed to [ttps()] (override stored args).
 #' @return A `"ttpspline"` fit.
 #' @export
@@ -349,12 +422,16 @@ tt_rank_refit <- function(object,
   }
   if (is.null(rank)) rank <- object$selected_rank
   args <- object$fit_args
-  if (!is.null(control)) args$control <- control
-  # Refit may want EDF; if still FALSE from CV, leave as stored unless overridden
+  if (is.null(control)) {
+    if (is.null(args$control)) args$control <- tt_control()
+    args$control$compute_edf <- TRUE
+  } else {
+    args$control <- control
+  }
   extra <- list(...)
   args$y <- y
   args$X <- X
-  args$rank <- rank
+  args$rank <- as.integer(rank)[1L]
   args$offset <- if ("offset" %in% names(extra)) {
     extra$offset
   } else {
@@ -369,6 +446,34 @@ tt_rank_refit <- function(object,
   extra$weights <- NULL
   if (length(extra)) args <- utils::modifyList(args, extra)
   do.call(ttps, args)
+}
+
+#' Generic full-data refit after CV (S3).
+#' @param object A fitted CV / selection object.
+#' @param ... Passed to methods.
+#' @export
+refit <- function(object, ...) {
+  UseMethod("refit")
+}
+
+#' @rdname tt_rank_refit
+#' @export
+refit.tt_rank_selection <- function(object,
+                                    rank = "1se",
+                                    ...) {
+  if (is.character(rank)) {
+    rank <- match.arg(rank, c("1se", "min"))
+    rank <- if (identical(rank, "1se")) object$rank_1se else object$rank_min
+  } else {
+    rank <- as.integer(rank)[1L]
+  }
+  tt_rank_refit(object, rank = rank, ...)
+}
+
+#' @rdname tt_rank_refit
+#' @export
+refit.cv.ttps <- function(object, rank = "1se", ...) {
+  refit.tt_rank_selection(object, rank = rank, ...)
 }
 
 # ---- internals -------------------------------------------------------------
@@ -389,13 +494,53 @@ tt_rank_refit <- function(object,
   sample(rep(seq_len(as.integer(folds)), length.out = as.integer(n)))
 }
 
+#' Normalize user foldid to consecutive integers 1:K.
+#' @keywords internal
+#' @noRd
+.tt_normalize_foldid <- function(foldid, n) {
+  foldid <- as.integer(foldid)
+  if (length(foldid) != as.integer(n)) {
+    stop("`foldid` must have length n = ", n, ".", call. = FALSE)
+  }
+  if (anyNA(foldid)) stop("`foldid` contains NA.", call. = FALSE)
+  u <- sort(unique(foldid))
+  if (length(u) < 2L) {
+    stop("`foldid` must define at least 2 folds.", call. = FALSE)
+  }
+  if (!identical(u, seq_along(u))) {
+    foldid <- match(foldid, u)
+  }
+  as.integer(foldid)
+}
+
+#' Attach glmnet-style aliases on a rank-selection object.
+#' @keywords internal
+#' @noRd
+.tt_attach_cv_aliases <- function(obj) {
+  obj$cvm <- obj$cv_results$mean_cv
+  obj$cvsd <- obj$cv_results$se_cv
+  obj$cvup <- obj$cv_results$mean_cv + obj$cv_results$se_cv
+  obj$cvlo <- obj$cv_results$mean_cv - obj$cv_results$se_cv
+  obj$cvraw <- obj$loss_by_fold
+  obj$foldid <- obj$fold_id
+  obj$`rank.min` <- obj$rank_min
+  obj$`rank.1se` <- obj$rank_1se
+  obj
+}
+
 #' @keywords internal
 #' @noRd
 .tt_resolve_cv_metric <- function(metric, family_key) {
+  if (identical(metric, "deviance")) {
+    if (identical(family_key, "poisson")) return("poisson_deviance")
+    if (identical(family_key, "bernoulli")) return("binomial_deviance")
+    stop("`metric = \"deviance\"` is not defined for family_key=",
+         family_key, call. = FALSE)
+  }
   if (!identical(metric, "auto")) return(metric)
-  if (identical(family_key, "gaussian")) return("rmse")
+  if (identical(family_key, "gaussian")) return("mse")
   if (identical(family_key, "poisson")) return("poisson_deviance")
-  if (identical(family_key, "bernoulli")) return("logloss")
+  if (identical(family_key, "bernoulli")) return("binomial_deviance")
   stop("No default CV metric for family_key=", family_key, call. = FALSE)
 }
 
@@ -408,10 +553,14 @@ tt_rank_refit <- function(object,
   n <- length(y)
   w <- normalize_weights(weights, n)
   sw <- sum(w)
+  if (identical(metric, "mse")) {
+    return(sum(w * (y - mu)^2) / sw)
+  }
   if (identical(metric, "rmse")) {
     return(sqrt(sum(w * (y - mu)^2) / sw))
   }
-  if (identical(metric, "poisson_deviance")) {
+  if (identical(metric, "poisson_deviance") ||
+      identical(metric, "binomial_deviance")) {
     return(as.numeric(glm_deviance(family, y, mu, weights = w) / sw))
   }
   if (identical(metric, "logloss")) {
@@ -432,10 +581,13 @@ tt_rank_refit <- function(object,
     losses <- as.numeric(loss_mat[i, ])
     times <- as.numeric(time_mat[i, ])
     conv <- as.logical(conv_mat[i, ])
-    finite <- is.finite(losses)
+    # Retain Inf in the mean (failed folds ⇒ Inf CV). SE uses finite folds only.
+    losses_mean <- losses
+    losses_mean[is.na(losses_mean)] <- Inf
+    mean_cv <- mean(losses_mean)
+    finite <- is.finite(losses_mean)
     K <- sum(finite)
-    mean_cv <- if (K > 0) mean(losses[finite]) else Inf
-    sd_cv <- if (K > 1) stats::sd(losses[finite]) else NA_real_
+    sd_cv <- if (K > 1) stats::sd(losses_mean[finite]) else NA_real_
     se_cv <- if (K > 1) sd_cv / sqrt(K) else NA_real_
     chain <- tt_rank(r, d = d)
     npar_tt <- as.integer(tt_npar(p, chain))
@@ -476,7 +628,8 @@ tt_rank_refit <- function(object,
       convergence_rate = mean(conv),
       mean_time = mean(times, na.rm = TRUE),
       total_time = sum(times, na.rm = TRUE),
-      n_finite_folds = K,
+      n_finite_folds = as.integer(K),
+      n_inf_folds = as.integer(sum(!finite)),
       lambda_mean = if (length(lam_mean) == 1L) lam_mean else mean(lam_mean, na.rm = TRUE),
       n_starts = as.integer(n_starts),
       objective_best = obj_best,
@@ -502,13 +655,16 @@ tt_rank_refit <- function(object,
 }
 
 #' Smallest rank with mean_cv <= mean_cv(r_min) + SE(r_min).
+#' If SE is NA (fewer than 2 finite folds at r_min), SE is treated as 0.
 #' @keywords internal
 #' @noRd
 .tt_rank_1se <- function(cv_results, rank_min, tol = 1e-12) {
   row_min <- cv_results[cv_results$rank == rank_min, , drop = FALSE]
-  thresh <- row_min$mean_cv + (row_min$se_cv %||% 0)
+  se <- row_min$se_cv
+  if (length(se) != 1L || !is.finite(se)) se <- 0
+  thresh <- row_min$mean_cv + se
   if (!is.finite(thresh)) return(rank_min)
-  ok <- cv_results$mean_cv <= thresh + tol
+  ok <- is.finite(cv_results$mean_cv) & (cv_results$mean_cv <= thresh + tol)
   if (!any(ok)) return(rank_min)
   min(cv_results$rank[ok])
 }
@@ -520,6 +676,10 @@ print.tt_rank_selection <- function(x, digits = 3, ...) {
   cat(sprintf("Metric:             %s\n", x$metric))
   cat(sprintf("Folds:              %d\n", x$folds))
   cat(sprintf("Starts per fold:    %d\n", x$n_starts %||% 1L))
+  if (!is.null(x$variable_order)) {
+    cat(sprintf("Variable order:     %s\n",
+                paste(x$variable_order, collapse = ", ")))
+  }
   lam_lab <- if (identical(x$lambda_method, "cGCV")) {
     "cGCV"
   } else if (is.numeric(x$lambda)) {
@@ -549,7 +709,13 @@ print.tt_rank_selection <- function(x, digits = 3, ...) {
   cat(sprintf("Selected rank:      %d\n", x$selected_rank))
   cat(sprintf("Rule:               %s\n",
               if (identical(x$rule, "1se")) "1-SE" else "minimum-CV"))
+  cat("Ranks are predictive / working structural capacity, not a true TT rank.\n")
   invisible(x)
+}
+
+#' @export
+print.cv.ttps <- function(x, digits = 3, ...) {
+  print.tt_rank_selection(x, digits = digits, ...)
 }
 
 #' @export
@@ -568,6 +734,7 @@ print.summary.tt_rank_selection <- function(x, digits = 4, ...) {
     intrinsic = tab$intrinsic_dim,
     CR = round(tab$compression, 1),
     conv = round(tab$convergence_rate, 2),
+    n_inf = tab$n_inf_folds %||% 0L,
     mean_t = round(tab$mean_time, 3),
     total_t = round(tab$total_time, 3),
     stringsAsFactors = FALSE
@@ -589,6 +756,7 @@ print.summary.tt_rank_selection <- function(x, digits = 4, ...) {
   }
   cat(sprintf("\nTotal CV wall time: %.3fs\n", x$timings$total_s))
   cat("SE is fold-to-fold variability of the CV loss, not a formal rank test.\n")
+  cat("Failed folds contribute Inf to mean CV; SE uses finite folds only.\n")
   if (identical(x$lambda_method, "cGCV")) {
     cat("Lambda was selected by cGCV on training folds only (no validation leakage).\n")
     cat(sprintf("Mean training lambda (avg over dims/folds): %s\n",
@@ -611,14 +779,15 @@ plot.tt_rank_selection <- function(x,
     ylim <- range(c(y - se, y + se), finite = TRUE)
     plot(r, y, type = "b", pch = 19, xlab = "TT rank r",
          ylab = sprintf("CV %s", x$metric),
-         main = "CV error vs rank", ylim = ylim, ...)
+         main = "CV error vs rank (predictive structural capacity)",
+         ylim = ylim, ...)
     if (any(is.finite(se) & se > 0)) {
       graphics::arrows(r, y - se, r, y + se, length = 0.05, angle = 90, code = 3)
     }
     graphics::abline(v = x$rank_min, col = "gray40", lty = 2)
     graphics::abline(v = x$rank_1se, col = "darkred", lty = 3)
     graphics::legend("topright",
-                     legend = c("mean CV", "min-CV rank", "1-SE rank"),
+                     legend = c("mean CV", "rank.min", "rank.1se"),
                      lty = c(1, 2, 3), pch = c(19, NA, NA),
                      col = c("black", "gray40", "darkred"), bty = "n", cex = 0.8)
   } else if (identical(type, "compression")) {
@@ -636,4 +805,9 @@ plot.tt_rank_selection <- function(x,
     }
   }
   invisible(x)
+}
+
+#' @export
+plot.cv.ttps <- function(x, type = c("error", "compression", "tradeoff"), ...) {
+  plot.tt_rank_selection(x, type = type, ...)
 }
