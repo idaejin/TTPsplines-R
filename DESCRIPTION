@@ -66,6 +66,7 @@ Collate:
     'complexity.R'
     'inference.R'
     'methods.R'
+    'multistart.R'
     'rank_profile.R'
     'rank_select.R'
     'glam.R'
