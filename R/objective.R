@@ -10,7 +10,7 @@ tt_objective <- function(fit, X, y = NULL) {
   if (is.null(y)) stop("Need y (or fit$y).", call. = FALSE)
   y <- as.numeric(y)
   X <- as.matrix(X)
-  basis <- eval_marginal_bases(X, fit$knots, fit$degree)
+  basis <- eval_marginal_bases(X, fit$knots, fit$degree, cyclic = fit$cyclic)
   cores <- fit$cores
   intercept <- fit$intercept
   lambda <- as.numeric(fit$lambda)
@@ -20,13 +20,12 @@ tt_objective <- function(fit, X, y = NULL) {
   ranks[1] <- dim(cores[[1]])[1]
   for (k in seq_len(d)) ranks[k + 1L] <- dim(cores[[k]])[3]
   po <- fit$penalty_order %||% 2L
-  penalties <- lapply(seq_len(d), function(k) {
-    core_penalty(ranks[k], p, ranks[k + 1L], po)
-  })
+  penalties <- tt_core_penalties(ranks, p, po, cyclic = fit$cyclic)
   fam <- fit$family %||% normalize_family(fit$family_key %||% "gaussian")
   off <- normalize_offset(fit$offset, length(y))
+  w <- normalize_weights(fit$weights, length(y))
   out <- tt_glm_penalized_objective(y, cores, intercept, basis, penalties, lambda, fam,
-                                    offset = off)
+                                    offset = off, weights = w)
   list(
     value = out$value,
     nll_or_sse = out$nll,

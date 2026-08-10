@@ -3,7 +3,8 @@
 \name{tt_glm_pirls_cgcv_cpp}
 \alias{tt_glm_pirls_cgcv_cpp}
 \title{GLM PIRLS + weighted TT-ALS with per-core conditional GCV (Rcpp).
-family: "bernoulli" | "poisson" (gaussian → use tt_cgcv_fit_cpp).}
+family: "bernoulli" | "poisson" (gaussian → use tt_cgcv_fit_cpp).
+Optional observation \code{weights} / \code{offset} (empty ⇒ ones / zeros).}
 \usage{
 tt_glm_pirls_cgcv_cpp(
   y,
@@ -18,10 +19,13 @@ tt_glm_pirls_cgcv_cpp(
   lambda_max = 100,
   tol = 0.001,
   tol_dev = 1e-06,
-  select_lambda = TRUE
+  select_lambda = TRUE,
+  weights = NULL,
+  offset = NULL
 )
 }
 \description{
 GLM PIRLS + weighted TT-ALS with per-core conditional GCV (Rcpp).
 family: "bernoulli" | "poisson" (gaussian → use tt_cgcv_fit_cpp).
+Optional observation \code{weights} / \code{offset} (empty ⇒ ones / zeros).
 }

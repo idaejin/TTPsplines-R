@@ -94,9 +94,17 @@ sel <- tt_rank_select(y, X, ranks = 1:5, lambda = 1, folds = 5, rule = "1se")
 fit <- tt_rank_refit(sel)
 ```
 
-See also `vignette("rank-selection")` for the selection API alone,
-`vignette("glam-gaussian")` for a shorter GLAM-vs-TT demo, and
-`vignette("rank-compression")` for complexity layers.
+See also `vignette("rank-selection")` for CV + 1-SE and compression layers,
+`vignette("cgcv")` for automatic \(\lambda\), and
+`vignette("glam-poisson")` for Currie–Durbán–Eilers Poisson grids.
+
+# See also
+
+- `vignette("rank-selection", package = "TTPsplines")`
+- `vignette("cgcv", package = "TTPsplines")`
+- `vignette("scalability", package = "TTPsplines")` — storage / timings / backends
+- `vignette("glam-poisson", package = "TTPsplines")`
+- `vignette("getting-started", package = "TTPsplines")`
 
 # References
 

@@ -4,7 +4,24 @@
 \alias{build_marginal_bases}
 \title{Build marginal bases for columns of X (scattered observations).}
 \usage{
-build_marginal_bases(X, k = 10, degree = 3, knots = NULL)
+build_marginal_bases(
+  X,
+  k = 10,
+  degree = 3,
+  knots = NULL,
+  cyclic = NULL,
+  period = NULL
+)
+}
+\arguments{
+\item{cyclic}{Logical scalar or length-\code{d} flags: use a \strong{circular}
+B-spline basis (and, at penalty construction, a circular difference
+penalty) on that margin. For hour-of-day, map to \(\link{0,1}\) (fraction of
+day) and set the corresponding flag to \code{TRUE} (period defaults to
+\(\link{0,1}\)).}
+
+\item{period}{Optional length-\code{d} list of \code{c(xl,xr)} periods for cyclic
+margins (\code{NULL} entries use \code{\link[=cyclic_period_range]{cyclic_period_range()}}).}
 }
 \description{
 The design is observation-wise: each row of X gets its own basis

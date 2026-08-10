@@ -1,0 +1,178 @@
+---
+title: "Choosing λ with conditional GCV"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Choosing λ with conditional GCV}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+# What this vignette is
+
+Directional smoothing \(\boldsymbol\lambda=(\lambda_1,\ldots,\lambda_d)\) is
+**separate** from the TT rank \(r\):
+
+\[
+\boxed{r \neq \lambda \neq \mathrm{EDF}}.
+\]
+
+This note covers **fixed** \(\lambda\) vs **conditional GCV (cGCV)** inside
+`ttpspline()`. Rank selection is `vignette("rank-selection")`; in-sample
+AIC/BIC is `vignette("aic-bic")`.
+
+```{r}
+library(TTPsplines)
+data(sobol_g)
+idx <- seq_len(400)
+X <- as.matrix(sobol_g[idx, paste0("x", 1:4)])
+y <- sobol_g$y[idx]
+```
+
+# Fixed \(\lambda\)
+
+Pass a scalar (isotropic) or length-\(d\) anisotropic vector:
+
+```{r fixed}
+fit_fix <- ttpspline(
+  y, X,
+  family = gaussian(),
+  rank = 2, k = 6,
+  lambda = c(0.1, 1, 10, 100),
+  control = tt_control(max_sweeps = 8, backend = "R", compute_edf = FALSE)
+)
+fit_fix$lambda_method
+fit_fix$lambda
+```
+
+# Conditional GCV
+
+`lambda = "cGCV"` selects each \(\lambda_k\) by **conditional** GCV while
+updating TT cores (ALS / PIRLS), not by a full \(d\)-dimensional grid over
+the joint map.
+
+```{r cgcv}
+fit <- ttpspline(
+  y, X,
+  family = gaussian(),
+  rank = 2, k = 6,
+  lambda = "cGCV",
+  control = tt_control(
+    max_sweeps = 8,
+    backend = "R",
+    lambda_start = 1,
+    lambda_bounds = c(1e-4, 1e4),
+    warn_lambda_boundary = TRUE,
+    compute_edf = FALSE
+  )
+)
+c(
+  method = fit$lambda_method,
+  lambda = paste(sprintf("%.4g", fit$lambda), collapse = ", "),
+  boundary = paste(fit$lambda_boundary, collapse = ", ")
+)
+```
+
+Useful control knobs:
+
+| Control | Role |
+|---------|------|
+| `lambda_start` | Initial \(\lambda\) (recycled to length \(d\)) |
+| `lambda_bounds` | Log-scale search interval \([\lambda_{\min},\lambda_{\max}]\) |
+| `tol_lambda` | Relative log-\(\lambda\) change for outer convergence |
+| `warn_lambda_boundary` | Soft warning when a margin hits a bound |
+
+Inspect `fit$lambda`, `fit$lambda_boundary`, and `fit$lambda_bounds` after
+fitting. If several margins sit on a bound, widen `lambda_bounds` or treat
+the directional \(\lambda\) as exploratory, not calibrated smoothness.
+
+# Anisotropy on Sobol-\(g\)
+
+Earlier coordinates of Sobol-\(g\) matter more; cGCV often pushes
+\(\lambda_k\) apart:
+
+```{r anisotropy}
+fit_iso <- ttpspline(
+  y, X, rank = 2, k = 6, lambda = 1,
+  control = tt_control(max_sweeps = 6, backend = "R", compute_edf = FALSE)
+)
+data.frame(
+  margin = seq_len(ncol(X)),
+  lambda_fixed_iso = fit_iso$lambda,
+  lambda_cGCV = fit$lambda,
+  boundary = fit$lambda_boundary
+)
+```
+
+# With GLMs
+
+The same `lambda = "cGCV"` works for Poisson (PIRLS-ALS). Bernoulli /
+L-BFGS paths also accept `"cGCV"`, but separation / bound hits are more
+common — check `lambda_boundary`.
+
+```{r poisson, warning=TRUE}
+set.seed(2)
+n <- 400
+Xp <- matrix(runif(n * 2), n, 2)
+eta <- 0.4 + sin(2 * pi * Xp[, 1]) * cos(2 * pi * Xp[, 2])
+yp <- rpois(n, exp(eta))
+fit_p <- ttpspline(
+  yp, Xp,
+  family = poisson(),
+  rank = 2, k = 8,
+  lambda = "cGCV",
+  control = tt_control(
+    pirls_maxit = 12, max_sweeps = 4,
+    backend = "R", compute_edf = FALSE
+  )
+)
+fit_p$lambda
+fit_p$lambda_boundary
+```
+
+# cGCV inside rank CV
+
+When selecting \(r\) with `tt_rank_select(..., lambda = "cGCV")`, each
+training fold runs its **own** cGCV; held-out rows never enter the λ
+search. That is honest but slower than fixed \(\lambda\).
+
+```{r rank-cgcv, eval = FALSE}
+sel <- tt_rank_select(
+  y, X, ranks = 1:3, k = 5, lambda = "cGCV",
+  folds = 3, rule = "1se", seed = 1,
+  control = tt_control(max_sweeps = 4, compute_edf = FALSE)
+)
+```
+
+# What this is not
+
+- Not REML / cREML (reserved: `lambda = "cREML"` errors for now).
+- Not TT-cFS / Fellner–Schall inside ALS (`lambda = "cFS"` not implemented).
+- Not coordinate AIC/BIC λ search (lab prototype; IC formulas in
+  `vignette("aic-bic")`).
+- Not a substitute for choosing TT rank \(r\).
+
+# See also
+
+- `vignette("rank-selection", package = "TTPsplines")` — CV + 1-SE for \(r\)
+- `vignette("aic-bic", package = "TTPsplines")` — AIC / BIC from EDF
+- `vignette("getting-started", package = "TTPsplines")`
+- `vignette("generalized", package = "TTPsplines")`
+
+# References
+
+Craven, P. and Wahba, G. (1979).
+Smoothing noisy data with spline functions.
+*Numerische Mathematik*, **31**, 377–403.
+
+Currie, I. D., Durban, M. and Eilers, P. H. C. (2006).
+Generalized linear array models with applications to multidimensional
+smoothing. *Journal of the Royal Statistical Society: Series B*, **68**,
+259–280.
+
+Oseledets, I. V. (2011).
+Tensor-train decomposition.
+*SIAM Journal on Scientific Computing*, **33**, 2295–2317.

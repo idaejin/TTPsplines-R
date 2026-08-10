@@ -94,7 +94,27 @@ print.summary.ttpspline <- function(x, ...) {
     note <- x$edf_note %||% "not computed"
     cat(sprintf("EDF:                    NA (%s)\n", note))
   }
-  cat(sprintf("Converged:              %s\n", x$converged))
+  cat("\nInference:\n")
+  inf <- x$inference
+  if (is.null(inf) && is.environment(x$._inf) && !is.null(x$._inf$data)) {
+    inf <- x$._inf$data
+  }
+  if (!is.null(inf) && isTRUE(inf$ready)) {
+    cat(sprintf("  Covariance:              Bayesian penalized-spline\n"))
+    cat(sprintf("  Conditional on rank:     yes\n"))
+    cat(sprintf("  Conditional on lambda:   yes\n"))
+    cat(sprintf("  Smoothing uncertainty:   not included\n"))
+    cat(sprintf("  Rank uncertainty:        not included\n"))
+    cat(sprintf("  Scale estimator:         %s\n",
+                inf$scale_estimator %||% "RSS/(n-edf)"))
+    cat(sprintf("  Gauge:                   %s\n",
+                inf$gauge %||% "left-orthogonal"))
+  } else {
+    cat("  Not prepared (call vcov(fit) or predict(..., se.fit=TRUE)\n")
+    cat("  for Gaussian conditional Bayesian/frequentist SE).\n")
+    cat("  Level-1 only: conditional on TT rank and fitted lambda.\n")
+  }
+  cat(sprintf("\nConverged:              %s\n", x$converged))
   cat(sprintf("ALS sweeps:             %s\n",
               if (is.na(x$n_sweeps)) "NA" else as.character(x$n_sweeps)))
   cat(sprintf("PIRLS iterations:       %s\n", .fmt_pirls_iters(x)))
@@ -115,30 +135,7 @@ print.summary.ttpspline <- function(x, ...) {
 #' @export
 fitted.ttpspline <- function(object, ...) object$fitted.values
 
-#' @export
-predict.ttpspline <- function(object,
-                              newdata = NULL,
-                              type = c("link", "response"),
-                              offset = NULL,
-                              ...) {
-  type <- match.arg(type)
-  if (is.null(newdata)) {
-    eta <- object$linear.predictors
-  } else {
-    Xnew <- as.matrix(newdata)
-    if (ncol(Xnew) != object$d) {
-      stop("newdata must have ", object$d, " columns.", call. = FALSE)
-    }
-    if (anyNA(Xnew)) stop("NA in newdata not supported.", call. = FALSE)
-    off <- normalize_offset(offset, nrow(Xnew))
-    basis <- eval_marginal_bases(Xnew, object$knots, object$degree)
-    eta <- tt_eta(off, object$intercept, object$cores, basis)
-  }
-  if (identical(type, "link") || identical(object$family_key, "gaussian")) {
-    return(eta)
-  }
-  invlink_eta(object$family, eta)
-}
+# predict.ttpspline is defined in inference.R (supports se.fit / intervals)
 
 #' @export
 residuals.ttpspline <- function(object,

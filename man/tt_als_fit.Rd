@@ -12,7 +12,8 @@ tt_als_fit(
   control,
   penalty_order = 2,
   init_cores = NULL,
-  offset = NULL
+  offset = NULL,
+  weights = NULL
 )
 }
 \description{

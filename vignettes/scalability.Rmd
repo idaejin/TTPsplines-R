@@ -1,0 +1,171 @@
+---
+title: "Scalability of TT P-splines"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Scalability of TT P-splines}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+# What this vignette is
+
+Tensor-product P-splines store about \(k^d\) coefficients. A Tensor-Train
+(TT) factorization of the **coefficient** array stores on the order of
+\(O(d k r^2)\) parameters for uniform interior ranks — a **scaling**
+statement, not an exact identity.
+
+This note is about **storage and wall time**, not predictive rank choice
+(`vignette("rank-selection")`) or uncertainty
+(`vignette("uncertainty")`).
+
+```{r}
+library(TTPsplines)
+```
+
+# Storage: dense vs TT
+
+`tt_complexity()` reports layers without needing a fit:
+
+```{r storage}
+tab <- do.call(rbind, lapply(c(3, 5, 7, 9), function(d) {
+  cx <- tt_complexity(d = d, p = 10, rank = 3)
+  data.frame(
+    d = d,
+    npar_dense = cx$n_full,
+    npar_tt = cx$n_tt_stored,
+    compression = round(cx$compression_ratio, 1)
+  )
+}))
+print(tab, row.names = FALSE)
+```
+
+At fixed \(k=10\) and \(r=3\), the dense count grows as \(10^d\); TT stored
+size grows roughly linearly in \(d\). That is why GLAM / full-tensor
+baselines become infeasible long before TT fits do.
+
+\[
+\boxed{r \neq \lambda \neq \mathrm{EDF}}.
+\]
+
+Rank \(r\) controls **structural** capacity (and storage). It is not the
+same as effective df after penalization.
+
+# When GLAM stops
+
+`compare_glam_tt_gaussian()` skips GLAM when \(k^d\) exceeds
+`max_glam_npar` (default 5000). On higher-\(d\) grids, report that skip
+honestly — do not imply TT “beat” a method that never ran.
+
+```{r glam-skip}
+# Tiny demo: raise the threshold so GLAM is skipped early
+cmp <- compare_glam_tt_gaussian(
+  d = 5, n_grid = 4, k = 5, ranks = 1:2,
+  lambda = 1, folds = 2, max_sweeps = 3,
+  max_glam_npar = 1000L,   # 5^5 = 3125 > 1000 → GLAM skipped
+  seed = 1, n_test = 200,
+  include_oracle = FALSE, detail_ranks = FALSE
+)
+cmp[, c("method", "npar", "npar_dense", "compression", "status", "reason")]
+```
+
+Full \(d=3/5\) narrative with plots: `vignette("glam-vs-tt")`.
+Larger \(d=7\) scale sweeps: `compare_glam_tt_scale()` (heavier; keep out of
+install-time vignette builds).
+
+```{r scale-heavy, eval = FALSE}
+# Example only — slow for package install
+scale7 <- compare_glam_tt_scale(
+  d = 7, n_grid_sizes = 3, k_values = c(4, 5),
+  ranks = 1:2, max_sweeps = 4, max_glam_npar = 5000L
+)
+summarize_glam_tt_compare(scale7)
+```
+
+# Honest timings
+
+Selecting \(r\) by \(K\)-fold CV costs many fits. Comparison helpers report
+**separately**:
+
+| Column | Meaning |
+|--------|---------|
+| `fit_time` | Final fit with known rank |
+| `rank_selection_time` | Cost of `tt_rank_select()` |
+| `total_procedure_time` | `fit_time + rank_selection_time` |
+| `oracle_probe_time` | Simulation-only (not in practical totals) |
+
+Never quote only the final `fit_time` when the paper workflow includes CV.
+
+```{r timing-cols}
+cols <- c("method", "rank", "npar", "fit_time", "rank_selection_time",
+          "total_procedure_time", "status")
+print(cmp[, intersect(cols, names(cmp))], row.names = FALSE)
+```
+
+# Backend: R vs Rcpp
+
+Hot paths (ALS / PIRLS / cGCV updates) have an Rcpp backend. For production
+fits prefer `backend = "auto"` (uses Rcpp when available). Vignette chunks
+often force `backend = "R"` for portability.
+
+```{r backends}
+data(ishigami)
+idx <- seq_len(300)
+X <- as.matrix(ishigami[idx, c("x1", "x2", "x3")])
+y <- ishigami$y[idx]
+
+t_r <- system.time(
+  fit_r <- ttpspline(
+    y, X, rank = 2, k = 8, lambda = 1,
+    control = tt_control(max_sweeps = 8, backend = "R", compute_edf = FALSE)
+  )
+)[["elapsed"]]
+
+t_cpp <- tryCatch(
+  system.time(
+    fit_cpp <- ttpspline(
+      y, X, rank = 2, k = 8, lambda = 1,
+      control = tt_control(max_sweeps = 8, backend = "Rcpp", compute_edf = FALSE)
+    )
+  )[["elapsed"]],
+  error = function(e) NA_real_
+)
+
+data.frame(
+  backend = c("R", "Rcpp"),
+  seconds = c(t_r, t_cpp),
+  deviance = c(fit_r$deviance, if (is.finite(t_cpp)) fit_cpp$deviance else NA)
+)
+```
+
+Numbers are machine-dependent; the point is the API and that Rcpp is the
+fast path when compiled.
+
+# Practical checklist
+
+1. Report **compression** (`npar_dense` / `npar_tt`) and **EDF** separately.
+2. If GLAM is skipped, say so (`status` / `reason`).
+3. Split **selection time** from **final fit time**.
+4. Use `backend = "auto"` or `"Rcpp"` for serious timings; keep vignette
+   demos small.
+
+# See also
+
+- `vignette("glam-vs-tt", package = "TTPsplines")` — full-tensor vs TT demos
+- `vignette("rank-selection", package = "TTPsplines")` — CV + 1-SE for \(r\)
+- `vignette("getting-started", package = "TTPsplines")`
+- `tt_complexity()`, `compare_glam_tt_gaussian()`, `compare_glam_tt_scale()`
+
+# References
+
+Currie, I. D., Durban, M. and Eilers, P. H. C. (2006).
+Generalized linear array models with applications to multidimensional
+smoothing. *Journal of the Royal Statistical Society: Series B*, **68**,
+259–280.
+
+Oseledets, I. V. (2011).
+Tensor-train decomposition.
+*SIAM Journal on Scientific Computing*, **33**, 2295–2317.

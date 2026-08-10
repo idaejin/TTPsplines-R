@@ -22,9 +22,10 @@ tt_contraction_d_cpp <- function(cores_list, basis_list) {
 }
 
 #' Full TT-ALS fit (Gaussian, fixed anisotropic λ).
-#' Returns cores, mu, optional jacobian, block sizes.
-tt_fit_d_cpp <- function(y, basis_list, init_cores, lambda, penalties_list, sweeps, return_jacobian = TRUE) {
-    .Call(`_TTPsplines_tt_fit_d_cpp`, y, basis_list, init_cores, lambda, penalties_list, sweeps, return_jacobian)
+#' Optional observation `weights` / `offset` (empty ⇒ ones / zeros).
+#' Returns cores, mu (=eta), optional jacobian, block sizes.
+tt_fit_d_cpp <- function(y, basis_list, init_cores, lambda, penalties_list, sweeps, return_jacobian = TRUE, weights = NULL, offset = NULL) {
+    .Call(`_TTPsplines_tt_fit_d_cpp`, y, basis_list, init_cores, lambda, penalties_list, sweeps, return_jacobian, weights, offset)
 }
 
 #' Effective DF: tr[(J'J + P)^{-1} J'J]
@@ -53,13 +54,15 @@ weighted_core_update_cgcv_cpp <- function(zc, Left, Right, Bk, weight, penalty, 
 }
 
 #' Gaussian TT-ALS with per-core conditional GCV (Rcpp).
-tt_cgcv_fit_cpp <- function(y, basis_list, init_cores, penalties_list, lambda_init, sweeps = 12L, lambda_min = 1e-2, lambda_max = 1e2, tol = 1e-3, tol_lambda = 1e-3, return_jacobian = FALSE) {
-    .Call(`_TTPsplines_tt_cgcv_fit_cpp`, y, basis_list, init_cores, penalties_list, lambda_init, sweeps, lambda_min, lambda_max, tol, tol_lambda, return_jacobian)
+#' Optional observation `weights` / `offset` (empty ⇒ ones / zeros).
+tt_cgcv_fit_cpp <- function(y, basis_list, init_cores, penalties_list, lambda_init, sweeps = 12L, lambda_min = 1e-2, lambda_max = 1e2, tol = 1e-3, tol_lambda = 1e-3, return_jacobian = FALSE, weights = NULL, offset = NULL) {
+    .Call(`_TTPsplines_tt_cgcv_fit_cpp`, y, basis_list, init_cores, penalties_list, lambda_init, sweeps, lambda_min, lambda_max, tol, tol_lambda, return_jacobian, weights, offset)
 }
 
 #' GLM PIRLS + weighted TT-ALS with per-core conditional GCV (Rcpp).
 #' family: "bernoulli" | "poisson" (gaussian → use tt_cgcv_fit_cpp).
-tt_glm_pirls_cgcv_cpp <- function(y, basis_list, init_cores, penalties_list, family, lambda_init, pirls_iter = 12L, als_sweeps = 4L, lambda_min = 1e-2, lambda_max = 1e2, tol = 1e-3, tol_dev = 1e-6, select_lambda = TRUE) {
-    .Call(`_TTPsplines_tt_glm_pirls_cgcv_cpp`, y, basis_list, init_cores, penalties_list, family, lambda_init, pirls_iter, als_sweeps, lambda_min, lambda_max, tol, tol_dev, select_lambda)
+#' Optional observation `weights` / `offset` (empty ⇒ ones / zeros).
+tt_glm_pirls_cgcv_cpp <- function(y, basis_list, init_cores, penalties_list, family, lambda_init, pirls_iter = 12L, als_sweeps = 4L, lambda_min = 1e-2, lambda_max = 1e2, tol = 1e-3, tol_dev = 1e-6, select_lambda = TRUE, weights = NULL, offset = NULL) {
+    .Call(`_TTPsplines_tt_glm_pirls_cgcv_cpp`, y, basis_list, init_cores, penalties_list, family, lambda_init, pirls_iter, als_sweeps, lambda_min, lambda_max, tol, tol_dev, select_lambda, weights, offset)
 }
 

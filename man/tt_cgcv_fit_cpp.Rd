@@ -2,7 +2,8 @@
 % Please edit documentation in R/RcppExports.R
 \name{tt_cgcv_fit_cpp}
 \alias{tt_cgcv_fit_cpp}
-\title{Gaussian TT-ALS with per-core conditional GCV (Rcpp).}
+\title{Gaussian TT-ALS with per-core conditional GCV (Rcpp).
+Optional observation \code{weights} / \code{offset} (empty ⇒ ones / zeros).}
 \usage{
 tt_cgcv_fit_cpp(
   y,
@@ -15,9 +16,12 @@ tt_cgcv_fit_cpp(
   lambda_max = 100,
   tol = 0.001,
   tol_lambda = 0.001,
-  return_jacobian = FALSE
+  return_jacobian = FALSE,
+  weights = NULL,
+  offset = NULL
 )
 }
 \description{
 Gaussian TT-ALS with per-core conditional GCV (Rcpp).
+Optional observation \code{weights} / \code{offset} (empty ⇒ ones / zeros).
 }

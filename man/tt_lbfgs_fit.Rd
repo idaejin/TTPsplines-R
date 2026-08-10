@@ -14,7 +14,8 @@ tt_lbfgs_fit(
   init_cores = NULL,
   family = NULL,
   intercept0 = NULL,
-  offset = NULL
+  offset = NULL,
+  weights = NULL
 )
 }
 \description{

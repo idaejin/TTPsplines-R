@@ -25,21 +25,34 @@ X <- as.matrix(friedman[idx, paste0("x", 1:5)])
 y <- friedman$y[idx]
 ```
 
-# Three complexity layers
-
-| Symbol | Role |
-|--------|------|
-| \(r\) | **structural capacity** (TT rank) |
-| \(\lambda\) | **directional smoothness** |
-| EDF | **effective fitted flexibility** after penalization |
+# Complexity layers
 
 \[
 \boxed{r \neq \lambda \neq \mathrm{EDF}}.
 \]
 
+| Layer | Meaning |
+|-------|---------|
+| \(r\) | **structural capacity** (TT rank) |
+| \(\lambda\) | **directional smoothness** (fixed or cGCV) |
+| EDF | **effective flexibility** after P-spline penalization |
+| \(k^d\) | Full tensor-product coefficients |
+| TT stored | Packed core entries (\(\approx O(dkr^2)\) uniform ranks) |
+| TT intrinsic | Stored minus gauge redundancy |
+
 Increasing \(r\) enlarges the TT manifold (more stored parameters, less
-compression). It can improve prediction, but gains are often marginal.
-Smoothing \(\lambda\) (fixed or cGCV) is a different knob.
+compression). Smoothing \(\lambda\) is a different knob
+(`vignette("cgcv")`).
+
+```{r complexity}
+data(ishigami)
+X_i <- as.matrix(ishigami[, c("x1", "x2", "x3")])
+fit0 <- ttpspline(
+  ishigami$y, X_i, rank = 2, k = 8, lambda = 1,
+  control = tt_control(max_sweeps = 6, compute_edf = TRUE)
+)
+tt_complexity(fit0)
+```
 
 # Cross-validation + 1-SE
 
@@ -84,7 +97,7 @@ summary(fit)
 
 When `lambda = "cGCV"`, each fold selects \(\lambda\) **only on its
 training rows**, then scores the held-out fold. Validation data never
-enter cGCV.
+enter cGCV. Details: `vignette("cgcv")`.
 
 ```{r cgcv, eval = FALSE}
 sel_cgcv <- tt_rank_select(
@@ -94,21 +107,37 @@ sel_cgcv <- tt_rank_select(
 )
 ```
 
+# In-sample rank sweep (diagnostic)
+
+`tt_rank_profile()` refits on the **full** sample at each rank and reports
+deviance / `npar`. This is **not** cross-validation.
+
+```{r profile, fig.width = 6, fig.height = 3.5}
+prof <- tt_rank_profile(
+  ishigami$y, X_i, ranks = 1:4, k = 6, lambda = 1,
+  control = tt_control(max_sweeps = 5, compute_edf = FALSE)
+)
+print(prof)
+plot(prof)
+```
+
 # What this is not
 
 - Not a likelihood-ratio / bootstrap test of TT rank.
 - Not adaptive TT-SVD / greedy rank expansion.
 - Not oracle \(r\) from simulation truth (`RMSE` vs \(f_{\mathrm{true}}\)).
+- Not AIC/BIC rank selection (`vignette("aic-bic")`).
 
 Oracle ranks are useful **only** in simulation to audit CV; they are not
 part of the user API.
 
 # See also
 
-- `vignette("glam-vs-tt", package = "TTPsplines")`
-- `vignette("rank-compression", package = "TTPsplines")`
+- `vignette("cgcv", package = "TTPsplines")` — choosing \(\lambda\)
+- `vignette("aic-bic", package = "TTPsplines")` — in-sample AIC / BIC (EDF)
+- `vignette("scalability", package = "TTPsplines")` — storage and timings
+- `vignette("glam-vs-tt", package = "TTPsplines")` — full tensor vs TT
 - `vignette("getting-started", package = "TTPsplines")`
-- `tt_rank_profile()` — in-sample rank sweep (not CV)
 
 # References
 

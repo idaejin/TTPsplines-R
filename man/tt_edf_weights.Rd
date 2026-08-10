@@ -4,7 +4,7 @@
 \alias{tt_edf_weights}
 \title{Working weights at a fitted object for GLM joint EDF.}
 \usage{
-tt_edf_weights(fit_raw, family_key, y)
+tt_edf_weights(fit_raw, family_key, y, weights = NULL)
 }
 \description{
 Working weights at a fitted object for GLM joint EDF.

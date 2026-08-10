@@ -59,39 +59,43 @@ glm_working <- function(family, y, eta, control = NULL) {
   stop("Unsupported family key: ", key)
 }
 
-#' Model deviance (Gaussian uses RSS).
+#' Model deviance (Gaussian uses RSS). Optional observation `weights`.
 #' @keywords internal
-glm_deviance <- function(family, y, mu) {
+glm_deviance <- function(family, y, mu, weights = NULL) {
   key <- family_key(family)
+  w <- normalize_weights(weights, length(y))
   if (identical(key, "gaussian")) {
-    return(sum((y - mu)^2))
+    return(sum(w * (y - mu)^2))
   }
   if (identical(key, "bernoulli")) {
     mu <- pmin(pmax(mu, 1e-12), 1 - 1e-12)
-    return(-2 * sum(y * log(mu) + (1 - y) * log(1 - mu)))
+    return(-2 * sum(w * (y * log(mu) + (1 - y) * log(1 - mu))))
   }
   if (identical(key, "poisson")) {
     mu <- pmax(mu, 1e-12)
     term <- ifelse(y > 0, y * log(y / mu), 0) - (y - mu)
-    return(2 * sum(term))
+    return(2 * sum(w * term))
   }
   stop("Unsupported family")
 }
 
-init_intercept <- function(family, y, offset = NULL) {
+init_intercept <- function(family, y, offset = NULL, weights = NULL) {
   key <- family_key(family)
   offset <- normalize_offset(offset, length(y))
-  if (identical(key, "gaussian")) return(mean(y - offset))
+  w <- normalize_weights(weights, length(y))
+  sw <- sum(w)
+  if (sw <= 0) stop("sum(weights) must be positive.", call. = FALSE)
+  if (identical(key, "gaussian")) return(sum(w * (y - offset)) / sw)
   if (identical(key, "bernoulli")) {
-    # offset on logit scale: initialise at mean residual logit
-    p <- pmin(pmax(mean(y), 0.05), 0.95)
-    return(qlogis(p) - mean(offset))
+    p <- sum(w * y) / sw
+    p <- pmin(pmax(p, 0.05), 0.95)
+    return(qlogis(p) - sum(w * offset) / sw)
   }
   if (identical(key, "poisson")) {
-    rate <- mean(y / pmax(exp(offset), 1e-12))
+    rate <- sum(w * y / pmax(exp(offset), 1e-12)) / sw
     return(log(max(rate, 1e-8)))
   }
-  mean(y - offset)
+  sum(w * (y - offset)) / sw
 }
 
 invlink_eta <- function(family, eta) {
@@ -124,22 +128,41 @@ normalize_offset <- function(offset, n) {
   offset
 }
 
+#' Normalize observation weights (NULL → ones). Must be finite and ≥ 0.
+#' @keywords internal
+#' @noRd
+normalize_weights <- function(weights, n) {
+  n <- as.integer(n)
+  if (is.null(weights)) return(rep(1, n))
+  weights <- as.numeric(weights)
+  if (length(weights) == 1L) weights <- rep(weights, n)
+  if (length(weights) != n) {
+    stop("`weights` must have length 1 or length(y) = ", n, ".", call. = FALSE)
+  }
+  if (anyNA(weights)) stop("`weights` contains NA.", call. = FALSE)
+  if (any(weights < 0)) stop("`weights` must be non-negative.", call. = FALSE)
+  if (sum(weights) <= 0) stop("sum(weights) must be positive.", call. = FALSE)
+  weights
+}
+
 #' True GLM + TT penalty objective at (cores, intercept).
 #' @keywords internal
 tt_glm_penalized_objective <- function(y, cores, intercept, basis, penalties,
-                                       lambda, family, offset = NULL) {
+                                       lambda, family, offset = NULL,
+                                       weights = NULL) {
   key <- family_key(family)
   offset <- normalize_offset(offset, length(y))
+  w <- normalize_weights(weights, length(y))
   eta <- tt_eta(offset, intercept, cores, basis)
   if (identical(key, "gaussian")) {
-    rss <- sum((y - eta)^2)
+    rss <- sum(w * (y - eta)^2)
     nll <- 0.5 * rss
   } else if (identical(key, "bernoulli")) {
     mu <- pmin(pmax(plogis(eta), 1e-12), 1 - 1e-12)
-    nll <- -sum(y * log(mu) + (1 - y) * log(1 - mu))
+    nll <- -sum(w * (y * log(mu) + (1 - y) * log(1 - mu)))
   } else if (identical(key, "poisson")) {
     mu <- pmax(exp(pmin(pmax(eta, -20), 20)), 1e-12)
-    nll <- sum(mu - y * log(mu))
+    nll <- sum(w * (mu - y * log(mu)))
   } else {
     stop("Unsupported family in tt_glm_penalized_objective", call. = FALSE)
   }

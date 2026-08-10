@@ -23,6 +23,7 @@ tt_rank_select(
   keep_fits = FALSE,
   knots = NULL,
   offset = NULL,
+  weights = NULL,
   rank_chain = NULL,
   ...
 )
@@ -32,7 +33,7 @@ tt_rank_select(
 
 \item{ranks}{Integer vector of candidate \strong{uniform} ranks (default \code{1:5}).}
 
-\item{family, k, degree, penalty_order, lambda, optimizer, backend, control, knots, offset}{Passed through to \code{\link[=ttpspline]{ttpspline()}} on each fold (and on final refit).}
+\item{family, k, degree, penalty_order, lambda, optimizer, backend, control, knots, offset, weights}{Passed through to \code{\link[=ttpspline]{ttpspline()}} on each fold (and on final refit).}
 
 \item{folds}{Number of CV folds (default 5).}
 

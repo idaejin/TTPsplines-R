@@ -13,7 +13,8 @@ tt_adam_fit(
   penalty_order = 2,
   init_cores = NULL,
   family = NULL,
-  offset = NULL
+  offset = NULL,
+  weights = NULL
 )
 }
 \description{

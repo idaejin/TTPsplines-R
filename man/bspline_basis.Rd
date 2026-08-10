@@ -2,11 +2,11 @@
 % Please edit documentation in R/basis.R
 \name{bspline_basis}
 \alias{bspline_basis}
-\title{Evaluate a B-spline basis matrix.}
+\title{Evaluate a (non-cyclic) B-spline basis matrix.}
 \usage{
 bspline_basis(x, knots, degree = 3)
 }
 \description{
-Evaluate a B-spline basis matrix.
+Evaluate a (non-cyclic) B-spline basis matrix.
 }
 \keyword{internal}

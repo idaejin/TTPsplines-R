@@ -92,9 +92,13 @@ tt_joint_edf <- function(cores, basis, penalties, lambda,
 
 #' Working weights at a fitted object for GLM joint EDF.
 #' @keywords internal
-tt_edf_weights <- function(fit_raw, family_key, y) {
-  if (identical(family_key, "gaussian")) return(NULL)
+tt_edf_weights <- function(fit_raw, family_key, y, weights = NULL) {
+  w_obs <- normalize_weights(weights, length(y))
+  if (identical(family_key, "gaussian")) {
+    if (all(w_obs == 1)) return(NULL)
+    return(w_obs)
+  }
   fam <- normalize_family(if (identical(family_key, "bernoulli")) "binomial" else family_key)
   work <- glm_working(fam, y, fit_raw$eta)
-  work$weight
+  work$weight * w_obs
 }

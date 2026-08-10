@@ -110,8 +110,7 @@ GLAM uses the full \(k\times k\) coefficient array; TT stores fewer parameters
 at modest rank while staying close to the GLAM mean surface on this example.
 For scattered Poisson / Bernoulli (no grid), prefer `ttpspline()` directly —
 see `vignette("generalized")`. For Gaussian GLAM vs TT with CV ranks and
-separated timings, see `vignette("glam-vs-tt")` (full) and
-`vignette("glam-gaussian")` (quick start).
+separated timings, see `vignette("glam-vs-tt")`.
 
 Redraw a smaller grid on the fly with `simulate_glam_poisson()`.
 
@@ -119,9 +118,9 @@ Redraw a smaller grid on the fly with `simulate_glam_poisson()`.
 
 - `vignette("generalized", package = "TTPsplines")` — scattered Poisson / Bernoulli
 - `vignette("glam-vs-tt", package = "TTPsplines")` — full tensor vs TT
+- `vignette("cgcv", package = "TTPsplines")` — automatic \(\lambda\)
 - `vignette("rank-selection", package = "TTPsplines")`
 - `vignette("getting-started", package = "TTPsplines")`
-- `vignette("introduction", package = "TTPsplines")`
 
 # References
 

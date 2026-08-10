@@ -212,6 +212,28 @@ fit <- tt_rank_refit(sel)   # full-data refit at selected_rank
 
 Vignette: `vignette("rank-selection", package = "TTPsplines")`.
 
+## Choosing λ (cGCV)
+
+```r
+fit <- ttpspline(y, X, rank = 2, k = 8, lambda = "cGCV")
+fit$lambda
+fit$lambda_boundary   # check for bound hits
+```
+
+Vignette: `vignette("cgcv", package = "TTPsplines")`.
+
+## AIC / BIC (linearized EDF)
+
+In-sample information criteria use joint linearized `fit$edf` (not `npar_tt`):
+
+```r
+# Gaussian: n * log(RSS/n) + 2 * (edf + 1)
+# Poisson / Bernoulli: deviance + 2 * (edf + 1)
+```
+
+Vignette: `vignette("aic-bic", package = "TTPsplines")`.
+There is no `AIC()` / `BIC()` method yet.
+
 ## GLAM Poisson (Currie–Durbán–Eilers)
 
 On a regular age × year grid with exposures (Currie, Durbán & Eilers, 2006):
@@ -228,8 +250,8 @@ fit <- glam_fit_poisson(
 Also: `glam_fit_gaussian()`, `simulate_glam_poisson()`,
 `compare_glam_tt_gaussian()` / `compare_glam_tt_scale()` (Gaussian GLAM vs TT
 on \(d=3,5,7\) grids, including \(n\times k\) scale at \(d=7\)).
-Vignettes: `vignette("glam-vs-tt")`, `vignette("glam-gaussian")`,
-`vignette("glam-poisson")`.
+Vignettes: `vignette("glam-vs-tt")`, `vignette("glam-poisson")`,
+`vignette("scalability")`.
 Scripts: `inst/examples/example_glam_poisson.R`,
 `inst/examples/example_glam_gaussian_vs_tt.R`.
 

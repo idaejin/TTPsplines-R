@@ -62,6 +62,7 @@ Collate:
     'objective.R'
     'ttpspline.R'
     'complexity.R'
+    'inference.R'
     'methods.R'
     'rank_profile.R'
     'rank_select.R'

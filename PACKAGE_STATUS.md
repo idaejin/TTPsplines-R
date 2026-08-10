@@ -37,7 +37,8 @@ R/  TTPsplines-package, linalg, basis, penalties, rank, control,
 src/ tt_pspline_nd.cpp (+ Makevars, RcppExports.cpp)
 tests/testthat/test-ttpspline.R, test-api.R, test-complexity-layers.R
 docs/PACKAGE_IMPLEMENTATION.md
-vignettes/ introduction, generalized, rank-compression
+vignettes/ getting-started, generalized, cgcv, rank-selection, aic-bic,
+           glam-vs-tt, glam-poisson, uncertainty, scalability
 inst/benchmarks/ *.R + python/benchmark_keras_tt.py (stubs)
 ```
 
@@ -72,7 +73,10 @@ Lab scripts/docs/outputs **not moved or deleted**. As of 2026-08-10 the lab **in
 | Bernoulli ALS/PIRLS | **working with caveats** (FIX1+FIX2; predictive gap vs LBFGS remains) |
 | cGCV for GLM | **working** via modular λ / Rcpp |
 | Joint EDF | **working** (linearized; size-guarded) |
-| Complexity layers | **working** (`tt_complexity`) |
+| cGCV vignette | **`vignettes/cgcv.Rmd`** (fixed vs cGCV; bounds) |
+| Scalability vignette | **`vignettes/scalability.Rmd`** (storage, GLAM skip, timings, backends) |
+| AIC / BIC helpers | **vignette only** (`vignettes/aic-bic.Rmd`; no `AIC()` method yet) |
+| Complexity layers | **working** (`tt_complexity`; covered in `rank-selection`) |
 | Rcpp backend | **working** (`backend = "auto"/"Rcpp"`) |
 | Sparse Matrix path | **hook only** (`sparse` in control; dense v0) |
 | Benchmarks | **runnable** — `inst/benchmarks/` |

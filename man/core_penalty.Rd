@@ -4,7 +4,7 @@
 \alias{core_penalty}
 \title{Core-wise Kronecker penalty for vec(G_k) with order (a, j, b).}
 \usage{
-core_penalty(rl, p, rr, penalty_order = 2)
+core_penalty(rl, p, rr, penalty_order = 2, cyclic = FALSE)
 }
 \description{
 Core-wise Kronecker penalty for vec(G_k) with order (a, j, b).

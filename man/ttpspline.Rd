@@ -20,7 +20,10 @@ ttpspline(
   control = tt_control(),
   monitor = FALSE,
   knots = NULL,
-  offset = NULL
+  offset = NULL,
+  weights = NULL,
+  cyclic = NULL,
+  period = NULL
 )
 }
 \arguments{
@@ -75,6 +78,16 @@ Convenient alias of \code{tt_control(monitor = TRUE)} / \code{tt_control(trace =
 
 \item{offset}{Optional numeric vector of length \code{n} (or scalar) added to the
 linear predictor, e.g. \code{log(exposure)} for Poisson. Default \code{NULL} (zeros).}
+
+\item{weights}{Optional non-negative observation weights of length \code{n}
+(or scalar). \code{NULL} means all ones. Zero weights exclude observations from
+the likelihood (useful for masking empty array cells).}
+
+\item{cyclic}{Logical scalar or length-\code{d} flags for \strong{circular} P-spline
+margins (periodic B-spline basis + circular difference penalty). For
+hour-of-day, map to \(\link{0,1}\) and set that margin to \code{TRUE}.}
+
+\item{period}{Optional length-\code{d} list of \code{c(xl,xr)} for cyclic margins.}
 }
 \value{
 An object of class \code{"ttpspline"}.

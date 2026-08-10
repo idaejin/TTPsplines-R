@@ -13,7 +13,8 @@ tt_pirls_fit_rcpp(
   control,
   penalty_order = 2,
   init_cores = NULL,
-  offset = NULL
+  offset = NULL,
+  weights = NULL
 )
 }
 \description{

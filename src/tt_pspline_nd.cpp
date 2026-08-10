@@ -175,7 +175,8 @@ arma::vec tt_contraction_d_cpp(const List& cores_list, const List& basis_list) {
 }
 
 //' Full TT-ALS fit (Gaussian, fixed anisotropic λ).
-//' Returns cores, mu, optional jacobian, block sizes.
+//' Optional observation `weights` / `offset` (empty ⇒ ones / zeros).
+//' Returns cores, mu (=eta), optional jacobian, block sizes.
 // [[Rcpp::export]]
 List tt_fit_d_cpp(const arma::vec& y,
                   const List& basis_list,
@@ -183,7 +184,9 @@ List tt_fit_d_cpp(const arma::vec& y,
                   const arma::vec& lambda,
                   const List& penalties_list,
                   int sweeps,
-                  bool return_jacobian = true) {
+                  bool return_jacobian = true,
+                  Rcpp::Nullable<Rcpp::NumericVector> weights = R_NilValue,
+                  Rcpp::Nullable<Rcpp::NumericVector> offset = R_NilValue) {
   std::vector<arma::mat> basis = list_to_mats(basis_list);
   std::vector<arma::cube> cores = list_to_cubes(init_cores);
   std::vector<arma::mat> penalties = list_to_mats(penalties_list);
@@ -196,39 +199,81 @@ List tt_fit_d_cpp(const arma::vec& y,
     stop("lambda length must equal d");
   }
 
-  const double intercept = arma::mean(y);
-  arma::vec yc = y - intercept;
+  arma::vec w_in = weights.isNotNull()
+                       ? Rcpp::as<arma::vec>(weights)
+                       : arma::vec();
+  arma::vec o_in = offset.isNotNull()
+                       ? Rcpp::as<arma::vec>(offset)
+                       : arma::vec();
+  // Local resolve (helpers live later in this TU)
+  arma::vec w_obs = w_in;
+  if (w_obs.n_elem == 0) {
+    w_obs = arma::ones<arma::vec>(n);
+  } else if (w_obs.n_elem == 1) {
+    const double w0 = w_obs(0);
+    w_obs = arma::vec(n);
+    w_obs.fill(w0);
+  }
+  if (static_cast<int>(w_obs.n_elem) != n) stop("`weights` length mismatch");
+  if (arma::any(w_obs < 0.0) || !w_obs.is_finite()) {
+    stop("`weights` must be finite and non-negative");
+  }
+  if (!(arma::accu(w_obs) > 0.0)) stop("sum(weights) must be positive");
+  arma::vec off = o_in;
+  if (off.n_elem == 0) {
+    off = arma::zeros<arma::vec>(n);
+  } else if (off.n_elem == 1) {
+    const double o0 = off(0);
+    off = arma::vec(n);
+    off.fill(o0);
+  }
+  if (static_cast<int>(off.n_elem) != n) stop("`offset` length mismatch");
+  if (!off.is_finite()) stop("`offset` contains NA/Inf");
+
+  const double intercept = arma::dot(w_obs, y - off) / arma::accu(w_obs);
+  arma::vec yc = y - off - intercept;
 
   for (int sweep = 0; sweep < sweeps; ++sweep) {
-    // Incremental: rebuild L once per sweep start; update after each core
     std::vector<arma::mat> L = build_left_interfaces(cores, basis);
     std::vector<arma::mat> R = build_right_interfaces(cores, basis);
     for (int k = 0; k < d; ++k) {
-      arma::vec coef = gaussian_core_update_cpp(
-          yc, L[k], R[k], basis[k], penalties[k], lambda[k]);
+      arma::mat X = tt_design_core_d_cpp(L[k], R[k], basis[k]);
+      arma::vec sw = arma::sqrt(w_obs);
+      for (arma::uword i = 0; i < sw.n_elem; ++i) {
+        if (!std::isfinite(sw(i)) || sw(i) < 0.0) sw(i) = 0.0;
+      }
+      arma::mat Xw = X;
+      Xw.each_col() %= sw;
+      arma::vec yw = sw % yc;
+      arma::mat xtx = Xw.t() * Xw;
+      const double ridge = ridge_scale_arma(xtx);
+      arma::mat system = xtx + lambda(k) * penalties[k];
+      system.diag() += ridge;
+      arma::vec coef = arma::solve(system, Xw.t() * yw,
+                                   arma::solve_opts::likely_sympd);
       const int rl = cores[k].n_rows;
       const int p = cores[k].n_cols;
       const int rr = cores[k].n_slices;
       cores[k] = arma::cube(coef.memptr(), rl, p, rr);
-      // refresh left interface for next cores
       if (k + 1 < d) {
         L[k + 1] = contract_left_step_cpp(L[k], cores[k], basis[k]);
       }
-      // refresh right interfaces for earlier cores (if needed later in sweep)
-      // When going left-to-right, R[k] for current/future does not depend on core k.
-      // So no R update needed within forward sweep.
     }
   }
 
-  arma::vec mu = intercept + tt_contraction_d_cpp(cubes_to_list(cores), basis_list);
+  arma::vec f = tt_contraction_d_cpp(cubes_to_list(cores), basis_list);
+  arma::vec eta = off + intercept + f;
+  arma::vec mu = eta;
 
   List out = List::create(
       _["cores"] = cubes_to_list(cores),
       _["intercept"] = intercept,
       _["mu"] = mu,
+      _["eta"] = eta,
       _["lambda"] = lambda,
       _["d"] = d,
-      _["sweeps"] = sweeps);
+      _["sweeps"] = sweeps,
+      _["deviance"] = arma::dot(w_obs, (y - mu) % (y - mu)));
 
   if (return_jacobian) {
     std::vector<arma::mat> L = build_left_interfaces(cores, basis);
@@ -240,11 +285,11 @@ List tt_fit_d_cpp(const arma::vec& y,
       m += block_sizes[k];
     }
     arma::mat J(n, m);
-    int offset = 0;
+    int joff = 0;
     for (int k = 0; k < d; ++k) {
       arma::mat Xk = tt_design_core_d_cpp(L[k], R[k], basis[k]);
-      J.cols(offset, offset + Xk.n_cols - 1) = Xk;
-      offset += Xk.n_cols;
+      J.cols(joff, joff + Xk.n_cols - 1) = Xk;
+      joff += Xk.n_cols;
     }
     out["jacobian"] = J;
     out["block_sizes"] = block_sizes;
@@ -468,7 +513,8 @@ void glm_working(const std::string& family,
 
 double glm_deviance(const std::string& family,
                     const arma::vec& y,
-                    const arma::vec& mu) {
+                    const arma::vec& mu,
+                    const arma::vec& weights) {
   const int n = y.n_elem;
   double dev = 0.0;
   if (family == "bernoulli" || family == "binomial") {
@@ -476,18 +522,19 @@ double glm_deviance(const std::string& family,
       double m = mu(i);
       if (m < 1e-12) m = 1e-12;
       if (m > 1.0 - 1e-12) m = 1.0 - 1e-12;
-      dev += -2.0 * (y(i) * std::log(m) + (1.0 - y(i)) * std::log(1.0 - m));
+      const double wi = weights(i);
+      dev += -2.0 * wi * (y(i) * std::log(m) + (1.0 - y(i)) * std::log(1.0 - m));
     }
   } else if (family == "poisson") {
     for (int i = 0; i < n; ++i) {
       double m = std::max(mu(i), 1e-12);
       const double yi = y(i);
       const double term = (yi > 0.0) ? (yi * std::log(yi / m)) : 0.0;
-      dev += 2.0 * (term - (yi - m));
+      dev += 2.0 * weights(i) * (term - (yi - m));
     }
   } else {
     arma::vec r = y - mu;
-    dev = arma::dot(r, r);
+    dev = arma::dot(weights, r % r);
   }
   return dev;
 }
@@ -510,18 +557,69 @@ arma::vec glm_invlink(const std::string& family, const arma::vec& eta) {
   return mu;
 }
 
-double glm_init_intercept(const std::string& family, const arma::vec& y) {
-  const double m = arma::mean(y);
+arma::vec resolve_obs_weights(const arma::vec& weights, int n) {
+  if (weights.n_elem == 0) {
+    return arma::ones<arma::vec>(n);
+  }
+  arma::vec w = weights;
+  if (w.n_elem == 1) {
+    const double w0 = w(0);
+    w = arma::vec(n);
+    w.fill(w0);
+  }
+  if (static_cast<int>(w.n_elem) != n) {
+    stop("`weights` must have length 1 or n.");
+  }
+  double sw = 0.0;
+  for (int i = 0; i < n; ++i) {
+    if (!std::isfinite(w(i)) || w(i) < 0.0) {
+      stop("`weights` must be finite and non-negative.");
+    }
+    sw += w(i);
+  }
+  if (!(sw > 0.0)) stop("sum(weights) must be positive.");
+  return w;
+}
+
+arma::vec resolve_obs_offset(const arma::vec& offset, int n) {
+  if (offset.n_elem == 0) {
+    return arma::zeros<arma::vec>(n);
+  }
+  arma::vec off = offset;
+  if (off.n_elem == 1) {
+    const double o0 = off(0);
+    off = arma::vec(n);
+    off.fill(o0);
+  }
+  if (static_cast<int>(off.n_elem) != n) {
+    stop("`offset` must have length 1 or n.");
+  }
+  if (!off.is_finite()) stop("`offset` contains NA/Inf.");
+  return off;
+}
+
+double glm_init_intercept(const std::string& family,
+                          const arma::vec& y,
+                          const arma::vec& offset,
+                          const arma::vec& weights) {
+  const double sw = arma::accu(weights);
   if (family == "bernoulli" || family == "binomial") {
-    double p = m;
+    double p = arma::dot(weights, y) / sw;
     if (p < 0.05) p = 0.05;
     if (p > 0.95) p = 0.95;
-    return std::log(p / (1.0 - p));
+    return std::log(p / (1.0 - p)) - arma::dot(weights, offset) / sw;
   }
   if (family == "poisson") {
-    return std::log(std::max(m, 0.1));
+    double rate = 0.0;
+    for (arma::uword i = 0; i < y.n_elem; ++i) {
+      const double ei = std::exp(offset(i));
+      rate += weights(i) * y(i) / std::max(ei, 1e-12);
+    }
+    rate /= sw;
+    return std::log(std::max(rate, 1e-8));
   }
-  return m;
+  // gaussian
+  return arma::dot(weights, y - offset) / sw;
 }
 
 }  // namespace
@@ -633,6 +731,7 @@ List weighted_core_update_cgcv_cpp(const arma::vec& zc,
 }
 
 //' Gaussian TT-ALS with per-core conditional GCV (Rcpp).
+//' Optional observation `weights` / `offset` (empty ⇒ ones / zeros).
 // [[Rcpp::export]]
 List tt_cgcv_fit_cpp(const arma::vec& y,
                      const List& basis_list,
@@ -644,7 +743,9 @@ List tt_cgcv_fit_cpp(const arma::vec& y,
                      double lambda_max = 1e2,
                      double tol = 1e-3,
                      double tol_lambda = 1e-3,
-                     bool return_jacobian = false) {
+                     bool return_jacobian = false,
+                     Rcpp::Nullable<Rcpp::NumericVector> weights = R_NilValue,
+                     Rcpp::Nullable<Rcpp::NumericVector> offset = R_NilValue) {
   std::vector<arma::mat> basis = list_to_mats(basis_list);
   std::vector<arma::cube> cores = list_to_cubes(init_cores);
   std::vector<arma::mat> penalties = list_to_mats(penalties_list);
@@ -656,8 +757,16 @@ List tt_cgcv_fit_cpp(const arma::vec& y,
     lambda_init.fill(lam0);
   }
   arma::vec lambda = lambda_init;
-  const double intercept = arma::mean(y);
-  arma::vec yc = y - intercept;
+  arma::vec w_in = weights.isNotNull()
+                       ? Rcpp::as<arma::vec>(weights)
+                       : arma::vec();
+  arma::vec o_in = offset.isNotNull()
+                       ? Rcpp::as<arma::vec>(offset)
+                       : arma::vec();
+  const arma::vec w_obs = resolve_obs_weights(w_in, n);
+  const arma::vec off = resolve_obs_offset(o_in, n);
+  const double intercept = arma::dot(w_obs, y - off) / arma::accu(w_obs);
+  arma::vec yc = y - off - intercept;
 
   int n_eval = 0;
   int n_core_visits = 0;
@@ -669,9 +778,16 @@ List tt_cgcv_fit_cpp(const arma::vec& y,
     std::vector<arma::mat> R = build_right_interfaces(cores, basis);
     for (int k = 0; k < d; ++k) {
       arma::mat X = tt_design_core_d_cpp(L[k], R[k], basis[k]);
-      arma::mat S = X.t() * X;
-      arma::vec b = X.t() * yc;
-      OptLam o = optimize_lambda_gcv(yc, X, S, penalties[k], b,
+      arma::vec swt = arma::sqrt(w_obs);
+      for (arma::uword i = 0; i < swt.n_elem; ++i) {
+        if (!std::isfinite(swt(i)) || swt(i) < 0.0) swt(i) = 0.0;
+      }
+      arma::mat Xw = X;
+      Xw.each_col() %= swt;
+      arma::vec yw = swt % yc;
+      arma::mat S = Xw.t() * Xw;
+      arma::vec b = Xw.t() * yw;
+      OptLam o = optimize_lambda_gcv(yw, Xw, S, penalties[k], b,
                                      lambda_min, lambda_max, tol);
       fill_cube_from_vec(cores[k], o.g);
       lambda(k) = o.lambda;
@@ -692,12 +808,16 @@ List tt_cgcv_fit_cpp(const arma::vec& y,
     prev_lam = lambda;
   }
 
-  arma::vec mu = intercept + tt_contraction_d_cpp(cubes_to_list(cores), basis_list);
+  arma::vec f = tt_contraction_d_cpp(cubes_to_list(cores), basis_list);
+  arma::vec eta = off + intercept + f;
+  arma::vec mu = eta;
   List out = List::create(
       _["cores"] = cubes_to_list(cores),
       _["intercept"] = intercept,
       _["mu"] = mu,
+      _["eta"] = eta,
       _["lambda"] = lambda,
+      _["deviance"] = arma::dot(w_obs, (y - mu) % (y - mu)),
       _["d"] = d,
       _["n_sweeps"] = n_sweeps_done,
       _["n_core_visits"] = n_core_visits,
@@ -716,11 +836,11 @@ List tt_cgcv_fit_cpp(const arma::vec& y,
       m += block_sizes[k];
     }
     arma::mat J(n, m);
-    int offset = 0;
+    int joff = 0;
     for (int k = 0; k < d; ++k) {
       arma::mat Xk = tt_design_core_d_cpp(L[k], R[k], basis[k]);
-      J.cols(offset, offset + Xk.n_cols - 1) = Xk;
-      offset += Xk.n_cols;
+      J.cols(joff, joff + Xk.n_cols - 1) = Xk;
+      joff += Xk.n_cols;
     }
     out["jacobian"] = J;
     out["block_sizes"] = block_sizes;
@@ -730,6 +850,7 @@ List tt_cgcv_fit_cpp(const arma::vec& y,
 
 //' GLM PIRLS + weighted TT-ALS with per-core conditional GCV (Rcpp).
 //' family: "bernoulli" | "poisson" (gaussian → use tt_cgcv_fit_cpp).
+//' Optional observation `weights` / `offset` (empty ⇒ ones / zeros).
 // [[Rcpp::export]]
 List tt_glm_pirls_cgcv_cpp(const arma::vec& y,
                            const List& basis_list,
@@ -743,7 +864,9 @@ List tt_glm_pirls_cgcv_cpp(const arma::vec& y,
                            double lambda_max = 1e2,
                            double tol = 1e-3,
                            double tol_dev = 1e-6,
-                           bool select_lambda = true) {
+                           bool select_lambda = true,
+                           Rcpp::Nullable<Rcpp::NumericVector> weights = R_NilValue,
+                           Rcpp::Nullable<Rcpp::NumericVector> offset = R_NilValue) {
   if (family == "binomial") family = "bernoulli";
   if (family != "bernoulli" && family != "poisson") {
     stop("tt_glm_pirls_cgcv_cpp: family must be bernoulli or poisson");
@@ -759,15 +882,23 @@ List tt_glm_pirls_cgcv_cpp(const arma::vec& y,
     lambda_init.fill(lam0);
   }
   arma::vec lambda = lambda_init;
+  arma::vec w_in = weights.isNotNull()
+                       ? Rcpp::as<arma::vec>(weights)
+                       : arma::vec();
+  arma::vec o_in = offset.isNotNull()
+                       ? Rcpp::as<arma::vec>(offset)
+                       : arma::vec();
+  const arma::vec w_obs = resolve_obs_weights(w_in, n);
+  const arma::vec off = resolve_obs_offset(o_in, n);
 
   // Shrink random init
   for (int k = 0; k < d; ++k) cores[k] *= 0.05;
 
-  double intercept = glm_init_intercept(family, y);
+  double intercept = glm_init_intercept(family, y, off, w_obs);
   arma::vec f = tt_contraction_d_cpp(cubes_to_list(cores), basis_list);
-  arma::vec eta = intercept + f;
+  arma::vec eta = off + intercept + f;
   arma::vec mu = glm_invlink(family, eta);
-  double dev = glm_deviance(family, y, mu);
+  double dev = glm_deviance(family, y, mu, w_obs);
 
   int n_eval = 0;
   int n_core_visits = 0;
@@ -777,11 +908,12 @@ List tt_glm_pirls_cgcv_cpp(const arma::vec& y,
   std::vector<double> hist_maxeta;
 
   for (int it = 0; it < pirls_iter; ++it) {
-    arma::vec w, z, mu_w;
-    glm_working(family, y, eta, w, z, mu_w);
+    arma::vec w_glm, z, mu_w;
+    glm_working(family, y, eta, w_glm, z, mu_w);
+    arma::vec w = w_glm % w_obs;
 
     for (int sw = 0; sw < als_sweeps; ++sw) {
-      arma::vec zc = z - intercept;
+      arma::vec zc = z - off - intercept;
       std::vector<arma::mat> L = build_left_interfaces(cores, basis);
       std::vector<arma::mat> R = build_right_interfaces(cores, basis);
       for (int k = 0; k < d; ++k) {
@@ -815,13 +947,13 @@ List tt_glm_pirls_cgcv_cpp(const arma::vec& y,
         }
       }
       f = tt_contraction_d_cpp(cubes_to_list(cores), basis_list);
-      intercept = arma::dot(w, z - f) / std::max(arma::accu(w), 1e-12);
+      intercept = arma::dot(w, z - off - f) / std::max(arma::accu(w), 1e-12);
     }
 
     f = tt_contraction_d_cpp(cubes_to_list(cores), basis_list);
-    eta = intercept + f;
+    eta = off + intercept + f;
     mu = glm_invlink(family, eta);
-    const double dev_new = glm_deviance(family, y, mu);
+    const double dev_new = glm_deviance(family, y, mu, w_obs);
     ++n_pirls_done;
     hist_pirls.push_back(static_cast<double>(it + 1));
     hist_dev.push_back(dev_new);

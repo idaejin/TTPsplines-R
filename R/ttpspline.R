@@ -52,6 +52,13 @@
 #' @param knots Optional list of knot vectors (advanced).
 #' @param offset Optional numeric vector of length `n` (or scalar) added to the
 #'   linear predictor, e.g. `log(exposure)` for Poisson. Default `NULL` (zeros).
+#' @param weights Optional non-negative observation weights of length `n`
+#'   (or scalar). `NULL` means all ones. Zero weights exclude observations from
+#'   the likelihood (useful for masking empty array cells).
+#' @param cyclic Logical scalar or length-`d` flags for **circular** P-spline
+#'   margins (periodic B-spline basis + circular difference penalty). For
+#'   hour-of-day, map to \([0,1]\) and set that margin to `TRUE`.
+#' @param period Optional length-`d` list of `c(xl,xr)` for cyclic margins.
 #'
 #' @return An object of class `"ttpspline"`.
 #'
@@ -114,7 +121,10 @@ ttpspline <- function(y,
                       control = tt_control(),
                       monitor = FALSE,
                       knots = NULL,
-                      offset = NULL) {
+                      offset = NULL,
+                      weights = NULL,
+                      cyclic = NULL,
+                      period = NULL) {
   cl <- match.call()
   fam <- normalize_family(family)
   y <- as.numeric(y)
@@ -133,6 +143,7 @@ ttpspline <- function(y,
     stop("poisson requires non-negative y.", call. = FALSE)
   }
   offset <- normalize_offset(offset, length(y))
+  weights <- normalize_weights(weights, length(y))
 
   if (!inherits(control, "tt_control")) {
     control <- do.call(tt_control, as.list(control))
@@ -189,9 +200,11 @@ ttpspline <- function(y,
     }
   }
 
-  bs <- build_marginal_bases(X, k = k, degree = degree, knots = knots)
+  bs <- build_marginal_bases(X, k = k, degree = degree, knots = knots,
+                             cyclic = cyclic, period = period)
   basis <- bs$basis
   p <- bs$k
+  cyclic <- bs$cyclic
   if (!is.null(init) && ncol(basis[[1]]) != dim(init[[1]])[2]) {
     stop("init cores k does not match basis size from argument k/knots.",
          call. = FALSE)
@@ -209,7 +222,8 @@ ttpspline <- function(y,
     optimizer = optimizer,
     backend = backend,
     init_cores = init,
-    offset = offset
+    offset = offset,
+    weights = weights
   )
 
   npar_tt <- tt_npar(p, ranks)
@@ -220,7 +234,7 @@ ttpspline <- function(y,
   edf <- NA_real_
   edf_note <- "not computed"
   if (isTRUE(control$compute_edf) && !is.null(raw$penalties)) {
-    w_edf <- tt_edf_weights(raw, key, y)
+    w_edf <- tt_edf_weights(raw, key, y, weights = weights)
     edf <- tt_joint_edf(
       raw$cores, basis, raw$penalties, as.numeric(raw$lambda),
       weight = w_edf, max_npar = control$edf_max_npar
@@ -247,13 +261,16 @@ ttpspline <- function(y,
       family = fam,
       family_key = key,
       y = y,
+      X = X,
       d = d,
       n = length(y),
       k = p,
       degree = bs$degree,
       knots = bs$knots,
+      cyclic = cyclic,
       penalty_order = as.integer(penalty_order),
       cores = raw$cores,
+      penalties = raw$penalties,
       rank = ranks,
       rank_internal = ranks[-c(1L, length(ranks))],
       rank_max = max(ranks),
@@ -264,6 +281,7 @@ ttpspline <- function(y,
       lambda_at_boundary = lam_info$lambda_at_boundary,
       intercept = raw$intercept,
       offset = offset,
+      weights = weights,
       fitted.values = raw$mu,
       linear.predictors = raw$eta,
       residuals = residuals_resp,
@@ -274,6 +292,8 @@ ttpspline <- function(y,
       npar_tt_intrinsic = npar_tt_intrinsic,
       npar_dense = npar_full,
       compression_ratio = npar_full / max(npar_tt, 1),
+      inference = NULL,
+      ._inf = new.env(parent = emptyenv()),
       converged = isTRUE(raw$converged),
       convergence = raw$convergence %||% list(
         overall = isTRUE(raw$converged),
@@ -344,20 +364,21 @@ ttpspline <- function(y,
 #' @keywords internal
 .ttpspline_dispatch <- function(y, basis, fam, key, ranks, lambda_spec,
                                 control, penalty_order, optimizer, backend,
-                                init_cores, offset = NULL) {
+                                init_cores, offset = NULL, weights = NULL) {
   offset <- normalize_offset(offset, length(y))
+  weights <- normalize_weights(weights, length(y))
   if (identical(optimizer, "Adam")) {
     return(tt_adam_fit(
       y, basis, ranks, lambda_spec, control, penalty_order,
       init_cores = init_cores, family = if (identical(key, "gaussian")) NULL else fam,
-      offset = offset
+      offset = offset, weights = weights
     ))
   }
 
   if (identical(optimizer, "hybrid")) {
     return(tt_hybrid_fit(
       y, basis, fam, ranks, lambda_spec, control, penalty_order,
-      init_cores = init_cores, offset = offset
+      init_cores = init_cores, offset = offset, weights = weights
     ))
   }
 
@@ -366,7 +387,7 @@ ttpspline <- function(y,
       y, basis, ranks, lambda_spec, control, penalty_order,
       init_cores = init_cores,
       family = if (identical(key, "gaussian")) NULL else fam,
-      offset = offset
+      offset = offset, weights = weights
     ))
   }
 
@@ -375,7 +396,7 @@ ttpspline <- function(y,
       y, basis, ranks, lambda_spec, control, penalty_order,
       init_cores = init_cores,
       family = if (identical(key, "gaussian")) NULL else fam,
-      offset = offset
+      offset = offset, weights = weights
     ))
   }
 
@@ -385,14 +406,14 @@ ttpspline <- function(y,
       warning("Damped-Newton-ALS on Gaussian uses the same path as ALS.",
               call. = FALSE)
       out <- tt_als_fit(y, basis, ranks, lambda_spec, control, penalty_order,
-                       init_cores = init_cores, offset = offset)
+                       init_cores = init_cores, offset = offset, weights = weights)
       out$optimizer <- "Damped-Newton-ALS"
       out$backend <- "R"
       return(out)
     }
     return(tt_damped_newton_als_fit(
       y, basis, fam, ranks, lambda_spec, control, penalty_order,
-      init_cores = init_cores, offset = offset
+      init_cores = init_cores, offset = offset, weights = weights
     ))
   }
 
@@ -401,14 +422,14 @@ ttpspline <- function(y,
       warning("LBFGS-ALS on Gaussian falls back to ALS (closed form).",
               call. = FALSE)
       out <- tt_als_fit(y, basis, ranks, lambda_spec, control, penalty_order,
-                       init_cores = init_cores, offset = offset)
+                       init_cores = init_cores, offset = offset, weights = weights)
       out$optimizer <- "LBFGS-ALS"
       out$backend <- "R"
       return(out)
     }
     return(tt_lbfgs_als_fit(
       y, basis, fam, ranks, lambda_spec, control, penalty_order,
-      init_cores = init_cores, offset = offset
+      init_cores = init_cores, offset = offset, weights = weights
     ))
   }
 
@@ -416,20 +437,20 @@ ttpspline <- function(y,
   if (identical(key, "gaussian")) {
     if (identical(backend, "Rcpp")) {
       tt_als_fit_rcpp(y, basis, ranks, lambda_spec, control, penalty_order,
-                      init_cores = init_cores, offset = offset)
+                      init_cores = init_cores, offset = offset, weights = weights)
     } else {
       out <- tt_als_fit(y, basis, ranks, lambda_spec, control, penalty_order,
-                       init_cores = init_cores, offset = offset)
+                       init_cores = init_cores, offset = offset, weights = weights)
       out$backend <- "R"
       out
     }
   } else {
     if (identical(backend, "Rcpp")) {
       tt_pirls_fit_rcpp(y, basis, fam, ranks, lambda_spec, control, penalty_order,
-                        init_cores = init_cores, offset = offset)
+                        init_cores = init_cores, offset = offset, weights = weights)
     } else {
       tt_pirls_fit(y, basis, fam, ranks, lambda_spec, control, penalty_order,
-                  init_cores = init_cores, offset = offset)
+                  init_cores = init_cores, offset = offset, weights = weights)
     }
   }
 }

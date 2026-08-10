@@ -3,7 +3,8 @@
 \name{tt_fit_d_cpp}
 \alias{tt_fit_d_cpp}
 \title{Full TT-ALS fit (Gaussian, fixed anisotropic λ).
-Returns cores, mu, optional jacobian, block sizes.}
+Optional observation \code{weights} / \code{offset} (empty ⇒ ones / zeros).
+Returns cores, mu (=eta), optional jacobian, block sizes.}
 \usage{
 tt_fit_d_cpp(
   y,
@@ -12,10 +13,13 @@ tt_fit_d_cpp(
   lambda,
   penalties_list,
   sweeps,
-  return_jacobian = TRUE
+  return_jacobian = TRUE,
+  weights = NULL,
+  offset = NULL
 )
 }
 \description{
 Full TT-ALS fit (Gaussian, fixed anisotropic λ).
-Returns cores, mu, optional jacobian, block sizes.
+Optional observation \code{weights} / \code{offset} (empty ⇒ ones / zeros).
+Returns cores, mu (=eta), optional jacobian, block sizes.
 }

@@ -16,13 +16,27 @@ knitr::opts_chunk$set(
 )
 ```
 
+# Scattered data, tensor coefficients, TT compression
+
+`TTPsplines` models a **single non-additive** smooth
+
+\[
+g(\mathbb{E}[Y\mid x]) = f(x_1,\ldots,x_d)
+\]
+
+with a tensor-product P-spline whose coefficient array \(\Theta\) is stored in
+**Tensor-Train** format. Observations \(X\in\mathbb{R}^{n\times d}\) may be
+arbitrarily scattered — **no data grid** is required.
+
+Family-aware default solver (`optimizer = "auto"`): Gaussian → ALS,
+Poisson → PIRLS-ALS, binomial → L-BFGS. Rank \(r\) is **not** chosen inside
+`ttpspline()` (see `vignette("rank-selection")`); directional \(\lambda\) can
+be fixed or selected by cGCV (`vignette("cgcv")`).
+
 # Why these datasets?
 
-`TTPsplines` targets **non-additive** multidimensional smoothing on scattered
-covariates. Classic UQ response surfaces are convenient demos: known truth,
-strong interactions, and increasing dimension.
-
-Packaged samples (each `n = 800`) load with the usual R idiom:
+Classic UQ response surfaces are convenient demos: known truth, strong
+interactions, and increasing dimension. Packaged samples (each `n = 800`):
 
 ```{r}
 library(TTPsplines)
@@ -54,6 +68,11 @@ fit_i <- ttpspline(
 )
 summary(fit_i)
 tt_complexity(fit_i)
+c(
+  requested = fit_i$optimizer_requested,
+  used = fit_i$optimizer_used,
+  reason = fit_i$optimizer_reason
+)
 ```
 
 True surface vs fitted predictor:
@@ -95,22 +114,8 @@ fit_s$compression_ratio
 rmse(fitted(fit_s), sobol_g$f)
 ```
 
-Anisotropic cGCV often pushes directional \(\lambda\) apart (and sometimes onto
-search bounds — see `fit$lambda_boundary` when `lambda = "cGCV"`).
-
-```{r sobol-cgcv, warning=TRUE}
-fit_s_cgcv <- ttpspline(
-  sobol_g$y, X_s,
-  family = gaussian(),
-  rank = 2, k = 6, lambda = "cGCV",
-  control = tt_control(
-    max_sweeps = 8, backend = "R", compute_edf = FALSE,
-    warn_lambda_boundary = TRUE
-  )
-)
-fit_s_cgcv$lambda
-fit_s_cgcv$lambda_boundary
-```
+For anisotropic automatic \(\lambda\), see `vignette("cgcv")`
+(`lambda = "cGCV"`, boundary diagnostics).
 
 # Friedman #1 (\(d=5\))
 
@@ -160,12 +165,14 @@ fit <- ttpspline(dat$y, dat$X, rank = 3, k = 10, lambda = "cGCV")
 
 # See also
 
-- `vignette("introduction", package = "TTPsplines")` — short overview
 - `vignette("generalized", package = "TTPsplines")` — Poisson / Bernoulli
+- `vignette("cgcv", package = "TTPsplines")` — fixed vs conditional GCV for \(\lambda\)
 - `vignette("rank-selection", package = "TTPsplines")` — CV + 1-SE for \(r\)
+- `vignette("aic-bic", package = "TTPsplines")` — AIC / BIC from linearized EDF
 - `vignette("glam-vs-tt", package = "TTPsplines")` — full tensor vs TT
+- `vignette("scalability", package = "TTPsplines")` — storage, timings, backends
 - `vignette("glam-poisson", package = "TTPsplines")` — Currie–Durbán–Eilers Poisson
-- `vignette("rank-compression", package = "TTPsplines")` — complexity layers
+- `vignette("uncertainty", package = "TTPsplines")` — conditional SEs
 
 # References
 

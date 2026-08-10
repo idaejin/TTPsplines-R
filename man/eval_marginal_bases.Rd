@@ -4,7 +4,7 @@
 \alias{eval_marginal_bases}
 \title{Evaluate bases on newdata using training knots.}
 \usage{
-eval_marginal_bases(Xnew, knots, degree)
+eval_marginal_bases(Xnew, knots, degree, cyclic = NULL)
 }
 \description{
 Evaluate bases on newdata using training knots.

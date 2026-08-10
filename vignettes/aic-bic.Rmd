@@ -1,0 +1,218 @@
+---
+title: "AIC and BIC for TT P-splines"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{AIC and BIC for TT P-splines}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+# What this vignette is
+
+`TTPsplines` reports a **joint linearized EDF** after a fit. This note shows
+how to turn that EDF into **AIC / BIC**-style scores for fixed-\(\lambda\)
+comparisons (e.g. candidate ranks or anisotropic \(\lambda\)).
+
+There is **no** `AIC()` / `BIC()` S3 method yet: compute the criteria from
+`fit$deviance` and `fit$edf` as below. Rank selection for prediction still
+belongs to `tt_rank_select()` (CV + 1-SE); see
+`vignette("rank-selection")`.
+
+```{r}
+library(TTPsplines)
+```
+
+# Complexity layers (again)
+
+| Quantity | Meaning | Use for AIC/BIC? |
+|----------|---------|------------------|
+| `npar_tt` | packed TT core entries | **No** |
+| `npar_tt_intrinsic` | packed size minus gauge dim | **No** |
+| `edf` | joint linearized effective df | **Yes** |
+
+\[
+\boxed{r \neq \lambda \neq \mathrm{EDF}}.
+\]
+
+The EDF is
+\[
+\widehat{\mathrm{edf}}
+=\operatorname{tr}\!\big[(J^\top J+P_{\boldsymbol\lambda})^{-1}J^\top J\big],
+\]
+with stacked conditional Jacobian \(J\) of the TT map at convergence and
+block-diagonal core penalty \(P_{\boldsymbol\lambda}\). Gauge directions
+contribute little; do **not** replace \(\widehat{\mathrm{edf}}\) by
+`npar_tt`.
+
+Enable it with `tt_control(compute_edf = TRUE)` (default in many demos;
+skipped automatically when packed TT size exceeds `edf_max_npar`).
+
+# Which number from `summary()`?
+
+From a typical `summary(fit)` block, take:
+
+```text
+EDF (joint linearized): 54.64
+```
+
+Ignore `EDF / stored parameters` and `EDF / intrinsic TT dim.` — those are
+diagnostic ratios only. The intercept is **not** inside the joint EDF, so
+penalties below use \(\widehat{\mathrm{edf}}+1\).
+
+# Working formulas
+
+Helpers used in this vignette (not exported package API yet):
+
+```{r helpers}
+`%||%` <- function(a, b) if (!is.null(a)) a else b
+
+tt_ic <- function(fit, criterion = c("AIC", "BIC")) {
+  criterion <- match.arg(criterion)
+  edf <- fit$edf
+  if (!is.finite(edf)) {
+    stop("fit$edf is missing; refit with tt_control(compute_edf = TRUE).")
+  }
+  n <- as.integer(fit$n %||% length(fitted(fit)))
+  df <- edf + 1                       # + intercept
+  pen <- if (identical(criterion, "AIC")) 2 else log(n)
+  key <- fit$family_key %||% fit$family$family
+
+  if (identical(key, "gaussian")) {
+    # Gaussian: n log(RSS/n) + pen * df  (RSS stored in fit$deviance)
+    return(n * log(fit$deviance / n) + pen * df)
+  }
+  # Poisson / Bernoulli: deviance + pen * df
+  fit$deviance + pen * df
+}
+```
+
+**Gaussian** (same as the lab coordinate-AIC notes):
+\[
+\mathrm{AIC}=n\log(\mathrm{RSS}/n)+2(\widehat{\mathrm{edf}}+1),\qquad
+\mathrm{BIC}=n\log(\mathrm{RSS}/n)+\log(n)\,(\widehat{\mathrm{edf}}+1).
+\]
+Here `fit$deviance` is **RSS**.
+
+**Poisson / Bernoulli:**
+\[
+\mathrm{AIC}=D+2(\widehat{\mathrm{edf}}+1),\qquad
+\mathrm{BIC}=D+\log(n)\,(\widehat{\mathrm{edf}}+1),
+\]
+with \(D=\) GLM deviance (`fit$deviance` / `deviance(fit)`).
+
+**Honesty:** \(\widehat{\mathrm{edf}}\) is for the **linearized** TT map
+(PIRLS working weights for GLMs). This is a working IC, not an exact
+`mgcv`-style REML score.
+
+# Gaussian example
+
+```{r gauss}
+data(ishigami)
+idx <- seq_len(400)
+X <- as.matrix(ishigami[idx, c("x1", "x2", "x3")])
+y <- ishigami$y[idx]
+
+fit_g <- ttpspline(
+  y, X,
+  family = gaussian(),
+  rank = 2, k = 8, lambda = 1,
+  control = tt_control(max_sweeps = 8, backend = "R", compute_edf = TRUE)
+)
+
+c(
+  RSS = fit_g$deviance,
+  edf = fit_g$edf,
+  npar_tt = fit_g$npar_tt,
+  AIC = tt_ic(fit_g, "AIC"),
+  BIC = tt_ic(fit_g, "BIC")
+)
+```
+
+Compare two ranks on the **same** data / \(\lambda\) (in-sample IC, not CV):
+
+```{r gauss-ranks}
+fits <- lapply(1:3, function(r) {
+  ttpspline(
+    y, X, family = gaussian(), rank = r, k = 8, lambda = 1,
+    control = tt_control(max_sweeps = 6, backend = "R", compute_edf = TRUE)
+  )
+})
+data.frame(
+  rank = 1:3,
+  edf = vapply(fits, function(f) f$edf, numeric(1)),
+  RSS = vapply(fits, function(f) f$deviance, numeric(1)),
+  AIC = vapply(fits, function(f) tt_ic(f, "AIC"), numeric(1)),
+  BIC = vapply(fits, function(f) tt_ic(f, "BIC"), numeric(1))
+)
+```
+
+# Poisson example
+
+```{r poisson}
+set.seed(1)
+n <- 500
+Xp <- matrix(runif(n * 2), n, 2)
+eta <- 0.5 + sin(2 * pi * Xp[, 1]) * cos(2 * pi * Xp[, 2])
+yp <- rpois(n, exp(eta))
+
+fit_p <- ttpspline(
+  yp, Xp,
+  family = poisson(),
+  rank = 2, k = 10, lambda = c(10, 1),
+  control = tt_control(
+    pirls_maxit = 15, max_sweeps = 6,
+    backend = "R", compute_edf = TRUE
+  )
+)
+
+c(
+  deviance = deviance(fit_p),
+  edf = fit_p$edf,
+  AIC = tt_ic(fit_p, "AIC"),
+  BIC = tt_ic(fit_p, "BIC")
+)
+summary(fit_p)
+```
+
+# When to use AIC/BIC vs CV
+
+| Goal | Prefer |
+|------|--------|
+| Predictive rank \(r\) | `tt_rank_select()` (CV + 1-SE) |
+| In-sample \(\lambda\) / model comparison with an EDF penalty | AIC / BIC as above |
+| Automatic anisotropic \(\lambda\) inside ALS | `vignette("cgcv")` now; coordinate AIC/BIC / TT-cFS later (Paper 2) |
+
+AIC/BIC here are **conditional on** the chosen TT rank and fixed
+\(\boldsymbol\lambda\). They do not fold in uncertainty from rank selection
+or \(\lambda\) search.
+
+# What this is not
+
+- Not `AIC(fit)` / `BIC(fit)` methods (not implemented yet).
+- Not REML / cREML.
+- Not a substitute for hold-out or CV when the goal is prediction.
+- Not a claim that linearized TT EDF equals dense-tensor EDF.
+
+# See also
+
+- `vignette("rank-selection", package = "TTPsplines")` — CV + 1-SE for \(r\)
+- `vignette("cgcv", package = "TTPsplines")` — fixed vs cGCV for \(\lambda\)
+- `vignette("generalized", package = "TTPsplines")` — Poisson / Bernoulli
+- `tt_complexity()`, `deviance()`, `summary()`
+
+# References
+
+Hastie, T. and Tibshirani, R. (1990).
+*Generalized Additive Models*. Chapman & Hall.
+
+Wood, S. N. (2017).
+*Generalized Additive Models: An Introduction with R* (2nd ed.).
+CRC Press.
+
+Oseledets, I. V. (2011).
+Tensor-train decomposition.
+*SIAM Journal on Scientific Computing*, **33**, 2295–2317.

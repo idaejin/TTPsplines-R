@@ -4,11 +4,51 @@ difference_penalty <- function(p, order = 2) {
   crossprod(diff(diag(p), differences = order))
 }
 
+#' Circular (periodic) difference penalty for cyclic P-splines.
+#' @keywords internal
+#' @noRd
+circular_difference_penalty <- function(p, order = 2) {
+  p <- as.integer(p)
+  order <- as.integer(order)
+  if (p < 2L) stop("circular penalty needs p >= 2.", call. = FALSE)
+  D1 <- diag(-1, p)
+  D1[cbind(seq_len(p), c(seq_len(p)[-1L], 1L))] <- 1
+  D <- D1
+  if (order > 1L) {
+    for (i in seq_len(order - 1L)) D <- D1 %*% D
+  }
+  crossprod(D)
+}
+
 #' Core-wise Kronecker penalty for vec(G_k) with order (a, j, b).
 #' @keywords internal
-core_penalty <- function(rl, p, rr, penalty_order = 2) {
-  DtD <- difference_penalty(p, penalty_order)
+core_penalty <- function(rl, p, rr, penalty_order = 2, cyclic = FALSE) {
+  DtD <- if (isTRUE(cyclic)) {
+    circular_difference_penalty(p, penalty_order)
+  } else {
+    difference_penalty(p, penalty_order)
+  }
   kronecker(diag(rr), kronecker(DtD, diag(rl)))
+}
+
+#' Per-margin TT core penalties (optional cyclic flags).
+#' @keywords internal
+#' @noRd
+tt_core_penalties <- function(ranks, p, penalty_order = 2, cyclic = NULL) {
+  d <- length(ranks) - 1L
+  cyclic <- normalize_cyclic(cyclic, d)
+  lapply(seq_len(d), function(k) {
+    core_penalty(ranks[k], p, ranks[k + 1L], penalty_order, cyclic = cyclic[k])
+  })
+}
+
+#' Build core penalties using `attr(basis, "cyclic")` when present.
+#' @keywords internal
+#' @noRd
+tt_core_penalties_from_basis <- function(ranks, basis, penalty_order = 2) {
+  p <- ncol(basis[[1]])
+  cyclic <- attr(basis, "cyclic")
+  tt_core_penalties(ranks, p, penalty_order, cyclic = cyclic)
 }
 
 #' Block-diagonal joint penalty from per-core penalties.

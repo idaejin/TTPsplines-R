@@ -5,7 +5,8 @@
 #'
 #' @keywords internal
 tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
-                         penalty_order = 2, init_cores = NULL, offset = NULL) {
+                         penalty_order = 2, init_cores = NULL, offset = NULL,
+                         weights = NULL) {
   d <- length(basis)
   p <- ncol(basis[[1]])
   method <- lambda_spec$method
@@ -13,21 +14,23 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
   fam <- normalize_family(family)
   key <- family_key(fam)
   offset <- normalize_offset(offset, length(y))
-  intercept <- init_intercept(fam, y, offset = offset)
+  w_obs <- normalize_weights(weights, length(y))
+  intercept <- init_intercept(fam, y, offset = offset, weights = w_obs)
   if (is.null(init_cores)) {
     cores <- initialize_tt_cores(p, ranks, seed = control$seed, sd = control$init_sd)
     for (k in seq_len(d)) cores[[k]] <- cores[[k]] * 0.05
   } else {
     cores <- init_cores
   }
-  penalties <- lapply(seq_len(d), function(k) {
-    core_penalty(ranks[k], p, ranks[k + 1L], penalty_order)
-  })
+  penalties <- tt_core_penalties_from_basis(ranks, basis, penalty_order)
 
   eta <- tt_eta(offset, intercept, cores, basis)
   mu <- invlink_eta(fam, eta)
-  dev <- glm_deviance(fam, y, mu)
-  obj <- tt_glm_penalized_objective(y, cores, intercept, basis, penalties, lambda, fam, offset = offset)
+  dev <- glm_deviance(fam, y, mu, weights = w_obs)
+  obj <- tt_glm_penalized_objective(
+    y, cores, intercept, basis, penalties, lambda, fam,
+    offset = offset, weights = w_obs
+  )
 
   hist_rows <- list()
   n_eval <- 0L
@@ -52,7 +55,7 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
     eta_old <- eta
     obj_old <- obj
     work <- glm_working(fam, y, eta, control = control)
-    w <- work$weight
+    w <- work$weight * w_obs
     z <- work$z
 
     # --- inner weighted ALS ---
@@ -81,7 +84,8 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
     intercept_cand <- intercept
     eta_cand <- tt_eta(offset, intercept_cand, cores_cand, basis)
     obj_cand <- tt_glm_penalized_objective(
-      y, cores_cand, intercept_cand, basis, penalties, lambda, fam, offset = offset
+      y, cores_cand, intercept_cand, basis, penalties, lambda, fam,
+      offset = offset, weights = w_obs
     )
 
     accepted_step <- 1
@@ -101,7 +105,7 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
         )
         obj_try <- tt_glm_penalized_objective(
           y, blended$cores, blended$intercept, basis, penalties, lambda, fam,
-          offset = offset
+          offset = offset, weights = w_obs
         )
         if (is.finite(obj_try$value) &&
             obj_try$value <= obj_old$value + accept_tol) {
@@ -125,7 +129,7 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
         line_ok <- FALSE
         n_pirls <- it
         mu <- invlink_eta(fam, eta)
-        dev <- glm_deviance(fam, y, mu)
+        dev <- glm_deviance(fam, y, mu, weights = w_obs)
         cand_rel <- abs(obj_cand$value - obj_old$value) /
           max(1, abs(obj_old$value))
         # Late stall at a numerical stationary region of the PIRLS path:
@@ -143,7 +147,7 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
         hist_rows[[length(hist_rows) + 1L]] <- .pirls_hist_row(
           it, obj, y, eta, fam, work, control$als_sweeps_per_pirls,
           proposed_step = 1, accepted_step = 0, n_halve_it = n_halve_it,
-          line_ok = FALSE
+          line_ok = FALSE, weights = w_obs
         )
         break
       }
@@ -157,12 +161,12 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
     }
 
     mu <- invlink_eta(fam, eta)
-    dev <- glm_deviance(fam, y, mu)
+    dev <- glm_deviance(fam, y, mu, weights = w_obs)
     n_pirls <- it
     hist_rows[[length(hist_rows) + 1L]] <- .pirls_hist_row(
       it, obj, y, eta, fam, work, control$als_sweeps_per_pirls,
       proposed_step = 1, accepted_step = accepted_step, n_halve_it = n_halve_it,
-      line_ok = TRUE
+      line_ok = TRUE, weights = w_obs
     )
 
     if (isTRUE(control$trace)) {
@@ -178,7 +182,8 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
     } else {
       rel <- abs(obj_old$value - obj$value) / max(1, abs(obj_old$value))
       # also track deviance for compatibility
-      rel_dev <- abs(glm_deviance(fam, y, invlink_eta(fam, eta_old)) - dev) /
+      rel_dev <- abs(glm_deviance(fam, y, invlink_eta(fam, eta_old),
+                                  weights = w_obs) - dev) /
         max(1, abs(dev))
       rel <- min(rel, rel_dev)
     }
@@ -235,14 +240,15 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
 }
 
 .pirls_hist_row <- function(it, obj, y, eta, family, work, als_sweeps,
-                            proposed_step, accepted_step, n_halve_it, line_ok) {
+                            proposed_step, accepted_step, n_halve_it, line_ok,
+                            weights = NULL) {
   mu <- invlink_eta(family, eta)
   data.frame(
     pirls = it,
     objective = obj$value,
     nll = obj$nll,
     penalty = obj$penalty,
-    deviance = glm_deviance(family, y, mu),
+    deviance = glm_deviance(family, y, mu, weights = weights),
     max_abs_eta = max(abs(eta)),
     min_probability = min(mu),
     max_probability = max(mu),
@@ -263,20 +269,17 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
 #'
 #' @keywords internal
 tt_pirls_fit_rcpp <- function(y, basis, family, ranks, lambda_spec, control,
-                              penalty_order = 2, init_cores = NULL, offset = NULL) {
+                              penalty_order = 2, init_cores = NULL, offset = NULL,
+                              weights = NULL) {
   offset <- normalize_offset(offset, length(y))
-  if (any(offset != 0)) {
-    out <- tt_pirls_fit(y, basis, family, ranks, lambda_spec, control,
-                        penalty_order, init_cores = init_cores, offset = offset)
-    out$backend <- "R"
-    return(out)
-  }
+  w <- normalize_weights(weights, length(y))
   key <- family_key(family)
   do_halving <- identical(key, "bernoulli") &&
     isTRUE(control$pirls_step_halving %||% control$damping %||% TRUE)
   if (do_halving || !exists("tt_glm_pirls_cgcv_cpp", mode = "function")) {
     return(tt_pirls_fit(y, basis, family, ranks, lambda_spec, control,
-                        penalty_order, init_cores = init_cores, offset = offset))
+                        penalty_order, init_cores = init_cores,
+                        offset = offset, weights = w))
   }
   d <- length(basis)
   p <- ncol(basis[[1]])
@@ -286,9 +289,7 @@ tt_pirls_fit_rcpp <- function(y, basis, family, ranks, lambda_spec, control,
   } else {
     cores <- init_cores
   }
-  penalties <- lapply(seq_len(d), function(k) {
-    core_penalty(ranks[k], p, ranks[k + 1L], penalty_order)
-  })
+  penalties <- tt_core_penalties_from_basis(ranks, basis, penalty_order)
   t0 <- proc.time()[["elapsed"]]
   fit <- tt_glm_pirls_cgcv_cpp(
     y = as.numeric(y),
@@ -303,7 +304,9 @@ tt_pirls_fit_rcpp <- function(y, basis, family, ranks, lambda_spec, control,
     lambda_max = control$lambda_bounds[2],
     tol = control$tol_lambda,
     tol_dev = control$tol,
-    select_lambda = identical(lambda_spec$method, "cGCV")
+    select_lambda = identical(lambda_spec$method, "cGCV"),
+    weights = w,
+    offset = offset
   )
   out_cores <- lapply(seq_len(d), function(k) {
     array(as.numeric(fit$cores[[k]]), c(ranks[k], p, ranks[k + 1L]))

@@ -2,11 +2,11 @@
 % Please edit documentation in R/families.R
 \name{glm_deviance}
 \alias{glm_deviance}
-\title{Model deviance (Gaussian uses RSS).}
+\title{Model deviance (Gaussian uses RSS). Optional observation \code{weights}.}
 \usage{
-glm_deviance(family, y, mu)
+glm_deviance(family, y, mu, weights = NULL)
 }
 \description{
-Model deviance (Gaussian uses RSS).
+Model deviance (Gaussian uses RSS). Optional observation \code{weights}.
 }
 \keyword{internal}

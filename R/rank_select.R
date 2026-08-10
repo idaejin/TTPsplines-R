@@ -10,7 +10,7 @@
 #'
 #' @param y,X Response and covariate matrix (as in [ttpspline()]).
 #' @param ranks Integer vector of candidate **uniform** ranks (default `1:5`).
-#' @param family,k,degree,penalty_order,lambda,optimizer,backend,control,knots,offset
+#' @param family,k,degree,penalty_order,lambda,optimizer,backend,control,knots,offset,weights
 #'   Passed through to [ttpspline()] on each fold (and on final refit).
 #' @param folds Number of CV folds (default 5).
 #' @param rule `"1se"` (default, parsimonious) or `"min"` (minimum mean CV).
@@ -62,6 +62,7 @@ tt_rank_select <- function(y,
                            keep_fits = FALSE,
                            knots = NULL,
                            offset = NULL,
+                           weights = NULL,
                            rank_chain = NULL,
                            ...) {
   cl <- match.call()
@@ -101,6 +102,7 @@ tt_rank_select <- function(y,
   }
 
   offset_full <- normalize_offset(offset, n)
+  weights_full <- normalize_weights(weights, n)
   fold_id <- .tt_make_fold_id(n, folds, seed)
 
   # CV fits: skip EDF (costly / irrelevant for selection)
@@ -152,6 +154,8 @@ tt_rank_select <- function(y,
       train <- !test
       off_tr <- offset_full[train]
       off_te <- offset_full[test]
+      w_tr <- weights_full[train]
+      w_te <- weights_full[test]
       t0 <- proc.time()[["elapsed"]]
       fit <- tryCatch(
         ttpspline(
@@ -166,7 +170,8 @@ tt_rank_select <- function(y,
           backend = backend,
           control = ctrl,
           knots = knots,
-          offset = off_tr
+          offset = off_tr,
+          weights = w_tr
         ),
         error = function(e) e
       )
@@ -189,7 +194,8 @@ tt_rank_select <- function(y,
         lambda_list[[i]][[f]] <- as.numeric(fit$lambda)
         next
       }
-      loss_mat[i, f] <- .tt_cv_loss(y[test], mu, metric = metric, family = fam)
+      loss_mat[i, f] <- .tt_cv_loss(y[test], mu, metric = metric, family = fam,
+                                   weights = w_te)
       conv_mat[i, f] <- isTRUE(fit$converged)
       lambda_list[[i]][[f]] <- as.numeric(fit$lambda)
       if (isTRUE(keep_fits)) fold_fits[[i]][[f]] <- fit
@@ -235,6 +241,7 @@ tt_rank_select <- function(y,
       y = y,
       X = X,
       offset = offset_full,
+      weights = weights_full,
       call = cl,
       timings = list(
         total_s = sum(time_mat, na.rm = TRUE),
@@ -288,6 +295,12 @@ tt_rank_refit <- function(object,
     object$offset
   }
   extra$offset <- NULL
+  args$weights <- if ("weights" %in% names(extra)) {
+    extra$weights
+  } else {
+    object$weights
+  }
+  extra$weights <- NULL
   if (length(extra)) args <- utils::modifyList(args, extra)
   do.call(ttpspline, args)
 }
@@ -323,19 +336,21 @@ tt_rank_refit <- function(object,
 #' Mean validation loss for one fold (lower is better).
 #' @keywords internal
 #' @noRd
-.tt_cv_loss <- function(y, mu, metric, family) {
+.tt_cv_loss <- function(y, mu, metric, family, weights = NULL) {
   y <- as.numeric(y)
   mu <- as.numeric(mu)
   n <- length(y)
+  w <- normalize_weights(weights, n)
+  sw <- sum(w)
   if (identical(metric, "rmse")) {
-    return(sqrt(mean((y - mu)^2)))
+    return(sqrt(sum(w * (y - mu)^2) / sw))
   }
   if (identical(metric, "poisson_deviance")) {
-    return(as.numeric(glm_deviance(family, y, mu) / n))
+    return(as.numeric(glm_deviance(family, y, mu, weights = w) / sw))
   }
   if (identical(metric, "logloss")) {
     mu <- pmin(pmax(mu, 1e-12), 1 - 1e-12)
-    return(-mean(y * log(mu) + (1 - y) * log(1 - mu)))
+    return(-sum(w * (y * log(mu) + (1 - y) * log(1 - mu))) / sw)
   }
   stop("Unknown metric: ", metric, call. = FALSE)
 }

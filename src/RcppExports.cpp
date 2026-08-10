@@ -79,8 +79,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // tt_fit_d_cpp
-List tt_fit_d_cpp(const arma::vec& y, const List& basis_list, const List& init_cores, const arma::vec& lambda, const List& penalties_list, int sweeps, bool return_jacobian);
-RcppExport SEXP _TTPsplines_tt_fit_d_cpp(SEXP ySEXP, SEXP basis_listSEXP, SEXP init_coresSEXP, SEXP lambdaSEXP, SEXP penalties_listSEXP, SEXP sweepsSEXP, SEXP return_jacobianSEXP) {
+List tt_fit_d_cpp(const arma::vec& y, const List& basis_list, const List& init_cores, const arma::vec& lambda, const List& penalties_list, int sweeps, bool return_jacobian, Rcpp::Nullable<Rcpp::NumericVector> weights, Rcpp::Nullable<Rcpp::NumericVector> offset);
+RcppExport SEXP _TTPsplines_tt_fit_d_cpp(SEXP ySEXP, SEXP basis_listSEXP, SEXP init_coresSEXP, SEXP lambdaSEXP, SEXP penalties_listSEXP, SEXP sweepsSEXP, SEXP return_jacobianSEXP, SEXP weightsSEXP, SEXP offsetSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -91,7 +91,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const List& >::type penalties_list(penalties_listSEXP);
     Rcpp::traits::input_parameter< int >::type sweeps(sweepsSEXP);
     Rcpp::traits::input_parameter< bool >::type return_jacobian(return_jacobianSEXP);
-    rcpp_result_gen = Rcpp::wrap(tt_fit_d_cpp(y, basis_list, init_cores, lambda, penalties_list, sweeps, return_jacobian));
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type weights(weightsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type offset(offsetSEXP);
+    rcpp_result_gen = Rcpp::wrap(tt_fit_d_cpp(y, basis_list, init_cores, lambda, penalties_list, sweeps, return_jacobian, weights, offset));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -178,8 +180,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // tt_cgcv_fit_cpp
-List tt_cgcv_fit_cpp(const arma::vec& y, const List& basis_list, const List& init_cores, const List& penalties_list, arma::vec lambda_init, int sweeps, double lambda_min, double lambda_max, double tol, double tol_lambda, bool return_jacobian);
-RcppExport SEXP _TTPsplines_tt_cgcv_fit_cpp(SEXP ySEXP, SEXP basis_listSEXP, SEXP init_coresSEXP, SEXP penalties_listSEXP, SEXP lambda_initSEXP, SEXP sweepsSEXP, SEXP lambda_minSEXP, SEXP lambda_maxSEXP, SEXP tolSEXP, SEXP tol_lambdaSEXP, SEXP return_jacobianSEXP) {
+List tt_cgcv_fit_cpp(const arma::vec& y, const List& basis_list, const List& init_cores, const List& penalties_list, arma::vec lambda_init, int sweeps, double lambda_min, double lambda_max, double tol, double tol_lambda, bool return_jacobian, Rcpp::Nullable<Rcpp::NumericVector> weights, Rcpp::Nullable<Rcpp::NumericVector> offset);
+RcppExport SEXP _TTPsplines_tt_cgcv_fit_cpp(SEXP ySEXP, SEXP basis_listSEXP, SEXP init_coresSEXP, SEXP penalties_listSEXP, SEXP lambda_initSEXP, SEXP sweepsSEXP, SEXP lambda_minSEXP, SEXP lambda_maxSEXP, SEXP tolSEXP, SEXP tol_lambdaSEXP, SEXP return_jacobianSEXP, SEXP weightsSEXP, SEXP offsetSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -194,13 +196,15 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
     Rcpp::traits::input_parameter< double >::type tol_lambda(tol_lambdaSEXP);
     Rcpp::traits::input_parameter< bool >::type return_jacobian(return_jacobianSEXP);
-    rcpp_result_gen = Rcpp::wrap(tt_cgcv_fit_cpp(y, basis_list, init_cores, penalties_list, lambda_init, sweeps, lambda_min, lambda_max, tol, tol_lambda, return_jacobian));
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type weights(weightsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type offset(offsetSEXP);
+    rcpp_result_gen = Rcpp::wrap(tt_cgcv_fit_cpp(y, basis_list, init_cores, penalties_list, lambda_init, sweeps, lambda_min, lambda_max, tol, tol_lambda, return_jacobian, weights, offset));
     return rcpp_result_gen;
 END_RCPP
 }
 // tt_glm_pirls_cgcv_cpp
-List tt_glm_pirls_cgcv_cpp(const arma::vec& y, const List& basis_list, const List& init_cores, const List& penalties_list, std::string family, arma::vec lambda_init, int pirls_iter, int als_sweeps, double lambda_min, double lambda_max, double tol, double tol_dev, bool select_lambda);
-RcppExport SEXP _TTPsplines_tt_glm_pirls_cgcv_cpp(SEXP ySEXP, SEXP basis_listSEXP, SEXP init_coresSEXP, SEXP penalties_listSEXP, SEXP familySEXP, SEXP lambda_initSEXP, SEXP pirls_iterSEXP, SEXP als_sweepsSEXP, SEXP lambda_minSEXP, SEXP lambda_maxSEXP, SEXP tolSEXP, SEXP tol_devSEXP, SEXP select_lambdaSEXP) {
+List tt_glm_pirls_cgcv_cpp(const arma::vec& y, const List& basis_list, const List& init_cores, const List& penalties_list, std::string family, arma::vec lambda_init, int pirls_iter, int als_sweeps, double lambda_min, double lambda_max, double tol, double tol_dev, bool select_lambda, Rcpp::Nullable<Rcpp::NumericVector> weights, Rcpp::Nullable<Rcpp::NumericVector> offset);
+RcppExport SEXP _TTPsplines_tt_glm_pirls_cgcv_cpp(SEXP ySEXP, SEXP basis_listSEXP, SEXP init_coresSEXP, SEXP penalties_listSEXP, SEXP familySEXP, SEXP lambda_initSEXP, SEXP pirls_iterSEXP, SEXP als_sweepsSEXP, SEXP lambda_minSEXP, SEXP lambda_maxSEXP, SEXP tolSEXP, SEXP tol_devSEXP, SEXP select_lambdaSEXP, SEXP weightsSEXP, SEXP offsetSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -217,7 +221,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
     Rcpp::traits::input_parameter< double >::type tol_dev(tol_devSEXP);
     Rcpp::traits::input_parameter< bool >::type select_lambda(select_lambdaSEXP);
-    rcpp_result_gen = Rcpp::wrap(tt_glm_pirls_cgcv_cpp(y, basis_list, init_cores, penalties_list, family, lambda_init, pirls_iter, als_sweeps, lambda_min, lambda_max, tol, tol_dev, select_lambda));
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type weights(weightsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type offset(offsetSEXP);
+    rcpp_result_gen = Rcpp::wrap(tt_glm_pirls_cgcv_cpp(y, basis_list, init_cores, penalties_list, family, lambda_init, pirls_iter, als_sweeps, lambda_min, lambda_max, tol, tol_dev, select_lambda, weights, offset));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -228,14 +234,14 @@ static const R_CallMethodDef CallEntries[] = {
     {"_TTPsplines_contract_right_step_cpp", (DL_FUNC) &_TTPsplines_contract_right_step_cpp, 3},
     {"_TTPsplines_gaussian_core_update_cpp", (DL_FUNC) &_TTPsplines_gaussian_core_update_cpp, 6},
     {"_TTPsplines_tt_contraction_d_cpp", (DL_FUNC) &_TTPsplines_tt_contraction_d_cpp, 2},
-    {"_TTPsplines_tt_fit_d_cpp", (DL_FUNC) &_TTPsplines_tt_fit_d_cpp, 7},
+    {"_TTPsplines_tt_fit_d_cpp", (DL_FUNC) &_TTPsplines_tt_fit_d_cpp, 9},
     {"_TTPsplines_effective_df_cpp", (DL_FUNC) &_TTPsplines_effective_df_cpp, 2},
     {"_TTPsplines_weighted_core_system_cpp", (DL_FUNC) &_TTPsplines_weighted_core_system_cpp, 5},
     {"_TTPsplines_conditional_gcv_cpp", (DL_FUNC) &_TTPsplines_conditional_gcv_cpp, 6},
     {"_TTPsplines_optimize_lambda_gcv_cpp", (DL_FUNC) &_TTPsplines_optimize_lambda_gcv_cpp, 8},
     {"_TTPsplines_weighted_core_update_cgcv_cpp", (DL_FUNC) &_TTPsplines_weighted_core_update_cgcv_cpp, 11},
-    {"_TTPsplines_tt_cgcv_fit_cpp", (DL_FUNC) &_TTPsplines_tt_cgcv_fit_cpp, 11},
-    {"_TTPsplines_tt_glm_pirls_cgcv_cpp", (DL_FUNC) &_TTPsplines_tt_glm_pirls_cgcv_cpp, 13},
+    {"_TTPsplines_tt_cgcv_fit_cpp", (DL_FUNC) &_TTPsplines_tt_cgcv_fit_cpp, 13},
+    {"_TTPsplines_tt_glm_pirls_cgcv_cpp", (DL_FUNC) &_TTPsplines_tt_glm_pirls_cgcv_cpp, 15},
     {NULL, NULL, 0}
 };
 

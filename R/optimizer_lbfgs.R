@@ -31,17 +31,20 @@
 }
 
 .tt_gaussian_objective <- function(theta, y, intercept, basis, template,
-                                   penalties, lambda, offset = NULL) {
+                                   penalties, lambda, offset = NULL,
+                                   weights = NULL) {
   offset <- normalize_offset(offset, length(y))
+  w <- normalize_weights(weights, length(y))
   cores <- .tt_unpack_cores(theta, template)
   f <- tt_contraction(cores, basis)
   resid <- y - offset - intercept - f
-  sse <- 0.5 * sum(resid^2)
+  sse <- 0.5 * sum(w * resid^2)
   pen <- .tt_penalty_value_grad(cores, penalties, lambda)
   list(
     value = sse + pen$value,
     grad = .tt_pack_cores(
-      mapply(function(gs, gp) gs + gp, .tt_sse_grad_cores(resid, cores, basis),
+      mapply(function(gs, gp) gs + gp,
+             .tt_sse_grad_cores(w * resid, cores, basis),
              pen$grads, SIMPLIFY = FALSE)
     ),
     cores = cores,
@@ -51,8 +54,10 @@
 }
 
 .tt_glm_objective <- function(theta, y, intercept, basis, template,
-                              penalties, lambda, fam, offset = NULL) {
+                              penalties, lambda, fam, offset = NULL,
+                              weights = NULL) {
   offset <- normalize_offset(offset, length(y))
+  w <- normalize_weights(weights, length(y))
   cores <- .tt_unpack_cores(theta, template)
   eta <- offset + intercept + tt_contraction(cores, basis)
   mu <- invlink_eta(fam, eta)
@@ -62,19 +67,17 @@
     key,
     poisson = {
       mu <- pmax(mu, 1e-12)
-      sum(mu - y * log(mu))
+      sum(w * (mu - y * log(mu)))
     },
     bernoulli = {
       mu <- pmin(pmax(mu, 1e-12), 1 - 1e-12)
-      -sum(y * log(mu) + (1 - y) * log(1 - mu))
+      -sum(w * (y * log(mu) + (1 - y) * log(1 - mu)))
     },
     stop("LBFGS GLM only poisson/binomial in v0.", call. = FALSE)
   )
   pen <- .tt_penalty_value_grad(cores, penalties, lambda)
-  score_resid <- y - mu # grad_eta NLL = -(y-mu); SSE-style helper uses -X'resid
-  # .tt_sse_grad_cores(resid) returns -X'resid; we need -X'(y-mu) = X'(mu-y)
-  # so pass resid = y - mu to get -X'(y-mu) = desired NLL grad.
-  grads_nll <- .tt_sse_grad_cores(y - mu, cores, basis)
+  # .tt_sse_grad_cores(resid) returns -X'resid; pass w*(y-mu) for weighted NLL
+  grads_nll <- .tt_sse_grad_cores(w * (y - mu), cores, basis)
   list(
     value = nll + pen$value,
     grad = .tt_pack_cores(
@@ -89,8 +92,9 @@
 .tt_lbfgs_optimize_cores <- function(y, basis, ranks, lambda, control,
                                      penalty_order, init_cores,
                                      family = NULL, intercept0 = NULL,
-                                     offset = NULL) {
+                                     offset = NULL, weights = NULL) {
   offset <- normalize_offset(offset, length(y))
+  weights <- normalize_weights(weights, length(y))
   d <- length(basis)
   p <- ncol(basis[[1]])
   if (is.null(init_cores)) {
@@ -98,33 +102,39 @@
   } else {
     cores <- init_cores
   }
-  penalties <- lapply(seq_len(d), function(k) {
-    core_penalty(ranks[k], p, ranks[k + 1L], penalty_order)
-  })
+  penalties <- tt_core_penalties_from_basis(ranks, basis, penalty_order)
   template <- cores
   theta0 <- .tt_pack_cores(cores)
 
   is_gauss <- is.null(family) || identical(family_key(family), "gaussian")
   if (is_gauss) {
-    intercept <- if (is.null(intercept0)) mean(y - offset) else intercept0
+    intercept <- if (is.null(intercept0)) {
+      sum(weights * (y - offset)) / sum(weights)
+    } else {
+      intercept0
+    }
     fn <- function(th) {
       .tt_gaussian_objective(th, y, intercept, basis, template, penalties, lambda,
-                             offset = offset)$value
+                             offset = offset, weights = weights)$value
     }
     gr <- function(th) {
       .tt_gaussian_objective(th, y, intercept, basis, template, penalties, lambda,
-                             offset = offset)$grad
+                             offset = offset, weights = weights)$grad
     }
   } else {
     fam <- normalize_family(family)
-    intercept <- if (is.null(intercept0)) init_intercept(fam, y, offset = offset) else intercept0
+    intercept <- if (is.null(intercept0)) {
+      init_intercept(fam, y, offset = offset, weights = weights)
+    } else {
+      intercept0
+    }
     fn <- function(th) {
       .tt_glm_objective(th, y, intercept, basis, template, penalties, lambda, fam,
-                        offset = offset)$value
+                        offset = offset, weights = weights)$value
     }
     gr <- function(th) {
       .tt_glm_objective(th, y, intercept, basis, template, penalties, lambda, fam,
-                        offset = offset)$grad
+                        offset = offset, weights = weights)$grad
     }
   }
 
@@ -183,10 +193,12 @@ tt_cgcv_update_lambdas <- function(y, cores, intercept, basis, penalties, lambda
 #' @keywords internal
 tt_lbfgs_fit <- function(y, basis, ranks, lambda_spec, control,
                          penalty_order = 2, init_cores = NULL,
-                         family = NULL, intercept0 = NULL, offset = NULL) {
+                         family = NULL, intercept0 = NULL, offset = NULL,
+                         weights = NULL) {
   method <- lambda_spec$method
   lambda <- lambda_spec$values %||% lambda_spec$lambda0
   offset <- normalize_offset(offset, length(y))
+  weights <- normalize_weights(weights, length(y))
   t0 <- proc.time()[["elapsed"]]
   n_eval <- 0L
   n_outer <- 0L
@@ -198,7 +210,8 @@ tt_lbfgs_fit <- function(y, basis, ranks, lambda_spec, control,
   run_once <- function(lam, cores0, intercept0 = NULL) {
     .tt_lbfgs_optimize_cores(
       y, basis, ranks, lam, control, penalty_order, cores0,
-      family = family, intercept0 = intercept0, offset = offset
+      family = family, intercept0 = intercept0, offset = offset,
+      weights = weights
     )
   }
 
@@ -218,9 +231,9 @@ tt_lbfgs_fit <- function(y, basis, ranks, lambda_spec, control,
     intercept <- if (!is.null(intercept0)) {
       intercept0
     } else if (is_gauss) {
-      mean(y - offset)
+      sum(weights * (y - offset)) / sum(weights)
     } else {
-      init_intercept(normalize_family(family), y, offset = offset)
+      init_intercept(normalize_family(family), y, offset = offset, weights = weights)
     }
     penalties <- NULL
     prev_lam <- lambda
@@ -236,7 +249,8 @@ tt_lbfgs_fit <- function(y, basis, ranks, lambda_spec, control,
 
       if (is_gauss) {
         upd <- tt_cgcv_update_lambdas(
-          y, cores, intercept, basis, penalties, lambda, control, offset = offset
+          y, cores, intercept, basis, penalties, lambda, control,
+          weight = weights, offset = offset
         )
       } else {
         fam <- normalize_family(family)
@@ -244,7 +258,7 @@ tt_lbfgs_fit <- function(y, basis, ranks, lambda_spec, control,
         work <- glm_working(fam, y, eta_cur)
         upd <- tt_cgcv_update_lambdas(
           y, cores, intercept, basis, penalties, lambda, control,
-          weight = work$weight, z = work$z, offset = offset
+          weight = work$weight * weights, z = work$z, offset = offset
         )
       }
       cores <- upd$cores
@@ -269,12 +283,12 @@ tt_lbfgs_fit <- function(y, basis, ranks, lambda_spec, control,
   if (is_gauss) {
     eta <- offset + intercept + tt_contraction(cores, basis)
     mu <- eta
-    deviance <- sum((y - eta)^2)
+    deviance <- sum(weights * (y - eta)^2)
   } else {
     fam <- normalize_family(family)
     eta <- offset + intercept + tt_contraction(cores, basis)
     mu <- invlink_eta(fam, eta)
-    deviance <- glm_deviance(fam, y, mu)
+    deviance <- glm_deviance(fam, y, mu, weights = weights)
   }
 
   list(
