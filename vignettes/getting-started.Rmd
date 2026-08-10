@@ -57,6 +57,14 @@ samples with different `n` / noise, use `simulate_ishigami()`,
 
 # Ishigami (\(d=3\))
 
+The Ishigami surface admits an approximately low-rank functional form
+(structural TT rank \(\lesssim 2\)), so `rank = 2` is a natural demo.
+ALS at that minimal rank can still be **initialization-sensitive**: a bad
+start may look like “\(r=2\) is inadequate” even when capacity is fine.
+For scientific rank choice prefer `tt_rank_select(..., n_starts > 1)`
+(`vignette("rank-selection")`); warm-start via `tt_truncate_rank()` is
+documented there and in the Ishigami init audit under `inst/benchmarks/`.
+
 ```{r ishigami-fit}
 data(ishigami)
 X_i <- as.matrix(ishigami[, c("x1", "x2", "x3")])
@@ -64,7 +72,8 @@ fit_i <- ttps(
   ishigami$y, X_i,
   family = gaussian(),
   rank = 2, k = 8, lambda = 1,
-  control = tt_control(max_sweeps = 10, backend = "R", compute_edf = TRUE)
+  control = tt_control(max_sweeps = 10, backend = "R", compute_edf = TRUE,
+                       seed = 1L)
 )
 summary(fit_i)
 tt_complexity(fit_i)

@@ -13,25 +13,67 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 
 # What this vignette is
 
-Tensor-product P-splines store about \(k^d\) coefficients. A Tensor-Train
-(TT) factorization of the **coefficient** array stores on the order of
-\(O(d k r^2)\) parameters for uniform interior ranks — a **scaling**
-statement, not an exact identity.
-
-This note is about **storage and wall time**, not predictive rank choice
-(`vignette("rank-selection")`) or uncertainty
+From exponential coefficient growth to linear-in-dimension TT storage.
+This note separates **representational scaling**, **statistical complexity**,
+and **computational cost**. It is about storage and wall time — not predictive
+rank choice (`vignette("rank-selection")`) or uncertainty
 (`vignette("uncertainty")`).
 
 ```{r}
 library(TTPsplines)
 ```
 
-# Storage: dense vs TT
+# Four complexities (do not collapse them)
 
-`tt_complexity()` reports layers without needing a fit:
+\[
+\boxed{N_{\mathrm{full}}=\prod_j k_j}
+\quad\text{(full coefficient array)}
+\]
+
+\[
+\boxed{N_{\mathrm{TT}}=\sum_j r_{j-1}\,k_j\,r_j}
+\quad\text{(TT storage; }r_0=r_d=1\text{)}
+\]
+
+\[
+\boxed{\dim(\mathcal{M}_r)=N_{\mathrm{TT}}-\sum_{j=1}^{d-1}r_j^2}
+\quad\text{(intrinsic TT manifold dimension)}
+\]
+
+\[
+\boxed{\mathrm{EDF}(r,\boldsymbol\lambda)}
+\quad\text{(effective statistical complexity after penalization)}
+\]
+
+Compression is not regularization, rank is not smoothness, and parameter
+storage is not EDF:
+
+\[
+\boxed{r \neq \lambda \neq \mathrm{EDF}}.
+\]
+
+`tt_complexity()` reports these layers without needing a fit.
+
+# Exact TT storage, then big-\(O\)
+
+For uniform interior rank \(r\), equal basis size \(k_j=k\), and boundary
+ranks \(r_0=r_d=1\),
+
+\[
+N_{\mathrm{TT}}=2kr+(d-2)kr^2,
+\]
+
+hence
+
+\[
+N_{\mathrm{TT}}=O(d\,k\,r^2).
+\]
+
+Examples at \(k=10\), \(r=3\): \(d=3\) gives \(60+90=150\); \(d=5\) gives
+\(60+270=330\); \(d=9\) gives \(60+630=690\); \(d=10\) gives \(60+720=780\).
 
 ```{r storage}
-tab <- do.call(rbind, lapply(c(3, 5, 7, 9), function(d) {
+tab <- do.call(rbind, lapply(c(3, 5, 7, 9, 10), function(d) {
   cx <- tt_complexity(d = d, p = 10, rank = 3)
   data.frame(
     d = d,
@@ -44,21 +86,22 @@ print(tab, row.names = FALSE)
 ```
 
 At fixed \(k=10\) and \(r=3\), the dense count grows as \(10^d\); TT stored
-size grows roughly linearly in \(d\). That is why GLAM / full-tensor
-baselines become infeasible long before TT fits do.
+size grows linearly in \(d\). At \(d=10\), \(N_{\mathrm{full}}=10^{10}\) while
+\(N_{\mathrm{TT}}=780\) (compression \(\approx 1.28\times 10^{7}\)).
 
-\[
-\boxed{r \neq \lambda \neq \mathrm{EDF}}.
-\]
-
-Rank \(r\) controls **structural** capacity (and storage). It is not the
-same as effective df after penalization.
+The coefficient dimension of conventional tensor-product representations
+still grows as \(k^d\). Efficient array algorithms such as GLAM can delay the
+computational consequences of this growth, but do not remove the exponential
+growth of the coefficient array itself. That is why full-tensor
+representations become infeasible long before TT fits do — and why a fair
+comparison must say when GLAM was skipped rather than implying TT “beat” a
+method that never ran.
 
 # When GLAM stops
 
 `compare_glam_tt_gaussian()` skips GLAM when \(k^d\) exceeds
 `max_glam_npar` (default 5000). On higher-\(d\) grids, report that skip
-honestly — do not imply TT “beat” a method that never ran.
+honestly.
 
 ```{r glam-skip}
 # Tiny demo: raise the threshold so GLAM is skipped early
@@ -85,6 +128,11 @@ scale7 <- compare_glam_tt_scale(
 summarize_glam_tt_compare(scale7)
 ```
 
+For a paper-facing computational frontier, vary \(d=2,\ldots,10\) and report
+full coefficient count, TT storage, implied dense memory, GLAM status, and
+TT runtime. The claim is not that TT is a few times faster; it is that
+**TT changes which multidimensional smooths are computationally representable**.
+
 # Honest timings
 
 Selecting \(r\) by \(K\)-fold CV costs many fits. Comparison helpers report
@@ -98,6 +146,13 @@ Selecting \(r\) by \(K\)-fold CV costs many fits. Comparison helpers report
 | `oracle_probe_time` | Simulation-only (not in practical totals) |
 
 Never quote only the final `fit_time` when the paper workflow includes CV.
+If the real procedure selects rank by CV,
+
+\[
+T_{\mathrm{procedure}}=T_{\mathrm{selection}}+T_{\mathrm{refit}}.
+\]
+
+A paper table should separate representation / tuning / final fit / total.
 
 ```{r timing-cols}
 cols <- c("method", "rank", "npar", "fit_time", "rank_selection_time",
@@ -107,50 +162,64 @@ print(cmp[, intersect(cols, names(cmp))], row.names = FALSE)
 
 # Backend: R vs Rcpp
 
-Hot paths (ALS / PIRLS / cGCV updates) have an Rcpp backend. For production
-fits prefer `backend = "auto"` (uses Rcpp when available). Vignette chunks
-often force `backend = "R"` for portability.
+Hot paths (ALS / PIRLS / cGCV updates) have an Rcpp backend. Prefer
+`backend = "auto"` (uses Rcpp when available). Vignette chunks often force
+`backend = "R"` for portability.
+
+Micro-timings on tiny problems are **API demos only** — wall times of a few
+milliseconds are dominated by system noise and must not be cited as speedup
+evidence. Serious benchmarks should take at least tenths of a second per fit,
+repeat 5–10 runs, and report medians over a grid such as
+\(d\in\{3,5,7,9\}\), \(n\in\{500,2000,10000\}\), \(k\in\{8,10,15\}\).
+
+Numerical parity (not speed) is the package validation target: same data,
+bases, \(\lambda\), **initial TT cores**, convergence settings, and sweep
+budget. Compare \(\eta\), \(\mu\), and deviance — not cores (TT gauge).
 
 ```{r backends}
 data(ishigami)
 idx <- seq_len(300)
 X <- as.matrix(ishigami[idx, c("x1", "x2", "x3")])
 y <- ishigami$y[idx]
+init <- tt_initialize(X, rank = 2, k = 8, seed = 123)
 
-t_r <- system.time(
-  fit_r <- ttps(
-    y, X, rank = 2, k = 8, lambda = 1,
-    control = tt_control(max_sweeps = 8, backend = "R", compute_edf = FALSE)
-  )
-)[["elapsed"]]
+ctrl_r <- tt_control(max_sweeps = 8, backend = "R", compute_edf = FALSE,
+                     seed = 123)
+fit_r <- ttps(y, X, rank = 2, k = 8, lambda = 1, init = init,
+              control = ctrl_r)
 
-t_cpp <- tryCatch(
-  system.time(
-    fit_cpp <- ttps(
-      y, X, rank = 2, k = 8, lambda = 1,
-      control = tt_control(max_sweeps = 8, backend = "Rcpp", compute_edf = FALSE)
-    )
-  )[["elapsed"]],
-  error = function(e) NA_real_
+fit_cpp <- tryCatch(
+  ttps(
+    y, X, rank = 2, k = 8, lambda = 1, init = init,
+    control = tt_control(max_sweeps = 8, backend = "Rcpp",
+                         compute_edf = FALSE, seed = 123)
+  ),
+  error = function(e) NULL
 )
 
+eta_r <- as.numeric(predict(fit_r, type = "link"))
+eta_c <- if (is.null(fit_cpp)) NA_real_ else as.numeric(predict(fit_cpp, type = "link"))
 data.frame(
   backend = c("R", "Rcpp"),
-  seconds = c(t_r, t_cpp),
-  deviance = c(fit_r$deviance, if (is.finite(t_cpp)) fit_cpp$deviance else NA)
+  deviance = c(fit_r$deviance, if (is.null(fit_cpp)) NA else fit_cpp$deviance),
+  max_abs_eta_diff = c(0, if (is.null(fit_cpp)) NA else max(abs(eta_r - eta_c)))
 )
 ```
 
-Numbers are machine-dependent; the point is the API and that Rcpp is the
-fast path when compiled.
+Numbers are machine-dependent; this chunk is an API demonstration of shared
+initialization, not a runtime study.
 
 # Practical checklist
 
-1. Report **compression** (`npar_dense` / `npar_tt`) and **EDF** separately.
-2. If GLAM is skipped, say so (`status` / `reason`).
-3. Split **selection time** from **final fit time**.
-4. Use `backend = "auto"` or `"Rcpp"` for serious timings; keep vignette
-   demos small.
+1. Report **\(N_{\mathrm{full}}\)**, **\(N_{\mathrm{TT}}\)**, **\(\dim(\mathcal{M}_r)\)**,
+   and **EDF** separately.
+2. Quote the exact TT identity before the \(O(dkr^2)\) statement.
+3. If GLAM is skipped, say so (`status` / `reason`) — array algorithms delay
+   but do not remove \(k^d\) coefficient growth.
+4. Split **selection time** from **final fit time**.
+5. Use `backend = "auto"` / `"Rcpp"` for serious timings; keep vignette demos
+   small; validate backends by \(\eta\)/\(\mu\)/deviance parity under shared
+   `init`.
 
 # See also
 
@@ -158,6 +227,7 @@ fast path when compiled.
 - `vignette("rank-selection", package = "TTPsplines")` — CV + 1-SE for \(r\)
 - `vignette("getting-started", package = "TTPsplines")`
 - `tt_complexity()`, `compare_glam_tt_gaussian()`, `compare_glam_tt_scale()`
+- Backend parity tests: `tests/testthat/test-backend-parity.R`
 
 # References
 

@@ -93,7 +93,7 @@ test_that("Rcpp backend accepts weights (Gaussian + Poisson 0/1)", {
                          seed = 2L)
   )
   expect_identical(g_c$backend, "Rcpp")
-  expect_equal(g_c$deviance, g_r$deviance, tolerance = 1e-3)
+  expect_equal(g_c$deviance, g_r$deviance, tolerance = 1e-8)
 
   y <- rpois(n, exp(f - mean(f) + log(1.2)))
   idx <- which(w > 0)

@@ -5,7 +5,9 @@
 #' \describe{
 #'   \item{Full tensor coefficients}{\eqn{N_{\mathrm{full}}=\prod_k p_k}.}
 #'   \item{TT stored parameters}{\eqn{N_{\mathrm{TT}}=\sum_k r_{k-1}p_k r_k}
-#'     (entries stored in the cores; \eqn{r_0=r_d=1}).}
+#'     (entries stored in the cores; \eqn{r_0=r_d=1}). For uniform interior
+#'     rank \(r\) and \(p_j=k\), this is exactly
+#'     \(N_{\mathrm{TT}}=2kr+(d-2)kr^2=O(dkr^2)\).}
 #'   \item{TT intrinsic dimension}{\eqn{\dim(\mathcal{M}_r)=N_{\mathrm{TT}}-\sum_{k=1}^{d-1}r_k^2}
 #'     after removing TT gauge redundancy (regular case).}
 #'   \item{Compression ratio}{\eqn{CR=N_{\mathrm{full}}/N_{\mathrm{TT}}}.}

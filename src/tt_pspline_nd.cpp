@@ -98,8 +98,9 @@ arma::vec gaussian_core_update_cpp(const arma::vec& yc,
                                    double lambda) {
   arma::mat X = tt_design_core_d_cpp(Left, Right, Bk);
   arma::mat xtx = X.t() * X;
-  const double ridge = ridge_scale_arma(xtx);
+  // Match R solve_spd_ridge: ridge on (S + λP) at 1e-6 (not S at 1e-7).
   arma::mat system = xtx + lambda * penalty;
+  const double ridge = ridge_scale_arma(system, 1e-6);
   system.diag() += ridge;
   arma::vec rhs = X.t() * yc;
   return arma::solve(system, rhs, arma::solve_opts::likely_sympd);
@@ -246,8 +247,9 @@ List tt_fit_d_cpp(const arma::vec& y,
       Xw.each_col() %= sw;
       arma::vec yw = sw % yc;
       arma::mat xtx = Xw.t() * Xw;
-      const double ridge = ridge_scale_arma(xtx);
+      // Match R update_lambda_fixed / solve_spd_ridge ridge policy.
       arma::mat system = xtx + lambda(k) * penalties[k];
+      const double ridge = ridge_scale_arma(system, 1e-6);
       system.diag() += ridge;
       arma::vec coef = arma::solve(system, Xw.t() * yw,
                                    arma::solve_opts::likely_sympd);
