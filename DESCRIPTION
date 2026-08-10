@@ -53,6 +53,7 @@ Collate:
     'families.R'
     'tt_geometry.R'
     'lambda.R'
+    'cgcv_outer.R'
     'edf.R'
     'als.R'
     'pirls.R'

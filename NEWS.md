@@ -33,3 +33,15 @@
   interval** (same heuristic as cyclic margins), so `predict()` on
   `seq(0,1)` no longer collapses to the intercept outside `range(X)`.
 * Soft warning when `newdata` falls outside a non-cyclic knot span.
+
+### cGCV dynamics (experimental)
+
+* `tt_control(cgcv_update=)`: **`"outer_simultaneous"` (default)** —
+  fit all cores at fixed \(\lambda\) → freeze → Jacobi proposals →
+  damped / trust-region update — or `"sequential"` (legacy Gauss–Seidel;
+  can oversmooth-cascade on Chicago Poisson).
+* Defaults after Chicago validation: `cgcv_damping = 0.25`,
+  `cgcv_max_log10_step = 1`. Also `"scale_anisotropy"` parameterization
+  and `tt_cgcv_frozen_curves()`.
+* Fit objects store `fit$cgcv` with proposals / traces. Global
+  \(J_{\boldsymbol\lambda}\) unchanged; own-margin not restored.

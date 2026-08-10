@@ -58,6 +58,24 @@
 #'   Skipped automatically when packed TT size exceeds `edf_max_npar`.
 #' @param edf_max_npar Maximum packed TT parameters for joint EDF (memory guard).
 #' @param warn_lambda_boundary Soft warning when cGCV λ hits search bounds.
+#' @param cgcv_update cGCV dynamics: `"outer_simultaneous"` (default; fit all
+#'   cores at fixed λ, freeze, Jacobi proposals, damped/trust update) or
+#'   `"sequential"` (legacy Gauss–Seidel; can cascade to λ_max on Chicago
+#'   Poisson under the global penalty).
+#' @param cgcv_damping Log-scale mixing weight \(\rho\in(0,1]\) toward the
+#'   raw proposal (default `0.25`).
+#' @param cgcv_max_log10_step Trust region: max \(|\Delta\log_{10}\lambda|\)
+#'   per update (default `1`). Use `Inf` to disable.
+#' @param cgcv_parameterization `"free"` (default) or `"scale_anisotropy"`
+#'   (\(\lambda_m=\lambda_0\omega_m\), \(\prod\omega_m=1\)).
+#' @param cgcv_trace Store per-update cGCV diagnostics on the fit (`TRUE`).
+#' @param cgcv_margin_order Optional permutation of `1:d` for sequential
+#'   updates (order-sensitivity diagnostics).
+#' @param cgcv_fit_sweeps ALS sweeps in each outer fit step (`NULL` →
+#'   `max_sweeps`).
+#' @param cgcv_lambda0_method For scale–anisotropy: `"fixed_start"` or
+#'   `"log_grid"` overall-scale search.
+#' @param cgcv_lambda0_grid Optional numeric grid for `"log_grid"`.
 #' @return A list of class `"tt_control"`.
 #' @export
 tt_control <- function(max_sweeps = 50,
@@ -107,8 +125,20 @@ tt_control <- function(max_sweeps = 50,
                        block_lbfgs_sweeps = 40L,
                        compute_edf = TRUE,
                        edf_max_npar = 2500L,
-                       warn_lambda_boundary = TRUE) {
+                       warn_lambda_boundary = TRUE,
+                       cgcv_update = c("outer_simultaneous", "sequential"),
+                       cgcv_damping = 0.25,
+                       cgcv_max_log10_step = 1,
+                       cgcv_parameterization = c("free", "scale_anisotropy"),
+                       cgcv_trace = TRUE,
+                       cgcv_margin_order = NULL,
+                       cgcv_fit_sweeps = NULL,
+                       cgcv_lambda0_method = c("fixed_start", "log_grid"),
+                       cgcv_lambda0_grid = NULL) {
   backend <- match.arg(backend)
+  cgcv_update <- match.arg(cgcv_update)
+  cgcv_parameterization <- match.arg(cgcv_parameterization)
+  cgcv_lambda0_method <- match.arg(cgcv_lambda0_method)
   if (is.character(sparse) && length(sparse) == 1L) {
     sparse <- match.arg(sparse, c("auto", "TRUE", "FALSE", "true", "false"))
     if (sparse %in% c("TRUE", "true")) sparse <- TRUE
@@ -171,6 +201,15 @@ tt_control <- function(max_sweeps = 50,
       compute_edf = isTRUE(compute_edf),
       edf_max_npar = as.integer(edf_max_npar),
       warn_lambda_boundary = isTRUE(warn_lambda_boundary),
+      cgcv_update = cgcv_update,
+      cgcv_damping = as.numeric(cgcv_damping),
+      cgcv_max_log10_step = as.numeric(cgcv_max_log10_step),
+      cgcv_parameterization = cgcv_parameterization,
+      cgcv_trace = isTRUE(cgcv_trace),
+      cgcv_margin_order = if (is.null(cgcv_margin_order)) NULL else as.integer(cgcv_margin_order),
+      cgcv_fit_sweeps = if (is.null(cgcv_fit_sweeps)) NULL else as.integer(cgcv_fit_sweeps),
+      cgcv_lambda0_method = cgcv_lambda0_method,
+      cgcv_lambda0_grid = if (is.null(cgcv_lambda0_grid)) NULL else as.numeric(cgcv_lambda0_grid),
       # Classical multidimensional P-spline penalty on Θ only (no surrogate).
       penalty_mode = "global"
     ),
