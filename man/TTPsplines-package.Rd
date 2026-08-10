@@ -6,7 +6,7 @@
 \alias{TTPsplines-package}
 \title{TTPsplines: Tensor-Train P-Splines for Multidimensional Smoothing and GLMs}
 \description{
-Tensor-Train (TT) compression of multidimensional P-spline coefficient arrays for non-additive smooth regression on scattered continuous covariates. Supports Gaussian, Poisson, and Bernoulli responses via ALS / PIRLS / L-BFGS, a transparent family-aware optimizer='auto' default, fixed anisotropic smoothing, and conditional GCV (cGCV). Full-tensor / GLAM baselines are available when feasible. Development version; the public API may still change.
+Tensor-Train (TT) compression of multidimensional P-spline coefficient arrays for non-additive smooth regression on scattered continuous covariates. Retains the classical discrete P-spline penalty on the coefficient tensor Theta; TT changes representation and optimization only. Supports Gaussian, Poisson, and Bernoulli responses via ALS / PIRLS / L-BFGS, a transparent family-aware optimizer='auto' default, fixed anisotropic smoothing, and conditional GCV (cGCV). Full-tensor / GLAM baselines are available when feasible. Development version; the public API may still change.
 }
 \seealso{
 Useful links:

@@ -90,12 +90,14 @@ size grows linearly in \(d\). At \(d=10\), \(N_{\mathrm{full}}=10^{10}\) while
 \(N_{\mathrm{TT}}=780\) (compression \(\approx 1.28\times 10^{7}\)).
 
 The coefficient dimension of conventional tensor-product representations
-still grows as \(k^d\). Efficient array algorithms such as GLAM can delay the
-computational consequences of this growth, but do not remove the exponential
-growth of the coefficient array itself. That is why full-tensor
-representations become infeasible long before TT fits do — and why a fair
-comparison must say when GLAM was skipped rather than implying TT “beat” a
-method that never ran.
+still grows as \(k^d\). Classical GLAM exploits array structure when
+**observations and design** live on a multiway grid and can delay the
+computational consequences of this growth, but does not remove the
+exponential growth of the coefficient array itself. TTPsplines instead
+restricts the **coefficient** representation (and admits scattered \(X\)).
+That is why full-tensor baselines become infeasible long before TT fits do —
+and why a fair comparison must say when GLAM was skipped rather than implying
+TT “beat” a method that never ran.
 
 # When GLAM stops
 

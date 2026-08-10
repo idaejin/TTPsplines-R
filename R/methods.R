@@ -45,6 +45,8 @@ print.summary.ttpspline <- function(x, ...) {
   cat(sprintf("Basis size k:           %d\n", x$k))
   cat(sprintf("Degree:                 %d\n", x$degree))
   cat(sprintf("Penalty order:          %d\n", x$penalty_order))
+  cat(sprintf("Penalty mode:           %s\n",
+              x$penalty_mode %||% x$control$penalty_mode %||% "global"))
   cat(sprintf("TT rank:                %s\n", .tt_rank_label(x)))
   cat(sprintf("Rank chain:             %s\n", paste(x$rank, collapse = "-")))
   cat(sprintf("Full tensor coeffs:     %s\n",
@@ -77,6 +79,10 @@ print.summary.ttpspline <- function(x, ...) {
       cat(sprintf("Lambda search bounds:   [%s, %s]\n",
                   format(x$lambda_bounds[1], digits = 4),
                   format(x$lambda_bounds[2], digits = 4)))
+    }
+    if (isTRUE(x$lambda_at_boundary)) {
+      cat("Note: λ at search bound — for init diagnostics see ttps_multistart();\n")
+      cat("      stable hits across starts suggest margin/null/r, not a bad seed.\n")
     }
   }
   cat("\n")
@@ -111,8 +117,9 @@ print.summary.ttpspline <- function(x, ...) {
                 inf$gauge %||% "left-orthogonal"))
   } else {
     cat("  Not prepared (call vcov(fit) or predict(..., se.fit=TRUE)\n")
-    cat("  for Gaussian conditional Bayesian/frequentist SE).\n")
-    cat("  Level-1 only: conditional on TT rank and fitted lambda.\n")
+    cat("  for conditional Bayesian/frequentist SE; Gaussian/Poisson/Bernoulli).\n")
+    cat("  Level-1 only: conditional on TT rank and fitted lambda;\n")
+    cat("  pointwise intervals (not simultaneous bands).\n")
   }
   cat(sprintf("\nConverged:              %s\n", x$converged))
   cat(sprintf("ALS sweeps:             %s\n",

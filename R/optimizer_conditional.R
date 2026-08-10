@@ -289,8 +289,11 @@ tt_damped_newton_als_fit <- function(y, basis, family, ranks, lambda_spec,
 
   offset <- st$offset
   weights <- st$weights
+  cyclic <- attr(basis, "cyclic")
   obj <- tt_glm_penalized_objective(y, cores, intercept, basis, penalties, lambda, fam,
-                                    offset = offset, weights = weights)
+                                    offset = offset, weights = weights,
+                                    penalty_mode = "global",
+                                    penalty_order = penalty_order)
 
   for (sw in seq_len(max_sweeps)) {
     obj_old <- obj
@@ -299,8 +302,13 @@ tt_damped_newton_als_fit <- function(y, basis, family, ranks, lambda_spec,
       R <- right_interfaces(cores, basis)
       Xk <- tt_design_core(L[[k]], R[[k]], basis[[k]])
       g <- as.numeric(cores[[k]])
+      pen_k <- tt_conditional_penalty_full(
+        cores, k, lambda, penalty_order = penalty_order, cyclic = cyclic
+      )
+      penalties[[k]] <- pen_k$P_own
+      # λ already folded into P_full = λ_k P_own + P_other
       upd <- .tt_damped_newton_core(
-        g, y, intercept, Xk, penalties[[k]], lambda[k], fam, control,
+        g, y, intercept, Xk, pen_k$P_full, 1, fam, control,
         offset = offset, weights = weights
       )
       n_backtrack_total <- n_backtrack_total + upd$n_backtrack
@@ -311,7 +319,9 @@ tt_damped_newton_als_fit <- function(y, basis, family, ranks, lambda_spec,
       }
     }
     obj <- tt_glm_penalized_objective(y, cores, intercept, basis, penalties, lambda, fam,
-                                      offset = offset, weights = weights)
+                                      offset = offset, weights = weights,
+                                      penalty_mode = "global",
+                                      penalty_order = penalty_order)
     if (isTRUE(control$trace)) {
       cat(sprintf(
         "  DN-ALS sweep %2d | L=%.6g | max|eta|=%.3g\n",
@@ -352,6 +362,7 @@ tt_damped_newton_als_fit <- function(y, basis, family, ranks, lambda_spec,
     n_outer = NA_integer_,
     history = hist,
     penalties = penalties,
+    penalty_mode = "global",
     elapsed = proc.time()[["elapsed"]] - t0,
     converged = isTRUE(converged) && is.finite(obj$value),
     convergence = list(
@@ -407,8 +418,11 @@ tt_lbfgs_als_fit <- function(y, basis, family, ranks, lambda_spec, control,
 
   offset <- st$offset
   weights <- st$weights
+  cyclic <- attr(basis, "cyclic")
   obj <- tt_glm_penalized_objective(y, cores, intercept, basis, penalties, lambda, fam,
-                                    offset = offset, weights = weights)
+                                    offset = offset, weights = weights,
+                                    penalty_mode = "global",
+                                    penalty_order = penalty_order)
 
   for (sw in seq_len(max_sweeps)) {
     obj_old <- obj
@@ -417,8 +431,12 @@ tt_lbfgs_als_fit <- function(y, basis, family, ranks, lambda_spec, control,
       R <- right_interfaces(cores, basis)
       Xk <- tt_design_core(L[[k]], R[[k]], basis[[k]])
       g <- as.numeric(cores[[k]])
+      pen_k <- tt_conditional_penalty_full(
+        cores, k, lambda, penalty_order = penalty_order, cyclic = cyclic
+      )
+      penalties[[k]] <- pen_k$P_own
       upd <- .tt_block_lbfgs_core(
-        g, y, intercept, Xk, penalties[[k]], lambda[k], fam, control,
+        g, y, intercept, Xk, pen_k$P_full, 1, fam, control,
         offset = offset, weights = weights
       )
       n_opt_iter <- n_opt_iter + (upd$n_iter %||% 0L)
@@ -429,7 +447,9 @@ tt_lbfgs_als_fit <- function(y, basis, family, ranks, lambda_spec, control,
       }
     }
     obj <- tt_glm_penalized_objective(y, cores, intercept, basis, penalties, lambda, fam,
-                                      offset = offset, weights = weights)
+                                      offset = offset, weights = weights,
+                                      penalty_mode = "global",
+                                      penalty_order = penalty_order)
     if (isTRUE(control$trace)) {
       cat(sprintf(
         "  LBFGS-ALS sweep %2d | L=%.6g | max|eta|=%.3g\n",
@@ -470,6 +490,7 @@ tt_lbfgs_als_fit <- function(y, basis, family, ranks, lambda_spec, control,
     n_outer = NA_integer_,
     history = hist,
     penalties = penalties,
+    penalty_mode = "global",
     elapsed = proc.time()[["elapsed"]] - t0,
     converged = isTRUE(converged) && is.finite(obj$value),
     convergence = list(

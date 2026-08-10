@@ -23,13 +23,15 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
     cores <- init_cores
   }
   penalties <- tt_core_penalties_from_basis(ranks, basis, penalty_order)
+  penalty_mode <- "global"
 
   eta <- tt_eta(offset, intercept, cores, basis)
   mu <- invlink_eta(fam, eta)
   dev <- glm_deviance(fam, y, mu, weights = w_obs)
   obj <- tt_glm_penalized_objective(
     y, cores, intercept, basis, penalties, lambda, fam,
-    offset = offset, weights = w_obs
+    offset = offset, weights = w_obs,
+    penalty_mode = penalty_mode, penalty_order = penalty_order
   )
 
   hist_rows <- list()
@@ -65,10 +67,17 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
         L <- left_interfaces(cores, basis)
         R <- right_interfaces(cores, basis)
         Xk <- tt_design_core(L[[k]], R[[k]], basis[[k]])
+        pen_k <- tt_conditional_penalty_full(
+          cores, k, lambda, penalty_order = penalty_order,
+          cyclic = attr(basis, "cyclic")
+        )
+        Pk <- pen_k$P_own
+        P0 <- pen_k$P_other
+        penalties[[k]] <- Pk
         ws <- make_core_workspace(
-          zc, Xk, penalties[[k]], lambda[k],
+          zc, Xk, Pk, lambda[k],
           control$lambda_bounds, control$tol_lambda,
-          weight = w, use_spectral = use_spec
+          weight = w, use_spectral = use_spec, P0 = P0
         )
         upd <- update_lambda(method, ws)
         cores[[k]] <- array(upd$g, c(ranks[k], p, ranks[k + 1L]))
@@ -85,7 +94,8 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
     eta_cand <- tt_eta(offset, intercept_cand, cores_cand, basis)
     obj_cand <- tt_glm_penalized_objective(
       y, cores_cand, intercept_cand, basis, penalties, lambda, fam,
-      offset = offset, weights = w_obs
+      offset = offset, weights = w_obs,
+      penalty_mode = penalty_mode, penalty_order = penalty_order
     )
 
     accepted_step <- 1
@@ -105,7 +115,8 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
         )
         obj_try <- tt_glm_penalized_objective(
           y, blended$cores, blended$intercept, basis, penalties, lambda, fam,
-          offset = offset, weights = w_obs
+          offset = offset, weights = w_obs,
+          penalty_mode = penalty_mode, penalty_order = penalty_order
         )
         if (is.finite(obj_try$value) &&
             obj_try$value <= obj_old$value + accept_tol) {
@@ -222,15 +233,16 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
     lambda = lambda,
     ranks = ranks,
     eta = eta,
-    mu = mu,
-    deviance = dev,
-    n_sweeps = NA_integer_,
+    mu = invlink_eta(fam, eta),
+    deviance = glm_deviance(fam, y, invlink_eta(fam, eta), weights = w_obs),
+    n_sweeps = n_als_sweeps_total,
     n_pirls = n_pirls,
     n_criterion_evals = n_eval,
     history = history,
     penalties = penalties,
+    penalty_mode = penalty_mode,
     elapsed = proc.time()[["elapsed"]] - t0,
-    converged = convergence$overall,
+    converged = isTRUE(convergence$overall),
     convergence = convergence,
     method_lambda = method,
     optimizer = "ALS",

@@ -6,7 +6,7 @@
 
 **Experimental** R package for **Tensor-Train P-splines**: non-additive multidimensional smooth / GLM regression on **scattered** continuous covariates.
 
-The TT factorization compresses the **coefficient tensor** of a tensor-product P-spline — observations need **not** lie on a grid.
+The TT factorization compresses the **coefficient tensor** of a tensor-product P-spline — observations need **not** lie on a grid. The package always imposes the **classical multidimensional P-spline penalty on \(\Theta\)**; TT changes representation and optimization, not the penalty definition.
 
 ## Install
 
@@ -222,6 +222,9 @@ fit <- ttps(y, X, rank = 2, k = 8, lambda = "cGCV")
 fit$lambda
 fit$lambda_boundary   # check for bound hits
 ```
+
+If λ sits on a search bound, diagnose with multi-start (stable vs unstable
+hits) via `ttps_multistart()` — see `vignette("cgcv")`.
 
 Vignette: `vignette("cgcv", package = "TTPsplines")`.
 

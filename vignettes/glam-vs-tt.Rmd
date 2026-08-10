@@ -13,9 +13,28 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 
 # Motivation
 
-A tensor-product P-spline stores about \(k^d\) coefficients. The TT
-representation stores on the order of \(O(d k r^2)\) parameters for uniform
-interior ranks — a scaling statement, not an exact identity.
+Classical GLAM (Currie, Durbán and Eilers, 2006) exploits **array structure
+in the observations and design** (e.g.\ age × year grids, contingency tables):
+responses and covariates live on a product grid, so Kronecker / rotated-\(H\)
+algebra avoids the full tensor-product design matrix. The coefficient array
+\(\Theta\) nevertheless still has size \(\prod_j k_j\).
+
+**TTPsplines** exploits **tensor structure in the coefficient representation**
+(TT cores) while allowing **arbitrarily scattered** covariates
+\((x_{i1},\ldots,x_{id})\) that need not fill a grid. It is complementary to
+GLAM, not “GLAM with Tensor-Train cores.”
+
+\[
+\boxed{\text{GLAM: grid/array data + array coefficients}}
+\qquad
+\boxed{\text{TTPsplines: scattered OK + TT coefficients}}
+\]
+
+A tensor-product P-spline stores \(N_{\mathrm{full}}=\prod_j k_j\)
+coefficients. For uniform interior rank \(r\) and \(k_j=k\),
+\[
+N_{\mathrm{TT}}=2kr+(d-2)kr^2=O(dkr^2).
+\]
 
 \[
 \boxed{r \neq \lambda \neq \mathrm{EDF}}.
@@ -47,7 +66,8 @@ library(TTPsplines)
 
 # Low-\(d\) reference (\(d=3\))
 
-GLAM is cheap; TT may add selection overhead but compresses.
+On a small grid, GLAM is still cheap; TT may add selection overhead but
+compresses the coefficient array.
 
 ```{r d3}
 cmp3 <- compare_glam_tt_gaussian(

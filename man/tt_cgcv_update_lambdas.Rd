@@ -14,7 +14,8 @@ tt_cgcv_update_lambdas(
   control,
   weight = NULL,
   z = NULL,
-  offset = NULL
+  offset = NULL,
+  penalty_order = 2L
 )
 }
 \description{

@@ -26,7 +26,14 @@ g(\mathbb{E}[Y\mid x]) = f(x_1,\ldots,x_d)
 
 with a tensor-product P-spline whose coefficient array \(\Theta\) is stored in
 **Tensor-Train** format. Observations \(X\in\mathbb{R}^{n\times d}\) may be
-arbitrarily scattered — **no data grid** is required.
+arbitrarily scattered — **no data grid** is required. TT itself is a
+**representation** of \(\Theta\), not a smoother: additive GAMs already cost
+\(O(dk)\) and do not need it; the package targets joint non-additive surfaces
+where a full tensor would cost \(O(k^d)\) and TT costs \(O(dkr^2)\).
+
+By default the package uses the **classical multidimensional P-spline
+penalty on \(\Theta\)**. TT changes representation and optimization only —
+not the statistical penalty.
 
 Family-aware default solver (`optimizer = "auto"`): Gaussian → ALS,
 Poisson → PIRLS-ALS, binomial → L-BFGS. Rank \(r\) is **not** chosen inside
@@ -62,8 +69,10 @@ The Ishigami surface admits an approximately low-rank functional form
 ALS at that minimal rank can still be **initialization-sensitive**: a bad
 start may look like “\(r=2\) is inadequate” even when capacity is fine.
 For scientific rank choice prefer `tt_rank_select(..., n_starts > 1)`
-(`vignette("rank-selection")`); warm-start via `tt_truncate_rank()` is
-documented there and in the Ishigami init audit under `inst/benchmarks/`.
+(`vignette("rank-selection")`); for a single model with several random TT
+inits (e.g. λ-bound diagnostics) use `ttps_multistart()`. Warm-start via
+`tt_truncate_rank()` is documented in the rank vignette and in the Ishigami
+init audit under `inst/benchmarks/`.
 
 ```{r ishigami-fit}
 data(ishigami)

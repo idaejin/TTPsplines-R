@@ -2,7 +2,7 @@
 % Please edit documentation in R/als.R
 \name{tt_als_fit_rcpp}
 \alias{tt_als_fit_rcpp}
-\title{Try Rcpp Gaussian cGCV / fixed-λ path.}
+\title{Rcpp entry for Gaussian ALS — redirects to the global-penalty R path.}
 \usage{
 tt_als_fit_rcpp(
   y,
@@ -17,6 +17,7 @@ tt_als_fit_rcpp(
 )
 }
 \description{
-Try Rcpp Gaussian cGCV / fixed-λ path.
+Legacy full-sweep Rcpp ALS used the own-margin surrogate and is no longer
+a production fitter. Penalty helpers remain available via Rcpp.
 }
 \keyword{internal}

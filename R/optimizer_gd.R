@@ -23,6 +23,7 @@
   penalties <- tt_core_penalties_from_basis(ranks, basis, penalty_order)
   template <- cores
   theta <- .tt_pack_cores(cores)
+  penalty_mode <- normalize_penalty_mode(control$penalty_mode %||% "global")
 
   is_gauss <- is.null(family) || identical(family_key(family), "gaussian")
   if (is_gauss) {
@@ -32,8 +33,11 @@
       intercept0
     }
     eval_obj <- function(th) {
-      .tt_gaussian_objective(th, y, intercept, basis, template, penalties, lambda,
-                             offset = offset, weights = weights)
+      .tt_gaussian_objective(
+        th, y, intercept, basis, template, penalties, lambda,
+        offset = offset, weights = weights,
+        penalty_mode = penalty_mode, penalty_order = penalty_order
+      )
     }
   } else {
     fam <- normalize_family(family)
@@ -43,8 +47,11 @@
       intercept0
     }
     eval_obj <- function(th) {
-      .tt_glm_objective(th, y, intercept, basis, template, penalties, lambda, fam,
-                        offset = offset, weights = weights)
+      .tt_glm_objective(
+        th, y, intercept, basis, template, penalties, lambda, fam,
+        offset = offset, weights = weights,
+        penalty_mode = penalty_mode, penalty_order = penalty_order
+      )
     }
   }
 
@@ -242,7 +249,7 @@ tt_gd_fit <- function(y, basis, ranks, lambda_spec, control,
       if (is_gauss) {
         upd <- tt_cgcv_update_lambdas(
           y, cores, intercept, basis, penalties, lambda, control,
-          weight = weights, offset = offset
+          weight = weights, offset = offset, penalty_order = penalty_order
         )
       } else {
         fam <- normalize_family(family)
@@ -250,11 +257,13 @@ tt_gd_fit <- function(y, basis, ranks, lambda_spec, control,
         work <- glm_working(fam, y, eta_cur)
         upd <- tt_cgcv_update_lambdas(
           y, cores, intercept, basis, penalties, lambda, control,
-          weight = work$weight * weights, z = work$z, offset = offset
+          weight = work$weight * weights, z = work$z, offset = offset,
+          penalty_order = penalty_order
         )
       }
       cores <- upd$cores
       lambda <- upd$lambda
+      if (!is.null(upd$penalties)) penalties <- upd$penalties
       n_eval <- n_eval + upd$n_eval
       n_outer <- outer
       history[[outer]] <- list(outer = outer, lambda = lambda, value = fit0$value)

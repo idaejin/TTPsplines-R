@@ -170,16 +170,56 @@ tt_control <- function(max_sweeps = 50,
       block_lbfgs_sweeps = as.integer(block_lbfgs_sweeps),
       compute_edf = isTRUE(compute_edf),
       edf_max_npar = as.integer(edf_max_npar),
-      warn_lambda_boundary = isTRUE(warn_lambda_boundary)
+      warn_lambda_boundary = isTRUE(warn_lambda_boundary),
+      # Classical multidimensional P-spline penalty on Θ only (no surrogate).
+      penalty_mode = "global"
     ),
     class = "tt_control"
   )
+}
+
+#' Package always uses the classical global penalty on Θ.
+#' Removed surrogates (`own_margin` / `separable`) error if requested.
+#' @keywords internal
+#' @noRd
+normalize_penalty_mode <- function(mode) {
+  if (is.null(mode) || !length(mode)) return("global")
+  mode <- as.character(mode)[[1L]]
+  if (mode %in% c("global", "full")) return("global")
+  if (mode %in% c("own_margin", "separable")) {
+    stop(
+      "penalty_mode '", mode, "' was removed: it is not the classical ",
+      "multidimensional P-spline penalty on Θ. ",
+      "TTPsplines always uses J_λ(Θ) = sum_m λ_m ||Θ ×_m Δ||_F^2.",
+      call. = FALSE
+    )
+  }
+  stop("Unknown penalty_mode '", mode, "'.", call. = FALSE)
+}
+
+#' @keywords internal
+#' @noRd
+is_global_penalty_mode <- function(mode) {
+  identical(normalize_penalty_mode(mode %||% "global"), "global")
 }
 
 #' Resolve computational backend given optimizer preference.
 #' @keywords internal
 resolve_backend <- function(control, optimizer = "ALS") {
   be <- control$backend
+  # Global P_k^full depends on other cores → ALS/PIRLS sweeps stay in R.
+  if (optimizer %in% c("ALS", "PIRLS", "auto")) {
+    if (identical(be, "Rcpp")) {
+      warning(
+        "ALS/PIRLS sweeps use the classical global penalty on Θ and run in R; ",
+        "Rcpp accelerates P_k^full / global-penalty helpers when available.",
+        call. = FALSE
+      )
+    }
+    if (identical(be, "auto") || identical(be, "Rcpp")) {
+      be <- "R"
+    }
+  }
   if (identical(be, "auto")) {
     if (identical(optimizer, "Adam")) {
       if (isTRUE(tt_has_keras())) return("keras")

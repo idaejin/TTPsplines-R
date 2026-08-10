@@ -987,3 +987,230 @@ List tt_glm_pirls_cgcv_cpp(const arma::vec& y,
       _["method"] = select_lambda ? "TT-cGCV-PIRLS" : "TT-PIRLS-fixed",
       _["backend"] = "Rcpp");
 }
+
+// ---------------------------------------------------------------------------
+// Exact conditional P_k^full = A_k^T S_λ A_k (TT contractions; no k^d)
+// ---------------------------------------------------------------------------
+
+static double tt_frobenius_inner_cubes(const std::vector<arma::cube>& a,
+                                       const std::vector<arma::cube>& b) {
+  const int d = a.size();
+  arma::mat cur(1, 1, arma::fill::ones);
+  for (int k = 0; k < d; ++k) {
+    const arma::cube& Ga = a[k];
+    const arma::cube& Gb = b[k];
+    const int rl = Ga.n_rows;
+    const int p = Ga.n_cols;
+    const int rr = Ga.n_slices;
+    arma::mat nxt(rr, Gb.n_slices, arma::fill::zeros);
+    for (int j = 0; j < p; ++j) {
+      arma::mat Ca = core_slice_j(Ga, j);
+      arma::mat Cb = core_slice_j(Gb, j);
+      nxt += Ca.t() * cur * Cb;
+    }
+    cur = nxt;
+  }
+  return cur(0, 0);
+}
+
+static arma::cube apply_DtD_mode_cube(const arma::cube& G, const arma::mat& DtD) {
+  const int rl = G.n_rows;
+  const int p = G.n_cols;
+  const int rr = G.n_slices;
+  arma::cube out(rl, p, rr, arma::fill::zeros);
+  for (int a = 0; a < rl; ++a) {
+    for (int b = 0; b < rr; ++b) {
+      arma::vec v(p);
+      for (int j = 0; j < p; ++j) v(j) = G(a, j, b);
+      arma::vec w = DtD * v;
+      for (int j = 0; j < p; ++j) out(a, j, b) = w(j);
+    }
+  }
+  return out;
+}
+
+static std::vector<arma::cube> apply_DtD_mode_tt(
+    const std::vector<arma::cube>& cores, int m, const arma::mat& DtD) {
+  std::vector<arma::cube> out = cores;
+  out[m] = apply_DtD_mode_cube(cores[m], DtD);
+  return out;
+}
+
+static arma::mat left_bond_gram(const std::vector<arma::cube>& cores, int upto) {
+  // Gram after contracting cores[0..upto-1] (0-based upto exclusive end)
+  arma::mat G(1, 1, arma::fill::ones);
+  for (int t = 0; t < upto; ++t) {
+    const arma::cube& Ct = cores[t];
+    const int rl = Ct.n_rows;
+    const int p = Ct.n_cols;
+    const int rr = Ct.n_slices;
+    arma::mat Gn(rr, rr, arma::fill::zeros);
+    for (int j = 0; j < p; ++j) {
+      arma::mat C = core_slice_j(Ct, j);
+      Gn += C.t() * G * C;
+    }
+    G = Gn;
+  }
+  return G;
+}
+
+static arma::mat right_bond_gram(const std::vector<arma::cube>& cores, int from) {
+  // Gram contracting cores[from..d-1]
+  const int d = cores.size();
+  arma::mat G(1, 1, arma::fill::ones);
+  for (int t = d - 1; t >= from; --t) {
+    const arma::cube& Ct = cores[t];
+    const int rl = Ct.n_rows;
+    const int p = Ct.n_cols;
+    const int rr = Ct.n_slices;
+    arma::mat Gn(rl, rl, arma::fill::zeros);
+    for (int j = 0; j < p; ++j) {
+      arma::mat C = core_slice_j(Ct, j);
+      Gn += C * G * C.t();
+    }
+    G = Gn;
+  }
+  return G;
+}
+
+static arma::mat core_penalty_own_exact_arma(const std::vector<arma::cube>& cores,
+                                             int k, const arma::mat& DtD) {
+  // k 0-based
+  const int rl = cores[k].n_rows;
+  const int p = cores[k].n_cols;
+  const int rr = cores[k].n_slices;
+  arma::mat W_L = left_bond_gram(cores, k);
+  arma::mat W_R = right_bond_gram(cores, k + 1);
+  // kronecker(W_R, kronecker(DtD, W_L))
+  return arma::kron(W_R, arma::kron(DtD, W_L));
+}
+
+static arma::cube unit_core_cube(int rl, int p, int rr, int i) {
+  arma::cube C(rl, p, rr, arma::fill::zeros);
+  const int mk = rl * p * rr;
+  if (i < 0 || i >= mk) return C;
+  // column-major (a,j,b)
+  const int b = i / (rl * p);
+  const int rem = i % (rl * p);
+  const int j = rem / rl;
+  const int a = rem % rl;
+  C(a, j, b) = 1.0;
+  return C;
+}
+
+//' Exact conditional P_k^full = A^T S_λ A via TT contractions.
+//' Returns list(P_own, P_other, P_full). k is 1-based (R).
+//' DtD_list: length-d list of p_m x p_m matrices.
+// [[Rcpp::export]]
+List tt_conditional_penalty_full_cpp(const List& cores_list,
+                                     int k,
+                                     const arma::vec& lambda,
+                                     const List& DtD_list) {
+  std::vector<arma::cube> cores = list_to_cubes(cores_list);
+  const int d = cores.size();
+  if (k < 1 || k > d) stop("tt_conditional_penalty_full_cpp: k out of range");
+  const int kk = k - 1; // 0-based
+  if (static_cast<int>(DtD_list.size()) != d) {
+    stop("tt_conditional_penalty_full_cpp: DtD_list length mismatch");
+  }
+  arma::vec lam = lambda;
+  if (static_cast<int>(lam.n_elem) == 1) {
+    const double v = lam(0);
+    lam = arma::vec(d);
+    lam.fill(v);
+  }
+  if (static_cast<int>(lam.n_elem) != d) {
+    stop("tt_conditional_penalty_full_cpp: lambda length mismatch");
+  }
+  std::vector<arma::mat> DtD(d);
+  for (int m = 0; m < d; ++m) DtD[m] = as<arma::mat>(DtD_list[m]);
+
+  const int rl = cores[kk].n_rows;
+  const int p = cores[kk].n_cols;
+  const int rr = cores[kk].n_slices;
+  const int mk = rl * p * rr;
+
+  arma::mat P_own = core_penalty_own_exact_arma(cores, kk, DtD[kk]);
+  arma::mat P_other(mk, mk, arma::fill::zeros);
+
+  if (d > 1) {
+    std::vector<int> other_m;
+    for (int m = 0; m < d; ++m) if (m != kk) other_m.push_back(m);
+    const int n_other = other_m.size();
+
+    // Precompute T_m(Θ(e_j)) for each j and each other margin
+    std::vector<std::vector<std::vector<arma::cube>>> Tmj(mk);
+    for (int j = 0; j < mk; ++j) {
+      std::vector<arma::cube> cj = cores;
+      cj[kk] = unit_core_cube(rl, p, rr, j);
+      Tmj[j].resize(n_other);
+      for (int ii = 0; ii < n_other; ++ii) {
+        const int m = other_m[ii];
+        Tmj[j][ii] = apply_DtD_mode_tt(cj, m, DtD[m]);
+      }
+    }
+
+    for (int i = 0; i < mk; ++i) {
+      std::vector<arma::cube> ci = cores;
+      ci[kk] = unit_core_cube(rl, p, rr, i);
+      for (int j = 0; j <= i; ++j) {
+        double s = 0.0;
+        for (int ii = 0; ii < n_other; ++ii) {
+          const int m = other_m[ii];
+          s += lam(m) * tt_frobenius_inner_cubes(ci, Tmj[j][ii]);
+        }
+        P_other(i, j) = s;
+        P_other(j, i) = s;
+      }
+    }
+    P_other = 0.5 * (P_other + P_other.t());
+  }
+
+  arma::mat P_full = lam(kk) * P_own + P_other;
+  return List::create(
+      _["P_own"] = P_own,
+      _["P_other"] = P_other,
+      _["P_full"] = P_full,
+      _["method"] = "tt_cpp");
+}
+
+//' Global discrete P-spline penalty value 0.5 * sum_m λ_m <Θ, T_m Θ>.
+// [[Rcpp::export]]
+double tt_global_penalty_value_cpp(const List& cores_list,
+                                   const arma::vec& lambda,
+                                   const List& DtD_list) {
+  std::vector<arma::cube> cores = list_to_cubes(cores_list);
+  const int d = cores.size();
+  arma::vec lam = lambda;
+  if (static_cast<int>(lam.n_elem) == 1) {
+    const double v = lam(0);
+    lam = arma::vec(d);
+    lam.fill(v);
+  }
+  double val = 0.0;
+  for (int m = 0; m < d; ++m) {
+    arma::mat DtD = as<arma::mat>(DtD_list[m]);
+    std::vector<arma::cube> Tm = apply_DtD_mode_tt(cores, m, DtD);
+    val += lam(m) * tt_frobenius_inner_cubes(cores, Tm);
+  }
+  return 0.5 * val;
+}
+
+//' Gaussian core update with optional fixed penalty offset P0 (for P_k^full).
+//' Solves (X'X + P0 + λ P) g = X'y with ridge on the system.
+// [[Rcpp::export]]
+arma::vec gaussian_core_update_p0_cpp(const arma::vec& yc,
+                                      const arma::mat& Left,
+                                      const arma::mat& Right,
+                                      const arma::mat& Bk,
+                                      const arma::mat& penalty,
+                                      double lambda,
+                                      const arma::mat& P0) {
+  arma::mat X = tt_design_core_d_cpp(Left, Right, Bk);
+  arma::mat xtx = X.t() * X;
+  arma::mat system = xtx + lambda * penalty + P0;
+  const double ridge = ridge_scale_arma(system, 1e-6);
+  system.diag() += ridge;
+  arma::vec rhs = X.t() * yc;
+  return arma::solve(system, rhs, arma::solve_opts::likely_sympd);
+}

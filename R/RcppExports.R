@@ -66,3 +66,21 @@ tt_glm_pirls_cgcv_cpp <- function(y, basis_list, init_cores, penalties_list, fam
     .Call(`_TTPsplines_tt_glm_pirls_cgcv_cpp`, y, basis_list, init_cores, penalties_list, family, lambda_init, pirls_iter, als_sweeps, lambda_min, lambda_max, tol, tol_dev, select_lambda, weights, offset)
 }
 
+#' Exact conditional P_k^full = A^T S_λ A via TT contractions.
+#' Returns list(P_own, P_other, P_full). k is 1-based (R).
+#' DtD_list: length-d list of p_m x p_m matrices.
+tt_conditional_penalty_full_cpp <- function(cores_list, k, lambda, DtD_list) {
+    .Call(`_TTPsplines_tt_conditional_penalty_full_cpp`, cores_list, k, lambda, DtD_list)
+}
+
+#' Global discrete P-spline penalty value 0.5 * sum_m λ_m <Θ, T_m Θ>.
+tt_global_penalty_value_cpp <- function(cores_list, lambda, DtD_list) {
+    .Call(`_TTPsplines_tt_global_penalty_value_cpp`, cores_list, lambda, DtD_list)
+}
+
+#' Gaussian core update with optional fixed penalty offset P0 (for P_k^full).
+#' Solves (X'X + P0 + λ P) g = X'y with ridge on the system.
+gaussian_core_update_p0_cpp <- function(yc, Left, Right, Bk, penalty, lambda, P0) {
+    .Call(`_TTPsplines_gaussian_core_update_p0_cpp`, yc, Left, Right, Bk, penalty, lambda, P0)
+}
+

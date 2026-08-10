@@ -12,8 +12,12 @@ make_core_workspace(
   bounds,
   tol,
   weight = NULL,
-  use_spectral = FALSE
+  use_spectral = FALSE,
+  P0 = NULL
 )
+}
+\arguments{
+\item{P0}{Optional fixed penalty offset (for exact P_k^full cross-margin terms).}
 }
 \description{
 Build cached conditional workspace for core k (Gaussian or weighted).

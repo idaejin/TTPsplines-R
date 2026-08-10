@@ -80,40 +80,62 @@ update_lambda <- function(method, workspace, ...) {
 
 update_lambda_fixed <- function(workspace, ...) {
   lam <- workspace$lambda0
-  g <- solve_spd_ridge(workspace$S + lam * workspace$P, workspace$b)
+  P0 <- workspace$P0
+  M <- workspace$S + lam * workspace$P
+  if (!is.null(P0)) M <- M + P0
+  # Global mode (P0 present): prefer exact SPD solve so fixed-λ ALS is an
+  # exact conditional minimizer of Q (P4–P6). Own-margin / legacy keeps the
+  # ridge path for R↔Rcpp parity with gaussian_core_update_cpp.
+  if (!is.null(P0)) {
+    g <- tryCatch(
+      as.numeric(solve_spd(M, workspace$b)),
+      error = function(e) solve_spd_ridge(M, workspace$b)
+    )
+    if (!all(is.finite(g))) g <- solve_spd_ridge(M, workspace$b)
+  } else {
+    g <- solve_spd_ridge(M, workspace$b)
+  }
   # n_eval counts smoothing-*criterion* evaluations (cGCV/cFS/…), not core solves
   list(lambda = lam, g = g, value = NA_real_, ed = NA_real_, n_eval = 0L)
 }
 
-.ed_S <- function(S, P, lambda) {
+.ed_S <- function(S, P, lambda, P0 = NULL) {
   m <- nrow(S)
   ridge <- ridge_scale(S, multiplier = 1e-6)
   M <- S + lambda * P + ridge * diag(m)
+  if (!is.null(P0)) M <- M + P0
   Minv_S <- tryCatch(
     solve_spd(M, S),
-    error = function(e) solve_spd_ridge(S + lambda * P, S, base_ridge = ridge)
+    error = function(e) {
+      Mr <- S + lambda * P
+      if (!is.null(P0)) Mr <- Mr + P0
+      solve_spd_ridge(Mr, S, base_ridge = ridge)
+    }
   )
   sum(diag(Minv_S))
 }
 
-.conditional_gcv <- function(yw, Xw, S, P, b, lambda) {
+.conditional_gcv <- function(yw, Xw, S, P, b, lambda, P0 = NULL) {
   n <- length(yw)
-  g <- solve_spd_ridge(S + lambda * P, b)
+  M <- S + lambda * P
+  if (!is.null(P0)) M <- M + P0
+  g <- solve_spd_ridge(M, b)
   rss <- sum((yw - as.numeric(Xw %*% g))^2)
-  ed <- .ed_S(S, P, lambda)
+  ed <- .ed_S(S, P, lambda, P0 = P0)
   denom <- (n - ed)^2
   value <- if (!is.finite(denom) || denom < 1e-12) Inf else n * rss / denom
   list(value = value, g = g, ed = ed, rss = rss)
 }
 
-#' Optional spectral cache for repeated GCV evals on fixed (S, P).
-#' Uses chol(S_ridge) then eigen of transformed P (dense, small m).
+#' Optional spectral cache for repeated GCV evals on fixed (S, P[, P0]).
+#' Uses chol(S_ridge + P0) then eigen of transformed P (dense, small m).
 #' @keywords internal
-.make_gcv_spectral_cache <- function(S, P) {
+.make_gcv_spectral_cache <- function(S, P, P0 = NULL) {
   m <- nrow(S)
   if (m > 400L) return(NULL) # not worth for large cores
   ridge <- ridge_scale(S, multiplier = 1e-8)
   Sr <- S + ridge * diag(m)
+  if (!is.null(P0)) Sr <- Sr + P0
   R <- tryCatch(chol(Sr), error = function(e) NULL)
   if (is.null(R)) return(NULL)
   # Q = R^{-T} P R^{-1}
@@ -126,13 +148,12 @@ update_lambda_fixed <- function(workspace, ...) {
        ridge = ridge)
 }
 
-.conditional_gcv_spectral <- function(yw, Xw, S, P, b, lambda, cache) {
+.conditional_gcv_spectral <- function(yw, Xw, S, P, b, lambda, cache, P0 = NULL) {
   # Fall back if cache missing
-  if (is.null(cache)) return(.conditional_gcv(yw, Xw, S, P, b, lambda))
+  if (is.null(cache)) return(.conditional_gcv(yw, Xw, S, P, b, lambda, P0 = P0))
   n <- length(yw)
   R <- cache$R
-  # Solve (S_ridge + lam P) g = b via spectral of Q
-  # (R'R + lam P) g = b  <=>  (I + lam Q) R g = R^{-T} b
+  # Solve (S_ridge + P0 + lam P) g = b via spectral of Q
   rhs <- forwardsolve(t(R), b)
   U <- cache$vectors
   d <- cache$values
@@ -154,25 +175,26 @@ update_lambda_cgcv <- function(workspace, ...) {
   Xw <- workspace$Xw
   S <- workspace$S
   P <- workspace$P
+  P0 <- workspace$P0
   b <- workspace$b
   use_spectral <- isTRUE(workspace$use_spectral)
-  cache <- if (use_spectral) .make_gcv_spectral_cache(S, P) else NULL
+  cache <- if (use_spectral) .make_gcv_spectral_cache(S, P, P0 = P0) else NULL
   n_eval <- 0L
   obj <- function(ll) {
     n_eval <<- n_eval + 1L
     lam <- exp(ll)
     if (is.null(cache)) {
-      .conditional_gcv(yw, Xw, S, P, b, lam)$value
+      .conditional_gcv(yw, Xw, S, P, b, lam, P0 = P0)$value
     } else {
-      .conditional_gcv_spectral(yw, Xw, S, P, b, lam, cache)$value
+      .conditional_gcv_spectral(yw, Xw, S, P, b, lam, cache, P0 = P0)$value
     }
   }
   opt <- stats::optimize(obj, interval = log(bounds), tol = tol)
   lam <- exp(opt$minimum)
   fit <- if (is.null(cache)) {
-    .conditional_gcv(yw, Xw, S, P, b, lam)
+    .conditional_gcv(yw, Xw, S, P, b, lam, P0 = P0)
   } else {
-    .conditional_gcv_spectral(yw, Xw, S, P, b, lam, cache)
+    .conditional_gcv_spectral(yw, Xw, S, P, b, lam, cache, P0 = P0)
   }
   list(
     lambda = lam, g = fit$g, value = fit$value, ed = fit$ed,
@@ -181,9 +203,11 @@ update_lambda_cgcv <- function(workspace, ...) {
 }
 
 #' Build cached conditional workspace for core k (Gaussian or weighted).
+#' @param P0 Optional fixed penalty offset (for exact P_k^full cross-margin terms).
 #' @keywords internal
 make_core_workspace <- function(zc, X, P, lambda0, bounds, tol,
-                                weight = NULL, use_spectral = FALSE) {
+                                weight = NULL, use_spectral = FALSE,
+                                P0 = NULL) {
   if (is.null(weight)) {
     S <- crossprod(X)
     b <- as.numeric(crossprod(X, zc))
@@ -197,7 +221,7 @@ make_core_workspace <- function(zc, X, P, lambda0, bounds, tol,
     b <- as.numeric(crossprod(Xw, yw))
   }
   list(
-    S = S, b = b, P = P, X = X, Xw = Xw, yw = yw,
+    S = S, b = b, P = P, P0 = P0, X = X, Xw = Xw, yw = yw,
     lambda0 = lambda0, bounds = bounds, tol = tol,
     use_spectral = isTRUE(use_spectral)
   )

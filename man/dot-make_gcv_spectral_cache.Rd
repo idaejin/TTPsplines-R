@@ -2,13 +2,13 @@
 % Please edit documentation in R/lambda.R
 \name{.make_gcv_spectral_cache}
 \alias{.make_gcv_spectral_cache}
-\title{Optional spectral cache for repeated GCV evals on fixed (S, P).
-Uses chol(S_ridge) then eigen of transformed P (dense, small m).}
+\title{Optional spectral cache for repeated GCV evals on fixed (S, P\link{, P0}).
+Uses chol(S_ridge + P0) then eigen of transformed P (dense, small m).}
 \usage{
-.make_gcv_spectral_cache(S, P)
+.make_gcv_spectral_cache(S, P, P0 = NULL)
 }
 \description{
-Optional spectral cache for repeated GCV evals on fixed (S, P).
-Uses chol(S_ridge) then eigen of transformed P (dense, small m).
+Optional spectral cache for repeated GCV evals on fixed (S, P\link{, P0}).
+Uses chol(S_ridge + P0) then eigen of transformed P (dense, small m).
 }
 \keyword{internal}

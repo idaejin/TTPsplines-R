@@ -1,4 +1,7 @@
 #' Gaussian TT-ALS with fixed or cGCV λ (R backend).
+#'
+#' Always uses the classical global discrete P-spline penalty on Θ via
+#' \(P_k^{\mathrm{full}}=A_k^\top S_{\boldsymbol\lambda} A_k\).
 #' @keywords internal
 tt_als_fit <- function(y, basis, ranks, lambda_spec, control, penalty_order = 2,
                        init_cores = NULL, offset = NULL, weights = NULL) {
@@ -16,6 +19,12 @@ tt_als_fit <- function(y, basis, ranks, lambda_spec, control, penalty_order = 2,
     cores <- init_cores
   }
   penalties <- tt_core_penalties_from_basis(ranks, basis, penalty_order)
+  cyclic <- attr(basis, "cyclic")
+  # Per-core Q descent for fixed λ (P6)
+  check_q_descent <- identical(method, "fixed")
+  q_tol <- as.numeric(control$objective_tol %||% 1e-10)
+  q_max_increase <- 0
+  q_violations <- 0L
 
   n_eval <- 0L
   n_sweeps <- 0L
@@ -27,28 +36,50 @@ tt_als_fit <- function(y, basis, ranks, lambda_spec, control, penalty_order = 2,
 
   for (sw in seq_len(control$max_sweeps)) {
     for (k in seq_len(d)) {
+      if (check_q_descent) {
+        q_old <- tt_gaussian_Q(
+          y, cores, intercept, basis, lambda,
+          offset = offset, weights = w,
+          penalty_order = penalty_order, cyclic = cyclic
+        )$value
+      }
       L <- left_interfaces(cores, basis)
       R <- right_interfaces(cores, basis)
       Xk <- tt_design_core(L[[k]], R[[k]], basis[[k]])
+      pen_k <- tt_conditional_penalty_full(
+        cores, k, lambda, penalty_order = penalty_order, cyclic = cyclic
+      )
+      Pk <- pen_k$P_own
+      P0 <- pen_k$P_other
+      penalties[[k]] <- Pk
       ws <- make_core_workspace(
-        yc, Xk, penalties[[k]], lambda[k],
+        yc, Xk, Pk, lambda[k],
         control$lambda_bounds, control$tol_lambda,
-        weight = w, use_spectral = use_spec
+        weight = w, use_spectral = use_spec, P0 = P0
       )
       upd <- update_lambda(method, ws)
       cores[[k]] <- array(upd$g, c(ranks[k], p, ranks[k + 1L]))
       lambda[k] <- upd$lambda
       n_eval <- n_eval + upd$n_eval
+      if (check_q_descent) {
+        q_new <- tt_gaussian_Q(
+          y, cores, intercept, basis, lambda,
+          offset = offset, weights = w,
+          penalty_order = penalty_order, cyclic = cyclic
+        )$value
+        dq <- q_new - q_old
+        if (is.finite(dq) && dq > q_max_increase) q_max_increase <- dq
+        if (is.finite(dq) && dq > q_tol * max(1, abs(q_old))) {
+          q_violations <- q_violations + 1L
+        }
+      }
     }
     n_sweeps <- sw
     eta <- tt_eta(offset, intercept, cores, basis)
     rss <- sum(w * (y - eta)^2)
-    # Full Gaussian penalized objective (same as LBFGS)
-    pen_val <- 0
-    for (kk in seq_len(d)) {
-      g <- as.numeric(cores[[kk]])
-      pen_val <- pen_val + 0.5 * lambda[kk] * sum(g * as.numeric(penalties[[kk]] %*% g))
-    }
+    pen_val <- tt_global_penalty_value(
+      cores, lambda, penalty_order = penalty_order, cyclic = cyclic
+    )
     obj <- 0.5 * rss + pen_val
     d_eta <- if (sw == 1L) NA_real_ else sqrt(mean((eta - prev_eta)^2))
     history[[sw]] <- list(
@@ -84,6 +115,17 @@ tt_als_fit <- function(y, basis, ranks, lambda_spec, control, penalty_order = 2,
     n_criterion_evals = n_eval,
     history = history,
     penalties = penalties,
+    penalty_mode = "global",
+    q_descent = if (check_q_descent) {
+      list(
+        checked = TRUE,
+        violations = q_violations,
+        max_increase = q_max_increase,
+        tol = q_tol
+      )
+    } else {
+      list(checked = FALSE)
+    },
     elapsed = proc.time()[["elapsed"]] - t0,
     converged = TRUE,
     method_lambda = method,
@@ -91,101 +133,15 @@ tt_als_fit <- function(y, basis, ranks, lambda_spec, control, penalty_order = 2,
   )
 }
 
-#' Try Rcpp Gaussian cGCV / fixed-λ path.
+#' Rcpp entry for Gaussian ALS — redirects to the global-penalty R path.
+#'
+#' Legacy full-sweep Rcpp ALS used the own-margin surrogate and is no longer
+#' a production fitter. Penalty helpers remain available via Rcpp.
 #' @keywords internal
 tt_als_fit_rcpp <- function(y, basis, ranks, lambda_spec, control, penalty_order = 2,
                             init_cores = NULL, offset = NULL, weights = NULL) {
-  offset <- normalize_offset(offset, length(y))
-  w <- normalize_weights(weights, length(y))
-  d <- length(basis)
-  p <- ncol(basis[[1]])
-  lambda0 <- lambda_spec$values %||% lambda_spec$lambda0
-  if (is.null(init_cores)) {
-    cores <- initialize_tt_cores(p, ranks, seed = control$seed, sd = control$init_sd)
-  } else {
-    cores <- init_cores
-  }
-  penalties <- tt_core_penalties_from_basis(ranks, basis, penalty_order)
-  t0 <- proc.time()[["elapsed"]]
-  if (identical(lambda_spec$method, "cGCV") && exists("tt_cgcv_fit_cpp", mode = "function")) {
-    fit <- tt_cgcv_fit_cpp(
-      y = as.numeric(y),
-      basis_list = basis,
-      init_cores = cores,
-      penalties_list = penalties,
-      lambda_init = lambda0,
-      sweeps = as.integer(control$max_sweeps),
-      lambda_min = control$lambda_bounds[1],
-      lambda_max = control$lambda_bounds[2],
-      tol = control$tol_lambda,
-      tol_lambda = control$tol_lambda,
-      return_jacobian = FALSE,
-      weights = w,
-      offset = offset
-    )
-    out_cores <- lapply(seq_len(d), function(k) {
-      array(as.numeric(fit$cores[[k]]), c(ranks[k], p, ranks[k + 1L]))
-    })
-    eta <- as.numeric(fit$eta %||% fit$mu)
-    return(list(
-      cores = out_cores,
-      intercept = fit$intercept,
-      lambda = as.numeric(fit$lambda),
-      ranks = ranks,
-      eta = eta,
-      mu = eta,
-      deviance = fit$deviance %||% sum(w * (y - eta)^2),
-      n_sweeps = fit$n_sweeps,
-      n_pirls = NA_integer_,
-      n_criterion_evals = fit$n_criterion_evals,
-      history = list(),
-      penalties = penalties,
-      elapsed = proc.time()[["elapsed"]] - t0,
-      converged = TRUE,
-      method_lambda = "cGCV",
-      optimizer = "ALS",
-      backend = "Rcpp"
-    ))
-  }
-  if (identical(lambda_spec$method, "fixed") && exists("tt_fit_d_cpp", mode = "function")) {
-    fit <- tt_fit_d_cpp(
-      y = as.numeric(y),
-      basis_list = basis,
-      init_cores = cores,
-      lambda = lambda0,
-      penalties_list = penalties,
-      sweeps = as.integer(control$max_sweeps),
-      return_jacobian = FALSE,
-      weights = w,
-      offset = offset
-    )
-    out_cores <- lapply(seq_len(d), function(k) {
-      array(as.numeric(fit$cores[[k]]), c(ranks[k], p, ranks[k + 1L]))
-    })
-    eta <- as.numeric(fit$eta %||% fit$mu)
-    return(list(
-      cores = out_cores,
-      intercept = fit$intercept,
-      lambda = lambda0,
-      ranks = ranks,
-      eta = eta,
-      mu = eta,
-      deviance = fit$deviance %||% sum(w * (y - eta)^2),
-      n_sweeps = control$max_sweeps,
-      n_pirls = NA_integer_,
-      n_criterion_evals = 0L,
-      history = list(),
-      penalties = penalties,
-      elapsed = proc.time()[["elapsed"]] - t0,
-      converged = TRUE,
-      method_lambda = "fixed",
-      optimizer = "ALS",
-      backend = "Rcpp"
-    ))
-  }
-  # fallback
   out <- tt_als_fit(y, basis, ranks, lambda_spec, control, penalty_order,
-                    init_cores = init_cores, offset = offset, weights = w)
+                    init_cores = init_cores, offset = offset, weights = weights)
   out$backend <- "R"
   out
 }

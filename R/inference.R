@@ -137,11 +137,32 @@ tt_apply_gauge <- function(cores, iface, A) {
   c(1, J) # intercept column
 }
 
+#' GLM / Gaussian working weights for inference (includes observation weights).
+#' @keywords internal
+#' @noRd
+.tt_inference_weights <- function(object, eta) {
+  key <- object$family_key %||% family_key(object$family)
+  n <- length(object$y)
+  w_obs <- normalize_weights(object$weights, n)
+  if (identical(key, "gaussian")) {
+    return(list(weight = w_obs, mu = eta, key = key))
+  }
+  fam <- object$family
+  work <- glm_working(fam, object$y, eta, control = object$control)
+  list(weight = as.numeric(work$weight) * w_obs, mu = work$mu, key = key)
+}
+
 #' Build / refresh conditional inference factorization on a fit.
 #'
-#' Gaussian Gate 1/2: H = X'X with X = [1 | J], S = blkdiag(0, S_λ),
-#' H_p = H + S + ridge, V_B = σ² H_p^{-1}, V_F = σ² H_p^{-1} H H_p^{-1}.
-#' Cores are left-orthogonalized before forming J (gauge-fixed local coords).
+#' Level-1 conditional covariance on left-orthogonal TT cores (+ intercept):
+#' \eqn{H = X^\top W X}, \eqn{S=\mathrm{blkdiag}(0,S_\lambda)},
+#' \eqn{H_p=H+S+\varepsilon I}.
+#' Gaussian: \eqn{V_B=\hat\sigma^2 H_p^{-1}} with
+#' \eqn{\hat\sigma^2=\mathrm{RSS}_w/(n_w-\mathrm{edf})}.
+#' Poisson / Bernoulli: Fisher weights in \eqn{W}, dispersion \eqn{\phi=1},
+#' so \eqn{V_B=H_p^{-1}}. Prediction SEs are on the link scale; response
+#' intervals transform \eqn{\hat\eta\pm z\,\mathrm{SE}_\eta} via the inverse link
+#' (pointwise, not simultaneous bands).
 #'
 #' @keywords internal
 #' @noRd
@@ -158,12 +179,8 @@ tt_prepare_inference <- function(object, force = FALSE) {
     return(object)
   }
   key <- object$family_key %||% family_key(object$family)
-  if (!identical(key, "gaussian")) {
-    stop(
-      "Pointwise uncertainty is implemented for Gaussian fits first ",
-      "(Gate 1/2). GLM extension is not enabled yet.",
-      call. = FALSE
-    )
+  if (!key %in% c("gaussian", "poisson", "bernoulli")) {
+    stop("Unsupported family for inference: ", key, call. = FALSE)
   }
   t0 <- proc.time()[[3L]]
   basis <- .tt_fit_basis(object)
@@ -193,6 +210,14 @@ tt_prepare_inference <- function(object, force = FALSE) {
     stop("Inference skipped: dense Jacobian would be too large.", call. = FALSE)
   }
 
+  off <- object$offset %||% rep(0, n)
+  eta <- as.numeric(off + object$intercept + f1)
+  ww <- .tt_inference_weights(object, eta)
+  w <- pmax(as.numeric(ww$weight), 0)
+  if (!any(w > 0)) {
+    stop("All inference weights are zero.", call. = FALSE)
+  }
+
   J <- tt_stacked_jacobian(cores, basis, weight = NULL)
   X <- cbind(1, J)
   S_cores <- tt_block_penalty(penalties, as.numeric(object$lambda))
@@ -200,7 +225,10 @@ tt_prepare_inference <- function(object, force = FALSE) {
   S <- matrix(0, m, m)
   S[2:m, 2:m] <- S_cores
 
-  H <- crossprod(X)
+  # H = X' W X via sqrt-weights (same construction as joint EDF)
+  sw <- sqrt(w)
+  Xw <- X * sw
+  H <- crossprod(Xw)
   ridge <- ridge_scale(H, multiplier = 1e-9)
   Hp <- H + S + ridge * diag(m)
 
@@ -232,13 +260,19 @@ tt_prepare_inference <- function(object, force = FALSE) {
     edf_inf <- if (is.finite(object$edf)) object$edf + 1 else 2
   }
 
-  off <- object$offset %||% rep(0, n)
-  eta <- as.numeric(off + object$intercept + f1)
-  rss <- sum((object$y - eta)^2)
-  df_res <- max(n - edf_inf, 1)
-  sigma2 <- rss / df_res
-  if (!is.finite(sigma2) || sigma2 <= 0) {
-    sigma2 <- max(rss / max(n - 1, 1), .Machine$double.eps)
+  if (identical(key, "gaussian")) {
+    rss <- sum(w * (object$y - eta)^2)
+    n_w <- sum(w)
+    df_res <- max(n_w - edf_inf, 1)
+    sigma2 <- rss / df_res
+    if (!is.finite(sigma2) || sigma2 <= 0) {
+      sigma2 <- max(rss / max(n_w - 1, 1), .Machine$double.eps)
+    }
+    scale_estimator <- "weighted RSS / (sum(w) - edf_aug)"
+  } else {
+    # Canonical Poisson / Bernoulli: dispersion fixed at 1
+    sigma2 <- 1
+    scale_estimator <- "phi = 1 (Poisson/Bernoulli Fisher information)"
   }
 
   setup_time <- proc.time()[[3L]] - t0
@@ -248,13 +282,13 @@ tt_prepare_inference <- function(object, force = FALSE) {
     method = "bayesian_penalized_spline",
     parameterization = "left_orthogonal_TT_cores_plus_intercept",
     gauge = "left-orthogonal QR (sequential)",
-    family = "gaussian",
+    family = key,
     conditional_on_rank = TRUE,
     conditional_on_lambda = TRUE,
     smoothing_uncertainty = FALSE,
     rank_uncertainty = FALSE,
     scale = sigma2,
-    scale_estimator = "RSS / (n - edf_aug)",
+    scale_estimator = scale_estimator,
     edf_aug = edf_inf,
     ridge = ridge,
     npar_packed = npar,
@@ -264,14 +298,16 @@ tt_prepare_inference <- function(object, force = FALSE) {
       "Factorization lives in packed TT coordinates after left-orthogonal ",
       "gauge fix (size npar_TT+1 including intercept). Identifiable ",
       "directions align with dim(M_r)=npar_TT-sum r_k^2; gauge null ",
-      "directions are controlled by the penalty + ridge."
+      "directions are controlled by the penalty + ridge. For GLMs, H uses ",
+      "Fisher / PIRLS weights; intervals are built on the link scale."
     ),
     cores_gauge = cores,
     chol_Hp = chol_Hp,
     H_data = H,
     H_pen = S,
     setup_time = setup_time,
-    lambda_method = object$lambda_method %||% "fixed"
+    lambda_method = object$lambda_method %||% "fixed",
+    pointwise_only = TRUE
   )
   object$inference <- inf
   if (is.environment(cache)) {
@@ -324,12 +360,13 @@ tt_prepare_inference <- function(object, force = FALSE) {
 #' Uncertainty is **conditional** on the fitted TT rank and smoothing
 #' parameters. `unconditional = TRUE` is not implemented.
 #'
-#' @param object A `"ttpspline"` fit (Gaussian for v1).
+#' @param object A `"ttpspline"` fit (Gaussian / Poisson / Bernoulli).
 #' @param type `"bayesian"` (default) or `"frequentist"`.
 #' @param unconditional Must be `FALSE` in v1.
 #' @param ... Unused.
 #' @return Dense covariance matrix for `(intercept, packed TT cores)` in the
 #'   gauge-fixed parameterization stored on `object$inference`.
+#'   For GLMs the scale factor is \(\phi=1\) (link-scale Fisher information).
 #' @export
 vcov.ttpspline <- function(object,
                            type = c("bayesian", "frequentist"),
@@ -358,8 +395,12 @@ vcov.ttpspline <- function(object,
 }
 
 #' @rdname predict.ttpspline
-#' @param se.fit If `TRUE`, return list with `fit` and `se.fit` (link-scale SE).
-#' @param interval `"none"` or `"confidence"` (pointwise, conditional).
+#' @param se.fit If `TRUE`, return list with `fit` and `se.fit`.
+#'   `se.fit` is always on the **link** scale.
+#' @param interval `"none"` or `"confidence"` (pointwise, conditional on
+#'   rank and \(\lambda\); not simultaneous bands). For GLMs, intervals are
+#'   formed on the link scale then mapped with the inverse link when
+#'   `type = "response"`.
 #' @param level Confidence level for intervals.
 #' @param vcov_type `"bayesian"` (default for `se.fit`) or `"frequentist"`.
 #' @param full_cov Reserved; must be `FALSE` (no m×m prediction covariance).

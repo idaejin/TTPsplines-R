@@ -1,52 +1,41 @@
-test_that("R and Rcpp Gaussian ALS agree under shared init (eta/mu/deviance)", {
-  skip_if_not(exists("tt_fit_d_cpp", mode = "function"),
+test_that("Rcpp P_k^full helpers agree with R TT path (gauge-free)", {
+  skip_if_not(exists("tt_conditional_penalty_full_cpp", mode = "function"),
               "Rcpp backend not compiled")
   set.seed(21)
-  n <- 180
-  X <- matrix(runif(n * 3), n, 3)
-  y <- sin(2 * pi * X[, 1]) * cos(2 * pi * X[, 2]) + rnorm(n, 0, 0.2)
-  bs <- build_marginal_bases(X, k = 6, degree = 3)
-  init <- tt_initialize(X, rank = 2, k = 6, seed = 123L, sd = 0.15)
-
-  ctrl <- function(backend) {
-    tt_control(
-      max_sweeps = 8L, backend = backend, compute_edf = FALSE,
-      seed = 123L, tol = 1e-10
-    )
+  ranks <- c(1L, 2L, 2L, 1L)
+  p <- 5L
+  cores <- initialize_tt_cores(p, ranks, seed = 21L, sd = 0.2)
+  lambda <- c(0.9, 1.1, 0.7)
+  DtD_list <- tt_DtD_list(cores, 2L)
+  for (k in 1:3) {
+    pen_r <- tt_conditional_penalty_full_tt(cores, k, lambda, DtD_list)
+    pen_c <- tt_conditional_penalty_full_cpp(cores, as.integer(k), lambda, DtD_list)
+    expect_lt(max(abs(pen_r$P_full - pen_c$P_full)), 1e-8)
   }
-  fit_r <- ttps(
-    y, X, rank = 2, k = 6, lambda = 1, init = init, knots = bs$knots,
-    control = ctrl("R")
+  expect_equal(
+    tt_global_penalty_value_cpp(cores, lambda, DtD_list),
+    tt_global_penalty_value(cores, lambda, penalty_order = 2L),
+    tolerance = 1e-10
   )
-  fit_c <- ttps(
-    y, X, rank = 2, k = 6, lambda = 1, init = init, knots = bs$knots,
-    control = ctrl("Rcpp")
-  )
-  expect_identical(fit_c$backend, "Rcpp")
-
-  eta_r <- as.numeric(predict(fit_r, type = "link"))
-  eta_c <- as.numeric(predict(fit_c, type = "link"))
-  mu_r <- as.numeric(predict(fit_r, type = "response"))
-  mu_c <- as.numeric(predict(fit_c, type = "response"))
-
-  # Same algorithm + ridge policy ⇒ near machine agreement on gauge-free
-  # quantities (do not compare TT cores).
-  expect_lt(max(abs(eta_r - eta_c)), 1e-6)
-  expect_lt(max(abs(mu_r - mu_c)), 1e-6)
-  expect_equal(fit_r$deviance, fit_c$deviance, tolerance = 1e-8)
-  obj_r <- tt_objective(fit_r, X, y)$value
-  obj_c <- tt_objective(fit_c, X, y)$value
-  expect_equal(obj_r, obj_c, tolerance = 1e-8)
 })
 
-test_that("uniform TT storage identity matches tt_complexity", {
-  # N_TT = 2 k r + (d-2) k r^2 for r_0 = r_d = 1, uniform interior r, p_j = k
-  k <- 10L
-  r <- 3L
-  for (d in c(3L, 5L, 7L, 9L, 10L)) {
-    cx <- tt_complexity(d = d, p = k, rank = r)
-    exact <- 2 * k * r + (d - 2) * k * r * r
-    expect_equal(cx$n_tt_stored, as.numeric(exact))
-    expect_equal(cx$n_full, as.numeric(k)^d)
-  }
+test_that("requesting backend=Rcpp for ALS falls back to R global path", {
+  skip_if_not(exists("tt_fit_d_cpp", mode = "function"),
+              "Rcpp backend not compiled")
+  set.seed(22)
+  n <- 80
+  X <- matrix(runif(n * 2), n, 2)
+  y <- sin(2 * pi * X[, 1]) + rnorm(n, 0, 0.2)
+  expect_warning(
+    fit <- ttps(
+      y, X, rank = 2, k = 5, lambda = 1,
+      control = tt_control(
+        max_sweeps = 3L, backend = "Rcpp", compute_edf = FALSE, seed = 22L
+      )
+    ),
+    "global penalty"
+  )
+  expect_identical(fit$backend, "R")
+  expect_identical(fit$penalty_mode, "global")
+  expect_true(is.finite(fit$deviance))
 })

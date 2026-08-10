@@ -13,11 +13,16 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 
 # Grid arrays vs scattered TT
 
-`ttps()` targets **scattered** covariates with a Tensor-Train coefficient
-array. When responses live on a **regular multiway grid**, the
-**Currie–Durbán–Eilers** GLAM framework (generalized linear array models)
-evaluates the same tensor-product P-spline without forming the Kronecker
-design, via rotated-\(H\) algebra.
+Classical GLAM (Currie, Durbán and Eilers, 2006) exploits **array structure
+in the observations and the design**: responses live on a product grid
+(e.g.\ age × year), and Kronecker / rotated-\(H\) algebra avoids forming the
+full tensor-product design. The coefficient array \(\Theta\) is still dense
+of size \(\prod_j k_j\).
+
+`ttps()` / TTPsplines exploits **tensor structure in the coefficient
+representation** (TT cores) and allows **arbitrarily scattered** covariates —
+not “GLAM with Tensor-Train cores,” but a complementary use of tensor
+structure.
 
 This vignette shows fixed-\(\lambda\) **Poisson** GLAM with an exposure offset
 — the classical age × year mortality-style setting of Currie, Durbán and

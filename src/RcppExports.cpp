@@ -227,6 +227,50 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// tt_conditional_penalty_full_cpp
+List tt_conditional_penalty_full_cpp(const List& cores_list, int k, const arma::vec& lambda, const List& DtD_list);
+RcppExport SEXP _TTPsplines_tt_conditional_penalty_full_cpp(SEXP cores_listSEXP, SEXP kSEXP, SEXP lambdaSEXP, SEXP DtD_listSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const List& >::type cores_list(cores_listSEXP);
+    Rcpp::traits::input_parameter< int >::type k(kSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type lambda(lambdaSEXP);
+    Rcpp::traits::input_parameter< const List& >::type DtD_list(DtD_listSEXP);
+    rcpp_result_gen = Rcpp::wrap(tt_conditional_penalty_full_cpp(cores_list, k, lambda, DtD_list));
+    return rcpp_result_gen;
+END_RCPP
+}
+// tt_global_penalty_value_cpp
+double tt_global_penalty_value_cpp(const List& cores_list, const arma::vec& lambda, const List& DtD_list);
+RcppExport SEXP _TTPsplines_tt_global_penalty_value_cpp(SEXP cores_listSEXP, SEXP lambdaSEXP, SEXP DtD_listSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const List& >::type cores_list(cores_listSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type lambda(lambdaSEXP);
+    Rcpp::traits::input_parameter< const List& >::type DtD_list(DtD_listSEXP);
+    rcpp_result_gen = Rcpp::wrap(tt_global_penalty_value_cpp(cores_list, lambda, DtD_list));
+    return rcpp_result_gen;
+END_RCPP
+}
+// gaussian_core_update_p0_cpp
+arma::vec gaussian_core_update_p0_cpp(const arma::vec& yc, const arma::mat& Left, const arma::mat& Right, const arma::mat& Bk, const arma::mat& penalty, double lambda, const arma::mat& P0);
+RcppExport SEXP _TTPsplines_gaussian_core_update_p0_cpp(SEXP ycSEXP, SEXP LeftSEXP, SEXP RightSEXP, SEXP BkSEXP, SEXP penaltySEXP, SEXP lambdaSEXP, SEXP P0SEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::vec& >::type yc(ycSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Left(LeftSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Right(RightSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Bk(BkSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type penalty(penaltySEXP);
+    Rcpp::traits::input_parameter< double >::type lambda(lambdaSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type P0(P0SEXP);
+    rcpp_result_gen = Rcpp::wrap(gaussian_core_update_p0_cpp(yc, Left, Right, Bk, penalty, lambda, P0));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_TTPsplines_tt_design_core_d_cpp", (DL_FUNC) &_TTPsplines_tt_design_core_d_cpp, 3},
@@ -242,6 +286,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_TTPsplines_weighted_core_update_cgcv_cpp", (DL_FUNC) &_TTPsplines_weighted_core_update_cgcv_cpp, 11},
     {"_TTPsplines_tt_cgcv_fit_cpp", (DL_FUNC) &_TTPsplines_tt_cgcv_fit_cpp, 13},
     {"_TTPsplines_tt_glm_pirls_cgcv_cpp", (DL_FUNC) &_TTPsplines_tt_glm_pirls_cgcv_cpp, 15},
+    {"_TTPsplines_tt_conditional_penalty_full_cpp", (DL_FUNC) &_TTPsplines_tt_conditional_penalty_full_cpp, 4},
+    {"_TTPsplines_tt_global_penalty_value_cpp", (DL_FUNC) &_TTPsplines_tt_global_penalty_value_cpp, 3},
+    {"_TTPsplines_gaussian_core_update_p0_cpp", (DL_FUNC) &_TTPsplines_gaussian_core_update_p0_cpp, 7},
     {NULL, NULL, 0}
 };
 

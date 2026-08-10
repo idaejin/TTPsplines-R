@@ -13,7 +13,9 @@ tt_glm_penalized_objective(
   lambda,
   family,
   offset = NULL,
-  weights = NULL
+  weights = NULL,
+  penalty_mode = "global",
+  penalty_order = 2L
 )
 }
 \description{

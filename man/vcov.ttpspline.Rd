@@ -7,7 +7,7 @@
 \method{vcov}{ttpspline}(object, type = c("bayesian", "frequentist"), unconditional = FALSE, ...)
 }
 \arguments{
-\item{object}{A \code{"ttpspline"} fit (Gaussian for v1).}
+\item{object}{A \code{"ttpspline"} fit (Gaussian / Poisson / Bernoulli).}
 
 \item{type}{\code{"bayesian"} (default) or \code{"frequentist"}.}
 
@@ -18,6 +18,7 @@
 \value{
 Dense covariance matrix for \verb{(intercept, packed TT cores)} in the
 gauge-fixed parameterization stored on \code{object$inference}.
+For GLMs the scale factor is \(\phi=1\) (link-scale Fisher information).
 }
 \description{
 Default is the Bayesian penalized-spline covariance

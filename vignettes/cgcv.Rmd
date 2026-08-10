@@ -89,6 +89,40 @@ Inspect `fit$lambda`, `fit$lambda_boundary`, and `fit$lambda_bounds` after
 fitting. If several margins sit on a bound, widen `lambda_bounds` or treat
 the directional \(\lambda\) as exploratory, not calibrated smoothness.
 
+# Multi-start diagnostics (nonconvex ALS)
+
+`ttps()` uses a **single** random TT initialization. Because the core
+problem is nonconvex, a \(\lambda\) on the search bound can mean either
+(i)~a statistical effect (near-null margin, low \(r\), conditional cGCV) or
+(ii)~a bad basin. Use `ttps_multistart()` to tell them apart:
+
+```{r multistart, fig.show='hide'}
+ms <- ttps_multistart(
+  y, X[, 1:2],
+  rank = 2, k = 5,
+  lambda = "cGCV",
+  n_starts = 4,
+  seed = 1,
+  control = tt_control(
+    max_sweeps = 5, backend = "R", compute_edf = FALSE,
+    lambda_bounds = c(1e-4, 1e4)
+  )
+)
+ms
+ms$starts[, c("start", "converged", "objective", "lambda_at_boundary",
+              "lambda_boundary")]
+ms$frac_boundary
+# Retain the selected fit:
+fit_best <- ms$best
+```
+
+- **Stable** boundary hits across starts (\(\texttt{frac\_boundary}\) near 1)
+  → interpret as margin / null space / rank, not a lucky seed.
+- **Unstable** hits → raise `n_starts`, try another optimizer, or warm-start.
+
+For multi-start inside **rank CV**, prefer
+`tt_rank_select(..., n_starts = ...)` (already fold-aware).
+
 # Anisotropy on Sobol-\(g\)
 
 Earlier coordinates of Sobol-\(g\) matter more; cGCV often pushes

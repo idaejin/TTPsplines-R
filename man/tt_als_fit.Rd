@@ -17,6 +17,7 @@ tt_als_fit(
 )
 }
 \description{
-Gaussian TT-ALS with fixed or cGCV λ (R backend).
+Always uses the classical global discrete P-spline penalty on Θ via
+\(P_k^{\mathrm{full}}=A_k^\top S_{\boldsymbol\lambda} A_k\).
 }
 \keyword{internal}

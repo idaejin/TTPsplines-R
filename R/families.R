@@ -149,7 +149,9 @@ normalize_weights <- function(weights, n) {
 #' @keywords internal
 tt_glm_penalized_objective <- function(y, cores, intercept, basis, penalties,
                                        lambda, family, offset = NULL,
-                                       weights = NULL) {
+                                       weights = NULL,
+                                       penalty_mode = "global",
+                                       penalty_order = 2L) {
   key <- family_key(family)
   offset <- normalize_offset(offset, length(y))
   w <- normalize_weights(weights, length(y))
@@ -166,7 +168,12 @@ tt_glm_penalized_objective <- function(y, cores, intercept, basis, penalties,
   } else {
     stop("Unsupported family in tt_glm_penalized_objective", call. = FALSE)
   }
-  pen <- .tt_penalty_value_grad(cores, penalties, lambda)$value
+  # Always classical J_λ(Θ); penalty_mode kept for call compatibility only.
+  normalize_penalty_mode(penalty_mode)
+  pen <- tt_global_penalty_value(
+    cores, lambda, penalty_order = penalty_order,
+    cyclic = attr(basis, "cyclic")
+  )
   list(value = nll + pen, nll = nll, penalty = pen, eta = eta)
 }
 

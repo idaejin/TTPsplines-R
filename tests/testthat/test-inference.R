@@ -110,16 +110,58 @@ test_that("cGCV still uses conditional inference", {
   expect_false(isTRUE(fit$._inf$data$smoothing_uncertainty))
 })
 
-test_that("GLM se.fit errors clearly (Gate 1 only)", {
+test_that("Poisson and Bernoulli pointwise intervals (link-scale SE)", {
   skip_on_cran()
   set.seed(16)
-  n <- 80
+  n <- 100
   X <- matrix(runif(n * 2), n, 2)
-  eta <- X[, 1] - X[, 2]
+  eta <- 0.8 * X[, 1] - 0.5 * X[, 2]
+  yp <- rpois(n, exp(eta - mean(eta) + log(3)))
+  fit_p <- ttps(
+    yp, X, family = poisson(), rank = 2, k = 5, lambda = 1,
+    control = tt_control(pirls_maxit = 15, compute_edf = FALSE, seed = 16)
+  )
+  pr <- predict(fit_p, X[1:8, ], type = "response", se.fit = TRUE,
+                interval = "confidence")
+  expect_true(all(pr$fit > 0))
+  expect_true(all(pr$se.fit > 0))
+  expect_true(all(pr$lower > 0))
+  expect_true(all(pr$lower <= pr$fit & pr$fit <= pr$upper))
+  # se.fit remains on link scale even when type=response
+  expect_equal(names(pr)[1:2], c("fit", "se.fit"))
+  Vb <- vcov(fit_p)
+  expect_true(all(is.finite(Vb)))
+  expect_equal(fit_p$._inf$data$scale, 1)
+
+  yb <- rbinom(n, 1, plogis(1.2 * (eta - mean(eta))))
+  fit_b <- ttps(
+    yb, X, family = binomial(), rank = 2, k = 5, lambda = 2,
+    control = tt_control(lbfgs_maxit = 80, compute_edf = FALSE, seed = 17)
+  )
+  cib <- predict(fit_b, X[1:5, ], type = "response", interval = "confidence")
+  expect_true(all(cib$lower >= 0 & cib$upper <= 1))
+  expect_true(all(cib$lower <= cib$fit & cib$fit <= cib$upper))
+})
+
+test_that("Poisson prediction SE is gauge-invariant", {
+  skip_on_cran()
+  set.seed(18)
+  n <- 90
+  X <- matrix(runif(n * 2), n, 2)
+  eta <- sin(2 * pi * X[, 1]) + 0.3 * X[, 2]
   y <- rpois(n, exp(eta - mean(eta) + log(2)))
   fit <- ttps(
     y, X, family = poisson(), rank = 2, k = 5, lambda = 1,
-    control = tt_control(pirls_maxit = 10, compute_edf = FALSE, seed = 16)
+    control = tt_control(pirls_maxit = 12, compute_edf = FALSE, seed = 18)
   )
-  expect_error(predict(fit, X[1:3, ], se.fit = TRUE), "Gaussian")
+  Xte <- matrix(runif(15 * 2), 15, 2)
+  se0 <- predict(fit, Xte, se.fit = TRUE)$se.fit
+  A <- matrix(c(1.3, 0.2, 0.1, 0.95), 2, 2)
+  fit2 <- fit
+  fit2$cores <- TTPsplines:::tt_apply_gauge(fit$cores, iface = 1L, A = A)
+  fit2$inference <- NULL
+  fit2$._inf <- new.env(parent = emptyenv())
+  expect_equal(predict(fit, Xte), predict(fit2, Xte), tolerance = 1e-6)
+  se1 <- predict(fit2, Xte, se.fit = TRUE)$se.fit
+  expect_equal(se0, se1, tolerance = 1e-4)
 })

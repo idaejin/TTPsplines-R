@@ -32,14 +32,20 @@
 
 .tt_gaussian_objective <- function(theta, y, intercept, basis, template,
                                    penalties, lambda, offset = NULL,
-                                   weights = NULL) {
+                                   weights = NULL,
+                                   penalty_mode = "global",
+                                   penalty_order = 2L) {
   offset <- normalize_offset(offset, length(y))
   w <- normalize_weights(weights, length(y))
   cores <- .tt_unpack_cores(theta, template)
   f <- tt_contraction(cores, basis)
   resid <- y - offset - intercept - f
   sse <- 0.5 * sum(w * resid^2)
-  pen <- .tt_penalty_value_grad(cores, penalties, lambda)
+  normalize_penalty_mode(penalty_mode)
+  pen <- .tt_penalty_value_grad_full(
+    cores, lambda, penalty_order = penalty_order,
+    cyclic = attr(basis, "cyclic")
+  )
   list(
     value = sse + pen$value,
     grad = .tt_pack_cores(
@@ -55,13 +61,14 @@
 
 .tt_glm_objective <- function(theta, y, intercept, basis, template,
                               penalties, lambda, fam, offset = NULL,
-                              weights = NULL) {
+                              weights = NULL,
+                              penalty_mode = "global",
+                              penalty_order = 2L) {
   offset <- normalize_offset(offset, length(y))
   w <- normalize_weights(weights, length(y))
   cores <- .tt_unpack_cores(theta, template)
   eta <- offset + intercept + tt_contraction(cores, basis)
   mu <- invlink_eta(fam, eta)
-  # canonical exponential-family score: -(y - mu) for poisson/bernoulli
   key <- family_key(fam)
   nll <- switch(
     key,
@@ -75,8 +82,11 @@
     },
     stop("LBFGS GLM only poisson/binomial in v0.", call. = FALSE)
   )
-  pen <- .tt_penalty_value_grad(cores, penalties, lambda)
-  # .tt_sse_grad_cores(resid) returns -X'resid; pass w*(y-mu) for weighted NLL
+  normalize_penalty_mode(penalty_mode)
+  pen <- .tt_penalty_value_grad_full(
+    cores, lambda, penalty_order = penalty_order,
+    cyclic = attr(basis, "cyclic")
+  )
   grads_nll <- .tt_sse_grad_cores(w * (y - mu), cores, basis)
   list(
     value = nll + pen$value,
@@ -105,6 +115,8 @@
   penalties <- tt_core_penalties_from_basis(ranks, basis, penalty_order)
   template <- cores
   theta0 <- .tt_pack_cores(cores)
+  penalty_mode <- normalize_penalty_mode(control$penalty_mode %||% "global")
+  cyclic <- attr(basis, "cyclic")
 
   is_gauss <- is.null(family) || identical(family_key(family), "gaussian")
   if (is_gauss) {
@@ -114,12 +126,18 @@
       intercept0
     }
     fn <- function(th) {
-      .tt_gaussian_objective(th, y, intercept, basis, template, penalties, lambda,
-                             offset = offset, weights = weights)$value
+      .tt_gaussian_objective(
+        th, y, intercept, basis, template, penalties, lambda,
+        offset = offset, weights = weights,
+        penalty_mode = penalty_mode, penalty_order = penalty_order
+      )$value
     }
     gr <- function(th) {
-      .tt_gaussian_objective(th, y, intercept, basis, template, penalties, lambda,
-                             offset = offset, weights = weights)$grad
+      .tt_gaussian_objective(
+        th, y, intercept, basis, template, penalties, lambda,
+        offset = offset, weights = weights,
+        penalty_mode = penalty_mode, penalty_order = penalty_order
+      )$grad
     }
   } else {
     fam <- normalize_family(family)
@@ -129,12 +147,18 @@
       intercept0
     }
     fn <- function(th) {
-      .tt_glm_objective(th, y, intercept, basis, template, penalties, lambda, fam,
-                        offset = offset, weights = weights)$value
+      .tt_glm_objective(
+        th, y, intercept, basis, template, penalties, lambda, fam,
+        offset = offset, weights = weights,
+        penalty_mode = penalty_mode, penalty_order = penalty_order
+      )$value
     }
     gr <- function(th) {
-      .tt_glm_objective(th, y, intercept, basis, template, penalties, lambda, fam,
-                        offset = offset, weights = weights)$grad
+      .tt_glm_objective(
+        th, y, intercept, basis, template, penalties, lambda, fam,
+        offset = offset, weights = weights,
+        penalty_mode = penalty_mode, penalty_order = penalty_order
+      )$grad
     }
   }
 
@@ -153,6 +177,7 @@
     cores = cores,
     intercept = intercept,
     penalties = penalties,
+    penalty_mode = penalty_mode,
     opt = opt,
     is_gauss = is_gauss,
     family = if (is_gauss) NULL else normalize_family(family)
@@ -162,7 +187,8 @@
 #' One conditional cGCV pass over all cores (shared with outer LBFGS/Adam).
 #' @keywords internal
 tt_cgcv_update_lambdas <- function(y, cores, intercept, basis, penalties, lambda,
-                                   control, weight = NULL, z = NULL, offset = NULL) {
+                                   control, weight = NULL, z = NULL, offset = NULL,
+                                   penalty_order = 2L) {
   d <- length(cores)
   ranks <- integer(d + 1L)
   ranks[1] <- dim(cores[[1]])[1]
@@ -172,21 +198,29 @@ tt_cgcv_update_lambdas <- function(y, cores, intercept, basis, penalties, lambda
   target <- if (is.null(z)) y - offset - intercept else z - offset - intercept
   n_eval <- 0L
   use_spec <- isTRUE(control$use_spectral_gcv)
+  use_full <- TRUE
+  cyclic <- attr(basis, "cyclic")
   for (k in seq_len(d)) {
     L <- left_interfaces(cores, basis)
     R <- right_interfaces(cores, basis)
     Xk <- tt_design_core(L[[k]], R[[k]], basis[[k]])
+    pen_k <- tt_conditional_penalty_full(
+      cores, k, lambda, penalty_order = penalty_order, cyclic = cyclic
+    )
+    Pk <- pen_k$P_own
+    P0 <- pen_k$P_other
+    penalties[[k]] <- Pk
     ws <- make_core_workspace(
-      target, Xk, penalties[[k]], lambda[k],
+      target, Xk, Pk, lambda[k],
       control$lambda_bounds, control$tol_lambda,
-      weight = weight, use_spectral = use_spec
+      weight = weight, use_spectral = use_spec, P0 = P0
     )
     upd <- update_lambda("cGCV", ws)
     cores[[k]] <- array(upd$g, c(ranks[k], p, ranks[k + 1L]))
     lambda[k] <- upd$lambda
     n_eval <- n_eval + upd$n_eval
   }
-  list(cores = cores, lambda = lambda, n_eval = n_eval)
+  list(cores = cores, lambda = lambda, n_eval = n_eval, penalties = penalties)
 }
 
 #' L-BFGS fit (Gaussian or GLM) with fixed λ or outer cGCV.
@@ -250,7 +284,7 @@ tt_lbfgs_fit <- function(y, basis, ranks, lambda_spec, control,
       if (is_gauss) {
         upd <- tt_cgcv_update_lambdas(
           y, cores, intercept, basis, penalties, lambda, control,
-          weight = weights, offset = offset
+          weight = weights, offset = offset, penalty_order = penalty_order
         )
       } else {
         fam <- normalize_family(family)
@@ -258,11 +292,13 @@ tt_lbfgs_fit <- function(y, basis, ranks, lambda_spec, control,
         work <- glm_working(fam, y, eta_cur)
         upd <- tt_cgcv_update_lambdas(
           y, cores, intercept, basis, penalties, lambda, control,
-          weight = work$weight * weights, z = work$z, offset = offset
+          weight = work$weight * weights, z = work$z, offset = offset,
+          penalty_order = penalty_order
         )
       }
       cores <- upd$cores
       lambda <- upd$lambda
+      if (!is.null(upd$penalties)) penalties <- upd$penalties
       n_eval <- n_eval + upd$n_eval
       n_outer <- outer
       history[[outer]] <- list(outer = outer, lambda = lambda, value = fit0$opt$value)

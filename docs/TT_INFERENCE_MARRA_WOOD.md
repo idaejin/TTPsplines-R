@@ -146,7 +146,23 @@ Scale estimator (documented on `fit$inference$scale_estimator`):
 
 ## 9. GLM extension
 
-**Not enabled in Gate 1/2.** Planned: Fisher / observed information on the link scale with PIRLS weights; intervals built on \(\eta\) then inverse-link transformed. Do not form \(\hat p\pm z\,\mathrm{SE}_p\) as default.
+**Implemented (Gates 3–4, Level 1):** Poisson and Bernoulli use Fisher / PIRLS
+weights \(W\) in
+
+\[
+H = X^\top W X,\qquad H_p = H + S_\lambda,\qquad V_B = H_p^{-1}
+\]
+
+with dispersion \(\phi=1\). Prediction SEs are on the **link** scale. For
+`type = "response"`, pointwise intervals are
+
+\[
+g^{-1}\bigl(\hat\eta(x)\pm z_{1-\alpha/2}\,\mathrm{SE}_\eta(x)\bigr),
+\]
+
+not \(\hat\mu\pm z\,\mathrm{SE}_\mu\). Still conditional on \((\hat r,\hat\lambda)\);
+still pointwise (not simultaneous bands). Overdispersion corrections and
+smoothing-parameter uncertainty remain open.
 
 ## 10. Coverage validation
 
@@ -179,7 +195,8 @@ Coverage is **not ESTABLISHED**. Larger factorial study is NEXT (not executed he
 - No rank-selection uncertainty.
 - Pointwise intervals only (not simultaneous bands).
 - Approximate Bayesian covariance / local linearization — not an exact posterior.
-- Gaussian first; GLM gates deferred.
+- Gaussian first; **Poisson / Bernoulli link-scale intervals implemented**
+  (dispersion \(\phi=1\)); simultaneous bands still open.
 - Dense factorization: limited by `edf_max_npar`.
 
 ## 12. Future: smoothing-parameter uncertainty
