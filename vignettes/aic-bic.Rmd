@@ -190,12 +190,21 @@ AIC/BIC here are **conditional on** the chosen TT rank and fixed
 \(\boldsymbol\lambda\). They do not fold in uncertainty from rank selection
 or \(\lambda\) search.
 
+**Paper-1 positioning (DECISION 2026-08-10):** do **not** treat `tt_ic()` as
+a formal TT-rank selector. Prefer `tt_rank_select()` (CV + 1-SE). Use AIC/BIC
+as an in-sample diagnostic of the \(r\)–EDF–RSS tradeoff. In particular, a
+large RSS drop from \(r=2\) to \(r=3\) on Ishigami with few ALS sweeps may
+reflect **local minima / under-iteration**, not structural need for \(r=3\)
+(Ishigami is approximately TT-rank \(\le 2\)). See
+`inst/benchmarks/benchmark_ishigami_rank_init.R`.
+
 # What this is not
 
 - Not `AIC(fit)` / `BIC(fit)` methods (not implemented yet).
 - Not REML / cREML.
 - Not a substitute for hold-out or CV when the goal is prediction.
 - Not a claim that linearized TT EDF equals dense-tensor EDF.
+- Not evidence by itself that higher TT rank is required for Ishigami.
 
 # See also
 

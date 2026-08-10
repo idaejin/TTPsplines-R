@@ -447,3 +447,75 @@ predict.ttpspline <- function(object,
   }
   out
 }
+
+#' Truncate TT cores to a lower (or equal) rank by sequential SVD.
+#'
+#' Diagnostic / warm-start helper: left-orthogonalize, then truncate bond
+#' dimensions right-to-left to the target [tt_rank()] chain. The contracted
+#' coefficient map is approximated (not exact unless singular values beyond
+#' the cut are zero). Use to warm-start a lower-rank [ttps()] fit from a
+#' higher-rank solution, e.g. Ishigami \(r=3\to r=2\).
+#'
+#' @param cores List of TT core arrays (length `d`), as in a `"ttpspline"` fit
+#'   (`fit$cores`), or from [tt_initialize()].
+#' @param rank Target rank (scalar, length `d-1`, or full chain); see [tt_rank()].
+#' @return List of truncated cores with attribute `ranks`.
+#' @examples
+#' init3 <- tt_initialize(d = 3, rank = 3, k = 6, seed = 1)
+#' init2 <- tt_truncate_rank(init3, rank = 2)
+#' attr(init2, "ranks")
+#' @export
+tt_truncate_rank <- function(cores, rank) {
+  if (!is.list(cores) || length(cores) < 2L) {
+    stop("`cores` must be a length-d list of TT cores.", call. = FALSE)
+  }
+  d <- length(cores)
+  cores <- lapply(cores, function(g) {
+    a <- array(as.numeric(g), dim(g))
+    storage.mode(a) <- "double"
+    a
+  })
+  target <- tt_rank(rank, d = d)
+  cores <- tt_left_orthogonalize(cores)
+
+  # Right-to-left bond truncation to target left-ranks of cores 2..d
+  for (k in d:2) {
+    r_keep <- as.integer(target[k])
+    gk <- cores[[k]]
+    dm <- dim(gk)
+    rl <- dm[1L]
+    p <- dm[2L]
+    rr <- dm[3L]
+    if (r_keep >= rl) next
+    if (r_keep < 1L) {
+      stop("Target rank chain has non-positive bond at position ", k, ".",
+           call. = FALSE)
+    }
+    # Matricize as left-bond × (p * right-bond)
+    M <- matrix(gk, rl, p * rr)
+    r_keep <- min(r_keep, nrow(M), ncol(M))
+    sv <- svd(M, nu = r_keep, nv = r_keep)
+    US <- sv$u %*% diag(sv$d[seq_len(r_keep)], nrow = r_keep)
+    # New core k: r_keep × p × rr from V
+    cores[[k]] <- array(t(sv$v), c(r_keep, p, rr))
+    # Absorb U S into previous core's right bond
+    gprev <- cores[[k - 1L]]
+    dp <- dim(gprev)
+    if (dp[3L] != rl) {
+      stop("Rank mismatch absorbing into core ", k - 1L, ".", call. = FALSE)
+    }
+    Mp <- matrix(gprev, dp[1L] * dp[2L], dp[3L])
+    Mp <- Mp %*% US
+    cores[[k - 1L]] <- array(Mp, c(dp[1L], dp[2L], r_keep))
+  }
+
+  ranks <- integer(d + 1L)
+  ranks[1L] <- dim(cores[[1L]])[1L]
+  for (k in seq_len(d)) ranks[k + 1L] <- dim(cores[[k]])[3L]
+  if (ranks[1L] != 1L || ranks[d + 1L] != 1L) {
+    warning("Truncated cores do not have boundary ranks 1; check SVD path.",
+            call. = FALSE)
+  }
+  attr(cores, "ranks") <- as.integer(ranks)
+  cores
+}

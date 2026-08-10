@@ -30,6 +30,7 @@
 # | `benchmark_optimizers_fixed.R` | ALS vs LBFGS vs Adam stub; fixed λ; same init |
 # | `benchmark_optimizers_cgcv.R` | ALS vs LBFGS vs Adam stub; cGCV; same init |
 # | `diagnose_als_vs_lbfgs.R` | Objective / multi-init / cross warm-start / λ paths |
+# | `benchmark_ishigami_rank_init.R` | Ishigami r=2 vs r=3 multi-seed + TT truncate warm-start |
 # | `benchmark_bernoulli_audit.R` | Bernoulli PIRLS vs LBFGS root-cause audit (`--quick`/`--full`) |
 # | `python/benchmark_keras_tt.py` | Optional autodiff comparator (no TF dependency) |
 #

@@ -18,24 +18,28 @@
 `%||%` <- function(a, b) if (!is.null(a)) a else b
 
 .ttps_bench_ensure_pkg <- function() {
-  if (requireNamespace("TTPsplines", quietly = TRUE) &&
-      "ttpspline" %in% getNamespaceExports("TTPsplines")) {
-    suppressPackageStartupMessages(library(TTPsplines))
-    return(invisible(TRUE))
-  }
-  # Walk up from CWD for DESCRIPTION (devtools load_all)
+  # Prefer development source tree (walk from CWD) so benchmarks see unreleased API.
   cand <- normalizePath(getwd())
   for (i in 1:8) {
     if (file.exists(file.path(cand, "DESCRIPTION"))) {
-      if (!requireNamespace("devtools", quietly = TRUE)) {
-        stop("Install/load TTPsplines, or use devtools::load_all()", call. = FALSE)
+      desc <- tryCatch(read.dcf(file.path(cand, "DESCRIPTION"), fields = "Package")[1],
+                       error = function(e) NA_character_)
+      if (identical(desc, "TTPsplines")) {
+        if (!requireNamespace("devtools", quietly = TRUE)) {
+          stop("Install/load TTPsplines, or use devtools::load_all()", call. = FALSE)
+        }
+        devtools::load_all(cand, quiet = TRUE)
+        return(invisible(TRUE))
       }
-      devtools::load_all(cand, quiet = TRUE)
-      return(invisible(TRUE))
     }
     parent <- dirname(cand)
     if (identical(parent, cand)) break
     cand <- parent
+  }
+  if (requireNamespace("TTPsplines", quietly = TRUE) &&
+      any(c("ttps", "ttpspline") %in% getNamespaceExports("TTPsplines"))) {
+    suppressPackageStartupMessages(library(TTPsplines))
+    return(invisible(TRUE))
   }
   stop("TTPsplines not loaded. Run: devtools::load_all('ttpsplines-pkg')", call. = FALSE)
 }
