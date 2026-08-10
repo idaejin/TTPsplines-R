@@ -54,6 +54,14 @@ fit_fix$lambda
 updating TT cores (ALS / PIRLS), not by a full \(d\)-dimensional grid over
 the joint map.
 
+**Default dynamics** (Chicago-validated under the exact global penalty):
+`cgcv_update = "outer_simultaneous"` — fit all cores at fixed
+\(\boldsymbol\lambda\), freeze, Jacobi-propose every margin, then apply
+log-damping (`cgcv_damping = 0.25`) and a trust region
+(`cgcv_max_log10_step = 1`). Legacy `"sequential"` Gauss–Seidel can cascade
+to \(\lambda_{\max}\) via immediate cross-margin \(P_{k,-k}\) feedback; keep
+it for diagnostics only. See `fit$cgcv` and `tt_cgcv_frozen_curves()`.
+
 ```{r cgcv}
 fit <- ttps(
   y, X,
@@ -66,11 +74,14 @@ fit <- ttps(
     lambda_start = 1,
     lambda_bounds = c(1e-4, 1e4),
     warn_lambda_boundary = TRUE,
-    compute_edf = FALSE
+    compute_edf = FALSE,
+    outer_maxit = 6,
+    cgcv_fit_sweeps = 4
   )
 )
 c(
   method = fit$lambda_method,
+  update = fit$cgcv$update,
   lambda = paste(sprintf("%.4g", fit$lambda), collapse = ", "),
   boundary = paste(fit$lambda_boundary, collapse = ", ")
 )
@@ -80,14 +91,18 @@ Useful control knobs:
 
 | Control | Role |
 |---------|------|
+| `cgcv_update` | `"outer_simultaneous"` (default) or `"sequential"` |
+| `cgcv_damping` | Log-mix \(\rho\) toward the raw proposal |
+| `cgcv_max_log10_step` | Trust region on \(|\Delta\log_{10}\lambda|\) |
 | `lambda_start` | Initial \(\lambda\) (recycled to length \(d\)) |
 | `lambda_bounds` | Log-scale search interval \([\lambda_{\min},\lambda_{\max}]\) |
 | `tol_lambda` | Relative log-\(\lambda\) change for outer convergence |
 | `warn_lambda_boundary` | Soft warning when a margin hits a bound |
 
-Inspect `fit$lambda`, `fit$lambda_boundary`, and `fit$lambda_bounds` after
-fitting. If several margins sit on a bound, widen `lambda_bounds` or treat
-the directional \(\lambda\) as exploratory, not calibrated smoothness.
+Inspect `fit$lambda`, `fit$lambda_boundary`, `fit$cgcv`, and
+`fit$lambda_bounds` after fitting. Bound hits under `"sequential"` are often
+update-dynamics artefacts — switch to outer simultaneous before interpreting
+them as scientific nulls.
 
 # Multi-start diagnostics (nonconvex ALS)
 
