@@ -59,6 +59,50 @@ test_that("Poisson PIRLS accepts linear= and improves deviance vs TT-only", {
   expect_true(sign(fit1$beta) == sign(0.8))
 })
 
+test_that("summary() prints glm-style parametric coefficient table", {
+  set.seed(4)
+  n <- 80
+  X <- matrix(runif(n * 2), n, 2)
+  z <- rnorm(n)
+  y <- 1 + 1.5 * z + 0.4 * X[, 1] + rnorm(n, 0, 0.2)
+  L <- cbind(z = z)
+  fit <- ttps(
+    y, X, linear = L, rank = 1, k = 5, lambda = 1,
+    control = tt_control(max_sweeps = 6, compute_edf = TRUE)
+  )
+  s <- summary(fit)
+  expect_true(is.matrix(s$coefficients))
+  expect_equal(colnames(s$coefficients),
+               c("Estimate", "Std. Error", "t value", "Pr(>|t|)"))
+  expect_true("(Intercept)" %in% rownames(s$coefficients))
+  expect_true("z" %in% rownames(s$coefficients))
+  expect_true(is.finite(s$coefficients["z", "Std. Error"]))
+  expect_equal(unname(s$coefficients["z", "Estimate"]), unname(fit$beta))
+  out <- paste(capture.output(print(s)), collapse = "\n")
+  expect_match(out, "Parametric coefficients:")
+  expect_match(out, "Std\\. Error")
+})
+
+test_that("Poisson summary uses z table; aliased DOW get NA SE", {
+  set.seed(5)
+  n <- 100
+  X <- matrix(runif(n * 2), n, 2)
+  dow <- factor(sample(0:6, n, replace = TRUE))
+  L <- model.matrix(~ 0 + dow)
+  eta <- 0.2 + 0.3 * X[, 1]
+  y <- rpois(n, exp(eta))
+  fit <- ttps(
+    y, X, family = poisson(), linear = L, rank = 1, k = 4, lambda = 1,
+    control = tt_control(pirls_maxit = 8, outer_maxit = 1,
+                         als_sweeps_adaptive = FALSE, compute_edf = FALSE)
+  )
+  s <- summary(fit)
+  expect_equal(colnames(s$coefficients)[3], "z value")
+  # full DOW dummies + intercept => at least one aliased column
+  expect_true(any(s$aliased))
+  expect_true(anyNA(s$coefficients[, "Std. Error"]))
+})
+
 test_that("tt_rank_select subsets linear by fold", {
   set.seed(3)
   n <- 60

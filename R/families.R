@@ -136,6 +136,13 @@ tt_eta <- function(offset, intercept, cores, basis,
 normalize_linear <- function(linear, n) {
   n <- as.integer(n)
   if (is.null(linear)) return(NULL)
+  # Idempotent: ttps() + ALS/PIRLS both call this; warn at most once
+  if (isTRUE(attr(linear, "ttps_linear_ok")) && is.matrix(linear)) {
+    if (nrow(linear) != n) {
+      stop("`linear` must have ", n, " rows (same as length(y)).", call. = FALSE)
+    }
+    return(linear)
+  }
   if (is.vector(linear) && !is.list(linear)) {
     linear <- matrix(as.numeric(linear), ncol = 1L)
   }
@@ -146,23 +153,25 @@ normalize_linear <- function(linear, n) {
   }
   if (anyNA(linear)) stop("`linear` contains NA.", call. = FALSE)
   if (ncol(linear) == 0L) return(NULL)
-  # Detect a literal intercept column (all ones)
-  for (j in seq_len(ncol(linear))) {
-    zj <- linear[, j]
-    if (max(abs(zj - 1)) < 1e-10) {
-      warning(
-        "`linear` column ", j, " looks like an intercept; ",
-        "omit it — ttps() already has an intercept.",
-        call. = FALSE
-      )
-      break
-    }
+  # Detect an intercept column (by name or literal ones)
+  ones <- which(vapply(seq_len(ncol(linear)), function(j) {
+    nm <- colnames(linear)[j]
+    if (!is.null(nm) && identical(nm, "(Intercept)")) return(TRUE)
+    max(abs(linear[, j] - 1)) < 1e-10
+  }, logical(1)))
+  if (length(ones)) {
+    warning(
+      "`linear` includes an intercept column (",
+      paste(colnames(linear)[ones], collapse = ", "),
+      "); omit it - ttps() already has an intercept. ",
+      "Prefer model.matrix(~ 0 + ..., data).",
+      call. = FALSE
+    )
   }
-  colnames(linear) <- if (is.null(colnames(linear))) {
-    paste0("linear", seq_len(ncol(linear)))
-  } else {
-    colnames(linear)
+  if (is.null(colnames(linear))) {
+    colnames(linear) <- paste0("linear", seq_len(ncol(linear)))
   }
+  attr(linear, "ttps_linear_ok") <- TRUE
   linear
 }
 

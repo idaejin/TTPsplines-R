@@ -30,13 +30,136 @@ print.ttpspline <- function(x, ...) {
   invisible(x)
 }
 
-#' @export
-summary.ttpspline <- function(object, ...) {
-  structure(object, class = c("summary.ttpspline", "ttpspline"))
+#' Parametric coef table for intercept + `linear` (glm-style).
+#'
+#' SEs treat the fitted TT surface as an offset: Fisher / WLS information
+#' for `Z = [1 | linear]` at the fitted eta, conditional on TT rank and lambda.
+#' Rank-deficient columns (e.g. full DOW dummies) get `NA` SE like `lm`/`glm`.
+#'
+#' @keywords internal
+#' @noRd
+.tt_parametric_coef_table <- function(object) {
+  n <- as.integer(object$n %||% length(object$y))
+  beta <- object$beta %||% numeric(0)
+  L <- object$linear
+  has_L <- !is.null(L) && length(beta) > 0L
+
+  Z <- matrix(1, n, 1L)
+  colnames(Z) <- "(Intercept)"
+  est <- c(`(Intercept)` = as.numeric(object$intercept))
+
+  if (has_L) {
+    L <- as.matrix(L)
+    if (nrow(L) != n) {
+      stop("`linear` rows do not match n.", call. = FALSE)
+    }
+    if (is.null(colnames(L))) {
+      colnames(L) <- names(beta) %||% paste0("linear", seq_len(ncol(L)))
+    }
+    Z <- cbind(Z, L)
+    b <- as.numeric(beta)
+    names(b) <- colnames(L)
+    est <- c(est, b)
+  }
+  # Align names with design columns
+  names(est) <- colnames(Z)
+
+  eta <- object$linear.predictors
+  if (is.null(eta) || length(eta) != n) {
+    off <- object$offset %||% rep(0, n)
+    basis <- .tt_fit_basis(object)
+    eta <- as.numeric(
+      tt_eta(off, object$intercept, object$cores, basis,
+             linear = if (has_L) L else NULL,
+             beta = if (has_L) beta else NULL)
+    )
+  }
+
+  ww <- .tt_inference_weights(object, eta)
+  w <- pmax(as.numeric(ww$weight), 0)
+  key <- object$family_key %||% family_key(object$family)
+
+  p_lin <- ncol(Z)
+  n_obs <- sum(w > 0)
+  edf_tt <- if (is.finite(object$edf)) as.numeric(object$edf) else 0
+  df_res <- max(n_obs - edf_tt - p_lin, 1)
+
+  if (identical(key, "gaussian")) {
+    rss <- sum(w * (as.numeric(object$y) - as.numeric(eta))^2)
+    dispersion <- rss / df_res
+    if (!is.finite(dispersion) || dispersion <= 0) {
+      dispersion <- max(rss / max(n_obs - 1, 1), .Machine$double.eps)
+    }
+    use_t <- TRUE
+  } else {
+    dispersion <- 1
+    use_t <- FALSE
+  }
+
+  sw <- sqrt(w)
+  Zw <- Z * sw
+  qZ <- qr(Zw, tol = 1e-10)
+  rank <- as.integer(qZ$rank)
+  pivot <- as.integer(qZ$pivot)
+  se <- rep(NA_real_, p_lin)
+
+  if (rank > 0L) {
+    R1 <- qr.R(qZ)[seq_len(rank), seq_len(rank), drop = FALSE]
+    Ri <- tryCatch(backsolve(R1, diag(rank)), error = function(e) NULL)
+    if (!is.null(Ri)) {
+      cov_piv <- dispersion * tcrossprod(Ri)
+      se_piv <- sqrt(pmax(diag(cov_piv), 0))
+      se[pivot[seq_len(rank)]] <- se_piv
+    }
+  }
+
+  zval <- est / se
+  if (use_t) {
+    pval <- 2 * stats::pt(-abs(zval), df = df_res)
+    cn <- c("Estimate", "Std. Error", "t value", "Pr(>|t|)")
+  } else {
+    pval <- 2 * stats::pnorm(-abs(zval))
+    cn <- c("Estimate", "Std. Error", "z value", "Pr(>|z|)")
+  }
+
+  coef <- cbind(Estimate = est, `Std. Error` = se,
+                stat = zval, p = pval)
+  colnames(coef) <- cn
+  rownames(coef) <- names(est)
+
+  list(
+    coefficients = coef,
+    dispersion = dispersion,
+    df.residual = if (use_t) df_res else NA_real_,
+    rank = rank,
+    aliased = is.na(se),
+    use_t = use_t,
+    note = paste0(
+      "Parametric SEs treat the fitted TT surface as an offset ",
+      "(conditional on TT rank and lambda; not joint with TT cores)."
+    )
+  )
 }
 
 #' @export
-print.summary.ttpspline <- function(x, ...) {
+summary.ttpspline <- function(object, ...) {
+  tab <- .tt_parametric_coef_table(object)
+  out <- object
+  out$coefficients <- tab$coefficients
+  out$dispersion <- tab$dispersion
+  out$df.residual <- tab$df.residual
+  out$aliased <- tab$aliased
+  out$parametric_rank <- tab$rank
+  out$parametric_note <- tab$note
+  out$use_t <- tab$use_t
+  class(out) <- c("summary.ttpspline", "ttpspline")
+  out
+}
+
+#' @export
+print.summary.ttpspline <- function(x, digits = max(3L, getOption("digits") - 3L),
+                                    signif.stars = getOption("show.signif.stars"),
+                                    ...) {
   cat("Tensor-Train P-spline fit\n\n")
   cat(sprintf("Family:                 %s\n", x$family$family))
   cat(sprintf("Link:                   %s\n", x$family$link))
@@ -71,12 +194,6 @@ print.summary.ttpspline <- function(x, ...) {
   cat(sprintf("Lambda method:          %s\n", x$lambda_method))
   cat(sprintf("Lambda:                 %s\n",
               paste(sprintf("%.6g", x$lambda), collapse = ", ")))
-  if (!is.null(x$beta) && length(x$beta) > 0L) {
-    cat(sprintf("Linear coef (beta):     %s\n",
-                paste(sprintf("%s=%.4g", names(x$beta) %||% seq_along(x$beta),
-                              x$beta),
-                      collapse = ", ")))
-  }
   if (!is.null(x$lambda_boundary) && length(x$lambda_boundary) &&
       (identical(x$lambda_method, "cGCV") || isTRUE(x$lambda_at_boundary))) {
     cat(sprintf("Lambda boundary:        %s\n",
@@ -91,6 +208,34 @@ print.summary.ttpspline <- function(x, ...) {
       cat("      stable hits across starts suggest margin/null/r, not a bad seed.\n")
     }
   }
+
+  # ---- Parametric coefficients (glm-style table) ----
+  if (!is.null(x$coefficients)) {
+    cat("\nParametric coefficients:\n")
+    stats::printCoefmat(
+      x$coefficients,
+      digits = digits,
+      signif.stars = signif.stars,
+      na.print = "NA",
+      ...
+    )
+    if (isTRUE(x$use_t) && is.finite(x$dispersion) && is.finite(x$df.residual)) {
+      cat(sprintf(
+        "\n(Dispersion parameter phi = %s on %s degrees of freedom)\n",
+        format(x$dispersion, digits = digits),
+        format(trunc(x$df.residual))
+      ))
+    } else if (!isTRUE(x$use_t)) {
+      cat("\n(Dispersion parameter for Poisson/Bernoulli family taken to be 1)\n")
+    }
+    if (!is.null(x$parametric_note)) {
+      cat(x$parametric_note, "\n", sep = "")
+    }
+    if (any(x$aliased %||% FALSE)) {
+      cat("Aliased coefficients have Std. Error = NA (rank-deficient design).\n")
+    }
+  }
+
   cat("\n")
   cat(sprintf("Deviance / RSS:         %.6g\n", x$deviance))
   if (is.finite(x$edf)) {
@@ -106,7 +251,7 @@ print.summary.ttpspline <- function(x, ...) {
     note <- x$edf_note %||% "not computed"
     cat(sprintf("EDF:                    NA (%s)\n", note))
   }
-  cat("\nInference:\n")
+  cat("\nInference (TT surface):\n")
   inf <- x$inference
   if (is.null(inf) && is.environment(x$._inf) && !is.null(x$._inf$data)) {
     inf <- x$._inf$data
@@ -123,9 +268,9 @@ print.summary.ttpspline <- function(x, ...) {
                 inf$gauge %||% "left-orthogonal"))
   } else {
     cat("  Not prepared (call vcov(fit) or predict(..., se.fit=TRUE)\n")
-    cat("  for conditional Bayesian/frequentist SE; Gaussian/Poisson/Bernoulli).\n")
-    cat("  Level-1 only: conditional on TT rank and fitted lambda;\n")
-    cat("  pointwise intervals (not simultaneous bands).\n")
+    cat("  for conditional Bayesian/frequentist SE on the TT surface;\n")
+    cat("  Gaussian/Poisson/Bernoulli). Level-1 only: conditional on TT rank\n")
+    cat("  and fitted lambda; pointwise intervals (not simultaneous bands).\n")
   }
   cat(sprintf("\nConverged:              %s\n", x$converged))
   cat(sprintf("ALS sweeps:             %s\n",

@@ -64,7 +64,7 @@ S3method(deviance, ttpspline)
 S3method(print, ttps_sim)
 S3method(as.data.frame, ttps_sim)
 
-importFrom(stats, gaussian, poisson, binomial, optimize, plogis, qlogis, median, quantile, sd, var, cor, rnorm, runif, rpois, rbinom, family, predict, fitted, residuals, coef, deviance, vcov, qnorm)
+importFrom(stats, gaussian, poisson, binomial, optimize, plogis, qlogis, median, quantile, sd, var, cor, rnorm, runif, rpois, rbinom, family, predict, fitted, residuals, coef, deviance, vcov, qnorm, pnorm, pt, printCoefmat)
 importFrom(graphics, plot, par, abline, image, legend, title, matplot, arrows, points)
 importFrom(utils, head, modifyList)
 importFrom(splines, splineDesign)
