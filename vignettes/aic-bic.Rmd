@@ -132,13 +132,18 @@ c(
 )
 ```
 
-Compare two ranks on the **same** data / \(\lambda\) (in-sample IC, not CV):
+Compare two ranks on the **same** data / \(\lambda\) (in-sample IC smoke test,
+**not** scientific rank selection):
 
 ```{r gauss-ranks}
+# WARNING: a single random start + few ALS sweeps can trap low ranks
+# (Ishigami often looks like it "needs" r=3 when r=2 is capacity-adequate).
+# For rank choice use vignette("rank-selection") with n_starts > 1 / CV+1SE.
 fits <- lapply(1:3, function(r) {
   ttps(
     y, X, family = gaussian(), rank = r, k = 8, lambda = 1,
-    control = tt_control(max_sweeps = 6, backend = "R", compute_edf = TRUE)
+    control = tt_control(max_sweeps = 6, backend = "R", compute_edf = TRUE,
+                         seed = 1L)
   )
 })
 data.frame(
@@ -149,6 +154,11 @@ data.frame(
   BIC = vapply(fits, function(f) tt_ic(f, "BIC"), numeric(1))
 )
 ```
+
+Do **not** read a large AIC drop \(r=2\to r=3\) here as proof that Ishigami
+requires rank 3 — see multi-start audit
+`inst/benchmarks/benchmark_ishigami_rank_init.R` and
+`tt_rank_select(..., n_starts = ...)`.
 
 # Poisson example
 

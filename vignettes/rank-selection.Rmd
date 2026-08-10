@@ -63,6 +63,13 @@ ranks, a family-aware validation loss (RMSE for Gaussian), then:
 - **1-SE** rank: the *smallest* \(r\) whose mean CV error is within one
   fold-SE of the minimum.
 
+Optional **`n_starts`**: several random TT initializations per fold×rank;
+the fold keeps the start with best training objective (preferring
+converged fits). Use this when low-rank ALS is init-sensitive — Ishigami at
+\(r=2\) can look “bad” with one start even though capacity is adequate.
+`summary(sel)` then reports `objective_best`, `objective_median`,
+`start_gap` (= median − best), and `start_convergence_rate`.
+
 The 1-SE rule selects the smallest candidate rank whose cross-validated
 error lies within one standard error of the minimum. This is a
 **parsimonious predictive choice**, not a formal test of a “true” tensor
@@ -76,6 +83,7 @@ sel <- tt_rank_select(
   k = 5,
   lambda = 1,          # fixed λ for a fast vignette build
   folds = 4,
+  n_starts = 1L,       # raise for init-sensitive problems
   rule = "1se",
   seed = 1,
   control = tt_control(max_sweeps = 5, compute_edf = FALSE)

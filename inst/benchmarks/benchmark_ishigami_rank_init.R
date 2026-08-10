@@ -172,7 +172,28 @@ if (nrow(ws)) {
   message(sprintf("warm trunc r=2: RSS=%.4g  test RMSE=%.4g",
                   ws$rss[1], ws$rmse_test_f[1]))
 }
+succ <- function(df, thr) mean(df$rss < thr)
+message(sprintf(
+  "Success rates P(RSS<100): r2=%.0f%%  r3=%.0f%% | P(RSS<150): r2=%.0f%%  r3=%.0f%%",
+  100 * succ(r2, 100), 100 * succ(r3, 100),
+  100 * succ(r2, 150), 100 * succ(r3, 150)
+))
 message(
   "If warm/min r=2 RSS approaches r=3: structural capacity OK (init/sweeps).\n",
-  "If r=2 stays ~10x worse: investigate parameterization/penalty before paper claim."
+  "If r=2 stays ~10x worse: investigate parameterization/penalty before paper claim.\n",
+  "Paper framing: minimal representational rank vs computationally robust working rank."
 )
+
+# Success-rate table for paper figure
+succ_tab <- data.frame(
+  rank = c(2L, 3L),
+  n_starts = c(nrow(r2), nrow(r3)),
+  p_rss_lt_100 = c(succ(r2, 100), succ(r3, 100)),
+  p_rss_lt_150 = c(succ(r2, 150), succ(r3, 150)),
+  rss_median = c(median(r2$rss), median(r3$rss)),
+  rss_min = c(min(r2$rss), min(r3$rss)),
+  stringsAsFactors = FALSE
+)
+succ_path <- file.path(out_dir, "ishigami_rank_init_success.csv")
+write.csv(succ_tab, succ_path, row.names = FALSE)
+message("Also wrote: ", succ_path)

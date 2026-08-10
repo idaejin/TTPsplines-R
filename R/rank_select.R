@@ -16,21 +16,28 @@
 #' @param rule `"1se"` (default, parsimonious) or `"min"` (minimum mean CV).
 #' @param metric `"auto"` (family-aware) or one of `"rmse"`, `"poisson_deviance"`,
 #'   `"logloss"`.
-#' @param seed Optional RNG seed for fold assignment (reproducible splits).
+#' @param n_starts Number of random TT initializations per fold×rank (default `1`).
+#'   When `>1`, each fold keeps the start with best **training** objective among
+#'   converged fits (else best objective) for validation scoring. Recommended
+#'   when ALS at low rank is init-sensitive (e.g. Ishigami at `r=2`).
+#' @param seed Optional RNG seed for fold assignment and multi-start inits.
 #' @param keep_fits If `TRUE`, store fold fits (large); default `FALSE`.
 #' @param rank_chain Reserved for future non-uniform rank search; must be `NULL`
 #'   in this version.
 #' @param ... Currently unused (reserved).
 #'
-#' @return An object of class `"tt_rank_selection"`.
+#' @return An object of class `"tt_rank_selection"`. With `n_starts>1`,
+#'   `cv_results` adds `objective_best`, `objective_median`, `objective_sd`,
+#'   `start_gap` (median−best), and `start_convergence_rate`.
 #'
 #' @section Complexity layers:
 #' Rank \(r\) = structural capacity; \(\lambda\) = directional smoothness;
 #' EDF = effective fitted flexibility. These are not interchangeable:
-#' \(r \neq \lambda \neq \mathrm{EDF}\).
+#' \(r \neq \lambda \neq \mathrm{EDF}\). A modestly larger \(r\) can also
+#' improve **optimization robustness**.
 #'
-#' @seealso [tt_rank_refit()], [ttps()], [tt_rank_profile()] (in-sample
-#'   rank diagnostic, not CV).
+#' @seealso [tt_rank_refit()], [ttps()], [tt_truncate_rank()], [tt_rank_profile()]
+#'   (in-sample rank diagnostic, not CV).
 #'
 #' @examples
 #' data(friedman)
@@ -58,6 +65,7 @@ tt_rank_select <- function(y,
                            folds = 5L,
                            rule = c("1se", "min"),
                            metric = c("auto", "rmse", "poisson_deviance", "logloss"),
+                           n_starts = 1L,
                            seed = NULL,
                            keep_fits = FALSE,
                            knots = NULL,
@@ -100,10 +108,15 @@ tt_rank_select <- function(y,
   if (folds < 2L || folds > n) {
     stop("`folds` must satisfy 2 <= folds <= n.", call. = FALSE)
   }
+  n_starts <- as.integer(n_starts)[1L]
+  if (!is.finite(n_starts) || n_starts < 1L) {
+    stop("`n_starts` must be a positive integer.", call. = FALSE)
+  }
 
   offset_full <- normalize_offset(offset, n)
   weights_full <- normalize_weights(weights, n)
   fold_id <- .tt_make_fold_id(n, folds, seed)
+  seed0 <- if (is.null(seed)) 1L else as.integer(seed)[1L]
 
   # CV fits: skip EDF (costly / irrelevant for selection)
   ctrl <- control
@@ -138,6 +151,9 @@ tt_rank_select <- function(y,
                      dimnames = dimnames(loss_mat))
   lambda_list <- vector("list", length(ranks))
   names(lambda_list) <- as.character(ranks)
+  start_obj <- vector("list", length(ranks))
+  start_conv <- vector("list", length(ranks))
+  names(start_obj) <- names(start_conv) <- as.character(ranks)
   fold_fits <- if (isTRUE(keep_fits)) {
     vector("list", length(ranks))
   } else {
@@ -148,6 +164,8 @@ tt_rank_select <- function(y,
   for (i in seq_along(ranks)) {
     r <- ranks[i]
     lambda_list[[i]] <- vector("list", folds)
+    start_obj[[i]] <- matrix(NA_real_, folds, n_starts)
+    start_conv[[i]] <- matrix(FALSE, folds, n_starts)
     if (isTRUE(keep_fits)) fold_fits[[i]] <- vector("list", folds)
     for (f in seq_len(folds)) {
       test <- fold_id == f
@@ -156,49 +174,91 @@ tt_rank_select <- function(y,
       off_te <- offset_full[test]
       w_tr <- weights_full[train]
       w_te <- weights_full[test]
-      t0 <- proc.time()[["elapsed"]]
-      fit <- tryCatch(
-        ttps(
-          y[train], X[train, , drop = FALSE],
-          family = fam,
-          rank = r,
-          k = k,
-          degree = degree,
-          penalty_order = penalty_order,
-          lambda = lambda,
-          optimizer = optimizer,
-          backend = backend,
-          control = ctrl,
-          knots = knots,
-          offset = off_tr,
-          weights = w_tr
-        ),
-        error = function(e) e
-      )
-      elapsed <- proc.time()[["elapsed"]] - t0
-      time_mat[i, f] <- elapsed
-      if (inherits(fit, "error")) {
+      y_tr <- y[train]
+      X_tr <- X[train, , drop = FALSE]
+      X_te <- X[test, , drop = FALSE]
+
+      best_fit <- NULL
+      best_obj <- Inf
+      best_conv <- FALSE
+      best_lam <- NA_real_
+      t_fold <- 0
+      for (s in seq_len(n_starts)) {
+        init_seed <- as.integer(seed0 + 1000L * r + 100L * f + s)
+        init <- tt_initialize(
+          X_tr, rank = r, k = k, seed = init_seed,
+          sd = ctrl$init_sd %||% 0.15
+        )
+        ctrl_s <- ctrl
+        ctrl_s$seed <- init_seed
+        t0 <- proc.time()[["elapsed"]]
+        fit <- tryCatch(
+          ttps(
+            y_tr, X_tr,
+            family = fam,
+            rank = r,
+            k = k,
+            degree = degree,
+            penalty_order = penalty_order,
+            lambda = lambda,
+            optimizer = optimizer,
+            backend = backend,
+            init = init,
+            control = ctrl_s,
+            knots = knots,
+            offset = off_tr,
+            weights = w_tr
+          ),
+          error = function(e) e
+        )
+        t_fold <- t_fold + (proc.time()[["elapsed"]] - t0)
+        if (inherits(fit, "error")) {
+          start_obj[[i]][f, s] <- Inf
+          start_conv[[i]][f, s] <- FALSE
+          next
+        }
+        obj <- tryCatch({
+          o <- tt_objective(fit, X_tr, y_tr)
+          as.numeric(o$value)
+        }, error = function(e) as.numeric(fit$deviance))
+        if (!is.finite(obj)) obj <- Inf
+        start_obj[[i]][f, s] <- obj
+        start_conv[[i]][f, s] <- isTRUE(fit$converged)
+        better <- FALSE
+        if (isTRUE(fit$converged) && !best_conv) {
+          better <- TRUE
+        } else if ((isTRUE(fit$converged) == best_conv) && (obj < best_obj)) {
+          better <- TRUE
+        }
+        if (better) {
+          best_fit <- fit
+          best_obj <- obj
+          best_conv <- isTRUE(fit$converged)
+          best_lam <- as.numeric(fit$lambda)
+        }
+      }
+      time_mat[i, f] <- t_fold
+      if (is.null(best_fit)) {
         loss_mat[i, f] <- Inf
         conv_mat[i, f] <- FALSE
         lambda_list[[i]][[f]] <- NA_real_
         next
       }
       mu <- tryCatch(
-        predict(fit, newdata = X[test, , drop = FALSE],
-                type = "response", offset = off_te),
+        predict(best_fit, newdata = X_te, type = "response", offset = off_te),
         error = function(e) NULL
       )
       if (is.null(mu) || anyNA(mu) || !all(is.finite(mu))) {
         loss_mat[i, f] <- Inf
         conv_mat[i, f] <- FALSE
-        lambda_list[[i]][[f]] <- as.numeric(fit$lambda)
+        lambda_list[[i]][[f]] <- best_lam
         next
       }
       loss_mat[i, f] <- .tt_cv_loss(y[test], mu, metric = metric, family = fam,
                                    weights = w_te)
-      conv_mat[i, f] <- isTRUE(fit$converged)
-      lambda_list[[i]][[f]] <- as.numeric(fit$lambda)
-      if (isTRUE(keep_fits)) fold_fits[[i]][[f]] <- fit
+      conv_mat[i, f] <- best_conv
+      lambda_list[[i]][[f]] <- best_lam
+      if (isTRUE(keep_fits)) fold_fits[[i]][[f]] <- best_fit
     }
   }
 
@@ -210,7 +270,10 @@ tt_rank_select <- function(y,
     lambda_list = lambda_list,
     lambda_method = lambda_method,
     d = d,
-    p = p
+    p = p,
+    start_obj = start_obj,
+    start_conv = start_conv,
+    n_starts = n_starts
   )
 
   rank_min <- .tt_rank_min_cv(cv_results)
@@ -223,11 +286,14 @@ tt_rank_select <- function(y,
       metric = metric,
       metric_requested = metric_arg,
       folds = folds,
+      n_starts = n_starts,
       fold_id = fold_id,
       cv_results = cv_results,
       loss_by_fold = loss_mat,
       time_by_fold = time_mat,
       converged_by_fold = conv_mat,
+      start_objective = start_obj,
+      start_converged = start_conv,
       lambda_by_fold = lambda_list,
       rank_min = rank_min,
       rank_1se = rank_1se,
@@ -302,7 +368,7 @@ tt_rank_refit <- function(object,
   }
   extra$weights <- NULL
   if (length(extra)) args <- utils::modifyList(args, extra)
-  do.call(ttpspline, args)
+  do.call(ttps, args)
 }
 
 # ---- internals -------------------------------------------------------------
@@ -358,7 +424,9 @@ tt_rank_refit <- function(object,
 #' @keywords internal
 #' @noRd
 .tt_summarize_rank_cv <- function(ranks, loss_mat, time_mat, conv_mat,
-                                  lambda_list, lambda_method, d, p) {
+                                  lambda_list, lambda_method, d, p,
+                                  start_obj = NULL, start_conv = NULL,
+                                  n_starts = 1L) {
   rows <- lapply(seq_along(ranks), function(i) {
     r <- ranks[i]
     losses <- as.numeric(loss_mat[i, ])
@@ -382,6 +450,20 @@ tt_rank_refit <- function(object,
       }))
       lam_mean <- colMeans(lam_mat, na.rm = TRUE)
     }
+    # Multi-start train-objective stability (pooled over folds × starts)
+    obj_best <- obj_med <- obj_sd <- start_gap <- start_conv_rate <- NA_real_
+    if (!is.null(start_obj) && length(start_obj) >= i) {
+      objs <- as.numeric(start_obj[[i]])
+      convs <- as.logical(start_conv[[i]])
+      finite_o <- is.finite(objs)
+      if (any(finite_o)) {
+        obj_best <- min(objs[finite_o])
+        obj_med <- stats::median(objs[finite_o])
+        obj_sd <- if (sum(finite_o) > 1) stats::sd(objs[finite_o]) else 0
+        start_gap <- obj_med - obj_best
+      }
+      start_conv_rate <- mean(convs)
+    }
     data.frame(
       rank = r,
       mean_cv = mean_cv,
@@ -396,6 +478,12 @@ tt_rank_refit <- function(object,
       total_time = sum(times, na.rm = TRUE),
       n_finite_folds = K,
       lambda_mean = if (length(lam_mean) == 1L) lam_mean else mean(lam_mean, na.rm = TRUE),
+      n_starts = as.integer(n_starts),
+      objective_best = obj_best,
+      objective_median = obj_med,
+      objective_sd = obj_sd,
+      start_gap = start_gap,
+      start_convergence_rate = start_conv_rate,
       stringsAsFactors = FALSE
     )
   })
@@ -431,6 +519,7 @@ print.tt_rank_selection <- function(x, digits = 3, ...) {
   cat(sprintf("Family:             %s\n", x$family$family))
   cat(sprintf("Metric:             %s\n", x$metric))
   cat(sprintf("Folds:              %d\n", x$folds))
+  cat(sprintf("Starts per fold:    %d\n", x$n_starts %||% 1L))
   lam_lab <- if (identical(x$lambda_method, "cGCV")) {
     "cGCV"
   } else if (is.numeric(x$lambda)) {
@@ -449,6 +538,10 @@ print.tt_rank_selection <- function(x, digits = 3, ...) {
     Compression = sprintf("%.1fx", tab$compression),
     check.names = FALSE
   )
+  if (!is.null(tab$start_gap) && (x$n_starts %||% 1L) > 1L) {
+    show[["start_gap"]] <- round(tab$start_gap, digits)
+    show[["start_conv"]] <- round(tab$start_convergence_rate, 2)
+  }
   print(show, row.names = FALSE)
   cat("\n")
   cat(sprintf("Minimum-CV rank:    %d\n", x$rank_min))
@@ -480,6 +573,20 @@ print.summary.tt_rank_selection <- function(x, digits = 4, ...) {
     stringsAsFactors = FALSE
   )
   print(show, row.names = FALSE)
+  if (!is.null(tab$objective_best) && (x$n_starts %||% 1L) > 1L) {
+    cat("\nMulti-start train-objective stability\n")
+    stab <- data.frame(
+      rank = tab$rank,
+      obj_best = round(tab$objective_best, digits),
+      obj_median = round(tab$objective_median, digits),
+      obj_sd = round(tab$objective_sd, digits),
+      start_gap = round(tab$start_gap, digits),
+      start_conv = round(tab$start_convergence_rate, 2),
+      stringsAsFactors = FALSE
+    )
+    print(stab, row.names = FALSE)
+    cat("start_gap = objective_median - objective_best (large ⇒ init-sensitive).\n")
+  }
   cat(sprintf("\nTotal CV wall time: %.3fs\n", x$timings$total_s))
   cat("SE is fold-to-fold variability of the CV loss, not a formal rank test.\n")
   if (identical(x$lambda_method, "cGCV")) {

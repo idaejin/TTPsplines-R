@@ -19,6 +19,7 @@ tt_rank_select(
   folds = 5L,
   rule = c("1se", "min"),
   metric = c("auto", "rmse", "poisson_deviance", "logloss"),
+  n_starts = 1L,
   seed = NULL,
   keep_fits = FALSE,
   knots = NULL,
@@ -42,7 +43,12 @@ tt_rank_select(
 \item{metric}{\code{"auto"} (family-aware) or one of \code{"rmse"}, \code{"poisson_deviance"},
 \code{"logloss"}.}
 
-\item{seed}{Optional RNG seed for fold assignment (reproducible splits).}
+\item{n_starts}{Number of random TT initializations per fold×rank (default \code{1}).
+When \verb{>1}, each fold keeps the start with best \strong{training} objective among
+converged fits (else best objective) for validation scoring. Recommended
+when ALS at low rank is init-sensitive (e.g. Ishigami at \code{r=2}).}
+
+\item{seed}{Optional RNG seed for fold assignment and multi-start inits.}
 
 \item{keep_fits}{If \code{TRUE}, store fold fits (large); default \code{FALSE}.}
 
@@ -52,7 +58,9 @@ in this version.}
 \item{...}{Currently unused (reserved).}
 }
 \value{
-An object of class \code{"tt_rank_selection"}.
+An object of class \code{"tt_rank_selection"}. With \code{n_starts>1},
+\code{cv_results} adds \code{objective_best}, \code{objective_median}, \code{objective_sd},
+\code{start_gap} (median−best), and \code{start_convergence_rate}.
 }
 \description{
 Chooses a uniform TT rank \(r\) (chain \verb{(1,r,...,r,1)}) using out-of-sample
@@ -68,7 +76,8 @@ fold's training portion (no validation leakage into cGCV).
 
 Rank \(r\) = structural capacity; \(\lambda\) = directional smoothness;
 EDF = effective fitted flexibility. These are not interchangeable:
-\(r \neq \lambda \neq \mathrm{EDF}\).
+\(r \neq \lambda \neq \mathrm{EDF}\). A modestly larger \(r\) can also
+improve \strong{optimization robustness}.
 }
 
 \examples{
@@ -84,6 +93,6 @@ fit <- tt_rank_refit(sel)
 
 }
 \seealso{
-\code{\link[=tt_rank_refit]{tt_rank_refit()}}, \code{\link[=ttps]{ttps()}}, \code{\link[=tt_rank_profile]{tt_rank_profile()}} (in-sample
-rank diagnostic, not CV).
+\code{\link[=tt_rank_refit]{tt_rank_refit()}}, \code{\link[=ttps]{ttps()}}, \code{\link[=tt_truncate_rank]{tt_truncate_rank()}}, \code{\link[=tt_rank_profile]{tt_rank_profile()}}
+(in-sample rank diagnostic, not CV).
 }

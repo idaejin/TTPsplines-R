@@ -1,3 +1,25 @@
+test_that("n_starts multi-init records stability and is reproducible", {
+  set.seed(8)
+  n <- 90
+  X <- matrix(runif(n * 3), n, 3)
+  y <- sin(2 * pi * X[, 1]) * cos(2 * pi * X[, 2]) + rnorm(n, 0, 0.3)
+  ctrl <- tt_control(max_sweeps = 3L, compute_edf = FALSE)
+  a <- tt_rank_select(
+    y, X, ranks = 1:2, k = 4, lambda = 1, folds = 3,
+    n_starts = 2L, seed = 11, control = ctrl
+  )
+  b <- tt_rank_select(
+    y, X, ranks = 1:2, k = 4, lambda = 1, folds = 3,
+    n_starts = 2L, seed = 11, control = ctrl
+  )
+  expect_equal(a$n_starts, 2L)
+  expect_true(all(c("objective_best", "objective_median", "start_gap",
+                    "start_convergence_rate") %in% names(a$cv_results)))
+  expect_equal(dim(a$start_objective[["2"]]), c(3L, 2L))
+  expect_equal(a$cv_results$mean_cv, b$cv_results$mean_cv, tolerance = 1e-10)
+  expect_equal(a$selected_rank, b$selected_rank)
+})
+
 test_that("tt_rank_select is reproducible with seed and shares folds", {
   set.seed(10)
   n <- 120
@@ -101,10 +123,6 @@ test_that("invalid ranks / rank_chain / refit / S3 methods", {
 })
 
 test_that("cGCV path uses training rows only (no validation leakage)", {
-  # Construct data where validation responses differ wildly from training.
-  # If cGCV saw validation y, lambda/fit would change; we check that swapping
-  # only validation y after fold_id is fixed does not change training lambdas
-  # when we re-run selection with the same seed and identical training y.
   set.seed(11)
   n <- 90
   X <- matrix(runif(n * 3), n, 3)
@@ -113,21 +131,20 @@ test_that("cGCV path uses training rows only (no validation leakage)", {
                      tol_lambda = 5e-2, lambda_bounds = c(1e-2, 1e2),
                      warn_lambda_boundary = FALSE)
   fold_id <- .tt_make_fold_id(n, 3L, seed = 99L)
-  # Fit one fold manually: train-only cGCV
   train <- fold_id != 1L
-  fit_tr <- ttps(y[train], X[train, , drop = FALSE], rank = 1, k = 5,
-                      lambda = "cGCV", control = ctrl)
-  # Poison validation y; training unchanged → same lambda if we refit train
+
+  # Poison only validation y; training rows identical → training λ unchanged
   y2 <- y
   y2[!train] <- y2[!train] + 50
-  fit_tr2 <- ttps(y2[train], X[train, , drop = FALSE], rank = 1, k = 5,
-                       lambda = "cGCV", control = ctrl)
-  expect_equal(fit_tr$lambda, fit_tr2$lambda, tolerance = 1e-10)
-
-  # Full selector stores per-fold lambdas from training fits
   sel <- tt_rank_select(y, X, ranks = 1, k = 5, lambda = "cGCV", folds = 3,
                         seed = 99, control = ctrl)
+  sel2 <- tt_rank_select(y2, X, ranks = 1, k = 5, lambda = "cGCV", folds = 3,
+                         seed = 99, control = ctrl)
   expect_equal(sel$fold_id, fold_id)
-  expect_equal(sel$lambda_by_fold[["1"]][[1]], as.numeric(fit_tr$lambda),
-               tolerance = 1e-8)
+  expect_equal(sel2$fold_id, fold_id)
+  expect_equal(sel$lambda_by_fold[["1"]][[1]], sel2$lambda_by_fold[["1"]][[1]],
+               tolerance = 1e-10)
+  # Fold-1 training λ should be finite length-d
+  lam <- sel$lambda_by_fold[["1"]][[1]]
+  expect_true(is.numeric(lam) && length(lam) == 3L && all(is.finite(lam)))
 })

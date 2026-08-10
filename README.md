@@ -205,12 +205,15 @@ For predictive choice of \(r\):
 
 ```r
 sel <- tt_rank_select(y, X, ranks = 1:5, lambda = 1, folds = 5, rule = "1se")
+# init-sensitive problems (e.g. Ishigami at low r):
+# sel <- tt_rank_select(..., n_starts = 5)
 sel
 plot(sel)
 fit <- tt_rank_refit(sel)   # full-data refit at selected_rank
 ```
 
 Vignette: `vignette("rank-selection", package = "TTPsplines")`.
+Warm-start from a neighbouring rank: `tt_truncate_rank(fit$cores, rank = 2)`.
 
 ## Choosing λ (cGCV)
 
