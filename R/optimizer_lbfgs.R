@@ -303,7 +303,7 @@ tt_lbfgs_fit <- function(y, basis, ranks, lambda_spec, control,
       n_outer <- outer
       history[[outer]] <- list(outer = outer, lambda = lambda, value = fit0$opt$value)
       if (control$trace) {
-        cat(sprintf("  LBFGS-cGCV outer %2d | λ=%s\n",
+        cat(sprintf("  LBFGS-cGCV outer %2d | lambda=%s\n",
                     outer, paste(sprintf("%.3g", lambda), collapse = ",")))
       }
       dlog <- max(abs(log(lambda) - log(pmax(prev_lam, 1e-12))))

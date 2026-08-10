@@ -81,7 +81,7 @@ print.summary.ttpspline <- function(x, ...) {
                   format(x$lambda_bounds[2], digits = 4)))
     }
     if (isTRUE(x$lambda_at_boundary)) {
-      cat("Note: λ at search bound — for init diagnostics see ttps_multistart();\n")
+      cat("Note: lambda at search bound - for init diagnostics see ttps_multistart();\n")
       cat("      stable hits across starts suggest margin/null/r, not a bad seed.\n")
     }
   }

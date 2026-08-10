@@ -257,7 +257,7 @@ print.ttps_multistart <- function(x, ...) {
     cat(sprintf("  Objective range: [%.6g, %.6g]\n", min(objs), max(objs)))
   }
   if (any(st$lambda_at_boundary, na.rm = TRUE)) {
-    cat(sprintf("  Starts at λ boundary: %d / %d\n",
+    cat(sprintf("  Starts at lambda boundary: %d / %d\n",
                 sum(st$lambda_at_boundary, na.rm = TRUE),
                 sum(!is.na(st$lambda_at_boundary))))
   }

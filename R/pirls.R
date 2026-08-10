@@ -426,7 +426,7 @@ tt_pirls_fit_cgcv_outer <- function(y, basis, family, ranks, lambda_spec,
 
     if (isTRUE(control$trace)) {
       cat(sprintf(
-        "  cGCV-outer %2d | dev=%.6g | λ=%s\n",
+        "  cGCV-outer %2d | dev=%.6g | lambda=%s\n",
         outer, fit_last$deviance,
         paste(sprintf("%.3g", lambda), collapse = ",")
       ))

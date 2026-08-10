@@ -175,7 +175,7 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
     )
     prev_eta <- eta
     if (control$trace) {
-      cat(sprintf("  ALS sweep %2d | obj=%.6g | RSS=%.6g | λ=%s\n",
+      cat(sprintf("  ALS sweep %2d | obj=%.6g | RSS=%.6g | lambda=%s\n",
                   sw, obj, rss, paste(sprintf("%.3g", lambda), collapse = ",")))
     }
     if (identical(method, "cGCV")) {
@@ -312,7 +312,7 @@ tt_als_fit_cgcv_outer <- function(y, basis, ranks, lambda_spec, control,
 
     if (isTRUE(control$trace)) {
       cat(sprintf(
-        "  cGCV-outer %2d | obj=%.6g | λ=%s\n",
+        "  cGCV-outer %2d | obj=%.6g | lambda=%s\n",
         outer, obj, paste(sprintf("%.3g", lambda), collapse = ",")
       ))
     }

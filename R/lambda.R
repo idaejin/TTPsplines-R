@@ -351,7 +351,7 @@ make_core_workspace <- function(zc, X, P, lambda0, bounds, tol,
       "Note: ", paste(parts, collapse = "; "),
       " near the cGCV search boundaries [",
       format(bounds[1], digits = 4), ", ", format(bounds[2], digits = 4), "]. ",
-      "Interpret directional λ cautiously; consider widening lambda_bounds ",
+      "Interpret directional lambda cautiously; consider widening lambda_bounds ",
       "or inspecting the surface.",
       call. = FALSE
     )

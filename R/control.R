@@ -238,8 +238,8 @@ normalize_penalty_mode <- function(mode) {
   if (mode %in% c("own_margin", "separable")) {
     stop(
       "penalty_mode '", mode, "' was removed: it is not the classical ",
-      "multidimensional P-spline penalty on Θ. ",
-      "TTPsplines always uses J_λ(Θ) = sum_m λ_m ||Θ ×_m Δ||_F^2.",
+      "multidimensional P-spline penalty on Theta. ",
+      "TTPsplines always uses J_lambda(Theta) = sum_m lambda_m ||Theta x_m Delta||_F^2.",
       call. = FALSE
     )
   }
@@ -260,7 +260,7 @@ resolve_backend <- function(control, optimizer = "ALS") {
   if (optimizer %in% c("ALS", "PIRLS", "auto")) {
     if (identical(be, "Rcpp")) {
       warning(
-        "ALS/PIRLS sweeps use the classical global penalty on Θ and run in R; ",
+        "ALS/PIRLS sweeps use the classical global penalty on Theta and run in R; ",
         "Rcpp accelerates P_k^full / global-penalty helpers when available.",
         call. = FALSE
       )

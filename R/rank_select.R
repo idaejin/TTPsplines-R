@@ -752,7 +752,7 @@ print.summary.tt_rank_selection <- function(x, digits = 4, ...) {
       stringsAsFactors = FALSE
     )
     print(stab, row.names = FALSE)
-    cat("start_gap = objective_median - objective_best (large ⇒ init-sensitive).\n")
+    cat("start_gap = objective_median - objective_best (large => init-sensitive).\n")
   }
   cat(sprintf("\nTotal CV wall time: %.3fs\n", x$timings$total_s))
   cat("SE is fold-to-fold variability of the CV loss, not a formal rank test.\n")
