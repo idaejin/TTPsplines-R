@@ -1,11 +1,34 @@
+#' Default spline domain for a margin (open or cyclic).
+#'
+#' If all finite values lie in \([0,1]\) (within a tiny tolerance), use the
+#' unit interval so prediction on a nice \([0,1]\) grid does not fall outside
+#' the knot span (which would zero the B-spline basis under `outer.ok`).
+#' Otherwise use the empirical range.
+#' @keywords internal
+#' @noRd
+default_basis_domain <- function(x) {
+  xr <- range(x, na.rm = TRUE)
+  if (xr[1] >= -1e-9 && xr[2] <= 1 + 1e-9) {
+    return(c(0, 1))
+  }
+  xr
+}
+
 #' Open knot sequence for a univariate B-spline basis.
 #' @keywords internal
-make_knots <- function(x, k, degree = 3) {
+make_knots <- function(x, k, degree = 3, xl = NULL, xr = NULL) {
   stopifnot(is.numeric(x), length(x) > 0, k > degree)
-  xr <- range(x, na.rm = TRUE)
-  inner <- seq(xr[1], xr[2], length.out = k - degree + 1)
+  if (is.null(xl) || is.null(xr)) {
+    dom <- default_basis_domain(x)
+    if (is.null(xl)) xl <- dom[1]
+    if (is.null(xr)) xr <- dom[2]
+  }
+  if (!(is.finite(xl) && is.finite(xr) && xr > xl)) {
+    stop("make_knots needs finite xl < xr.", call. = FALSE)
+  }
+  inner <- seq(xl, xr, length.out = k - degree + 1)
   inner <- inner[-c(1, length(inner))]
-  c(rep(xr[1], degree + 1), inner, rep(xr[2], degree + 1))
+  c(rep(xl, degree + 1), inner, rep(xr, degree + 1))
 }
 
 #' Cyclic B-spline basis on [xl, xr] with `k` periodic functions (Eilers-style).
@@ -108,15 +131,11 @@ cyclic_period_range <- function(x, period = NULL) {
     }
     return(period)
   }
-  # Default: unit interval when data lie in [0,1]; else data range
-  xr <- range(x, na.rm = TRUE)
-  if (xr[1] >= -1e-9 && xr[2] <= 1 + 1e-9) {
-    return(c(0, 1))
-  }
-  if (diff(xr) < .Machine$double.eps) {
+  dom <- default_basis_domain(x)
+  if (diff(dom) < .Machine$double.eps) {
     stop("cyclic margin has zero range; pass period = c(xl, xr).", call. = FALSE)
   }
-  xr
+  dom
 }
 
 #' Build marginal bases for columns of X (scattered observations).
@@ -216,6 +235,27 @@ eval_marginal_bases <- function(Xnew, knots, degree, cyclic = NULL) {
     cyclic <- vapply(knots, function(kn) isTRUE(attr(kn, "cyclic")), logical(1))
   } else {
     cyclic <- normalize_cyclic(cyclic, d)
+  }
+  for (j in seq_len(d)) {
+    if (cyclic[j]) next
+    kn <- as.numeric(knots[[j]])
+    xl <- min(kn)
+    xr <- max(kn)
+    xj <- Xnew[, j]
+    if (any(xj < xl - 1e-10 | xj > xr + 1e-10, na.rm = TRUE)) {
+      warning(
+        sprintf(
+          paste0(
+            "newdata margin %d has values outside knot span [%.4g, %.4g]; ",
+            "open B-splines evaluate to 0 there (prediction collapses toward ",
+            "the intercept). Prefer knots covering the prediction domain ",
+            "(unit-interval covariates now default to [0,1])."
+          ),
+          j, xl, xr
+        ),
+        call. = FALSE
+      )
+    }
   }
   lapply(seq_len(d), function(j) {
     if (cyclic[j]) {

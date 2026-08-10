@@ -48,9 +48,12 @@ n <- 400
 X <- matrix(runif(n * 2), n, 2)
 f <- sin(2 * pi * X[, 1]) * cos(2 * pi * X[, 2])
 y <- f + rnorm(n, 0, 0.3)
+# Unit-cube covariates → open B-spline knots on [0, 1] (not empirical
+# range(X)), so prediction on seq(0,1) stays inside the knot span.
+# Mild fixed λ: λ = 1 oversmooths this amplitude-1 interaction.
 fit <- ttps(
-  y, X, family = gaussian(), rank = 2, k = 6, lambda = 1,
-  control = tt_control(max_sweeps = 10, seed = 1)
+  y, X, family = gaussian(), rank = 2, k = 8, lambda = 0.01,
+  control = tt_control(max_sweeps = 15, seed = 1)
 )
 summary(fit)
 ```
@@ -95,6 +98,12 @@ legend("topright",
        lty = c(1, 2, 1), lwd = c(2, 1, 2),
        col = c("black", "grey40", "firebrick"), bty = "n")
 ```
+
+Bands are **conditional** on \((r,\lambda)\): they do not inflate for
+smoothing-parameter or rank selection, and they do not correct
+approximation bias. Truth outside the band can still happen under misspecified
+\(\lambda\) / \(r\) or a coarse basis.
+
 
 # What is still open
 

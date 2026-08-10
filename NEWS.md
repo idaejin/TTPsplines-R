@@ -26,3 +26,10 @@
   Use when cGCV λ hits search bounds or low-\(r\) ALS looks init-sensitive.
   `summary()` of cGCV fits with boundary hits points here.
 * Rank CV multi-start remains `tt_rank_select(..., n_starts = ...)`.
+
+### Bases / prediction
+
+* Open B-spline knots for covariates in \([0,1]\) now span the **unit
+  interval** (same heuristic as cyclic margins), so `predict()` on
+  `seq(0,1)` no longer collapses to the intercept outside `range(X)`.
+* Soft warning when `newdata` falls outside a non-cyclic knot span.
