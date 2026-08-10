@@ -75,13 +75,15 @@ fit <- ttps(
     lambda_bounds = c(1e-4, 1e4),
     warn_lambda_boundary = TRUE,
     compute_edf = FALSE,
-    outer_maxit = 6,
-    cgcv_fit_sweeps = 4
+    outer_maxit = 6
+    # defaults: cgcv_update = "outer_simultaneous",
+    # cgcv_damping = 0.25, cgcv_max_log10_step = 1
   )
 )
+cgcv_upd <- if (!is.null(fit$cgcv$update)) fit$cgcv$update else NA_character_
 c(
   method = fit$lambda_method,
-  update = fit$cgcv$update,
+  update = cgcv_upd,
   lambda = paste(sprintf("%.4g", fit$lambda), collapse = ", "),
   boundary = paste(fit$lambda_boundary, collapse = ", ")
 )
