@@ -8,7 +8,7 @@ test_that("Poisson offset is used in eta and predict", {
   y <- rpois(n, mu)
   off <- log(exposure)
 
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, family = poisson(), rank = 2, k = 6, lambda = 1,
     offset = off,
     control = tt_control(pirls_maxit = 20, backend = "R", compute_edf = FALSE)
@@ -36,7 +36,7 @@ test_that("GLAM and TT with same offset recover similar means on grid", {
   X <- as.matrix(expand.grid(age = dat$age, year = dat$year))
   y <- as.numeric(dat$Y)
   off <- log(as.numeric(dat$exposure))
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, family = poisson(), rank = 3, k = 8, lambda = c(5, 1),
     offset = off,
     control = tt_control(pirls_maxit = 20, max_sweeps = 8, backend = "R",

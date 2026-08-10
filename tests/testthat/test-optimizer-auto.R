@@ -7,7 +7,7 @@ test_that("auto resolves family-aware defaults transparently", {
                      compute_edf = FALSE)
 
   y_g <- sin(2 * pi * X[, 1]) + rnorm(n, 0, 0.2)
-  fit_g <- ttpspline(y_g, X, family = gaussian(), rank = 2, k = 5,
+  fit_g <- ttps(y_g, X, family = gaussian(), rank = 2, k = 5,
                      lambda = 1, optimizer = "auto", control = ctrl)
   expect_equal(fit_g$optimizer_requested, "auto")
   expect_equal(fit_g$optimizer_used, "ALS")
@@ -15,7 +15,7 @@ test_that("auto resolves family-aware defaults transparently", {
   expect_equal(fit_g$optimizer_reason, "gaussian family default")
 
   y_p <- rpois(n, exp(0.5 * sin(2 * pi * X[, 1])))
-  fit_p <- ttpspline(y_p, X, family = poisson(), rank = 2, k = 5,
+  fit_p <- ttps(y_p, X, family = poisson(), rank = 2, k = 5,
                      lambda = 1, optimizer = "auto", control = ctrl)
   expect_equal(fit_p$optimizer_requested, "auto")
   expect_equal(fit_p$optimizer_used, "PIRLS-ALS")
@@ -23,7 +23,7 @@ test_that("auto resolves family-aware defaults transparently", {
   expect_equal(fit_p$optimizer_reason, "poisson family default")
 
   y_b <- rbinom(n, 1, plogis(sin(2 * pi * X[, 1])))
-  fit_b <- ttpspline(y_b, X, family = binomial(), rank = 2, k = 5,
+  fit_b <- ttps(y_b, X, family = binomial(), rank = 2, k = 5,
                      lambda = 1, optimizer = "auto", control = ctrl)
   expect_equal(fit_b$optimizer_requested, "auto")
   expect_equal(fit_b$optimizer_used, "LBFGS")
@@ -41,7 +41,7 @@ test_that("manual optimizer override is recorded as user-specified", {
   n <- 80
   X <- matrix(runif(n * 2), n, 2)
   y <- rbinom(n, 1, 0.4)
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, family = binomial(), rank = 2, k = 4, lambda = 2,
     optimizer = "PIRLS-ALS",
     control = tt_control(backend = "R", pirls_maxit = 10L,

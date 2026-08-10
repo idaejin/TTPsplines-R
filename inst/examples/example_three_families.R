@@ -32,7 +32,7 @@ f <- sin(2 * pi * X[, 1]) * cos(2 * pi * X[, 2]) + 0.4 * X[, 3]
 
 cat("\n--- Gaussian (auto -> ALS) ---\n")
 yg <- f + rnorm(n, 0, 0.3)
-fit_g <- ttpspline(
+fit_g <- ttps(
   yg, X, family = gaussian(), rank = 2, k = 8, lambda = "cGCV",
   control = tt_control(max_sweeps = 10, backend = "auto", compute_edf = FALSE)
 )
@@ -47,7 +47,7 @@ print(summary(fit_g))
 
 cat("\n--- Poisson (auto -> PIRLS-ALS) ---\n")
 yp <- rpois(n, exp(f - mean(f) + log(3)))
-fit_p <- ttpspline(
+fit_p <- ttps(
   yp, X, family = poisson(), rank = 2, k = 8, lambda = 1,
   control = tt_control(pirls_maxit = 20, als_sweeps_per_pirls = 3,
                        backend = "auto", compute_edf = FALSE)
@@ -58,7 +58,7 @@ print(summary(fit_p))
 
 cat("\n--- Bernoulli (auto -> LBFGS) ---\n")
 yb <- rbinom(n, 1, plogis(1.5 * (f - mean(f))))
-fit_b <- ttpspline(
+fit_b <- ttps(
   yb, X, family = binomial(), rank = 2, k = 8, lambda = 5,
   control = tt_control(lbfgs_maxit = 200, backend = "auto", compute_edf = FALSE)
 )

@@ -32,7 +32,7 @@ local({
         backend = "auto", pirls_maxit = 15L, als_sweeps_per_pirls = 3L, seed = 8L
       )
       t0 <- proc.time()[["elapsed"]]
-      fit <- ttpspline(
+      fit <- ttps(
         dat$y, dat$X,
         family = poisson(),
         rank = r,

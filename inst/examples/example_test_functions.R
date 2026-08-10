@@ -18,7 +18,7 @@ devtools::load_all(root, quiet = TRUE)
                 gaussian = gaussian(),
                 poisson = poisson(),
                 binomial = binomial())
-  ttpspline(
+  ttps(
     dat$y, dat$X, family = fam, rank = rank, k = k, lambda = lambda,
     control = tt_control(max_sweeps = 10L, pirls_maxit = 15L,
                          lbfgs_maxit = 150L, backend = "R",
@@ -53,7 +53,7 @@ cat(sprintf("  optimizer=%s | RMSE(eta,f)=%.3f | CR=%.1fx\n",
 cat("\n=== Packaged data(ishigami) ===\n")
 utils::data("ishigami", package = "TTPsplines", envir = environment())
 X <- as.matrix(ishigami[, c("x1", "x2", "x3")])
-fit <- ttpspline(
+fit <- ttps(
   ishigami$y, X, rank = 2, k = 8, lambda = 1,
   control = tt_control(max_sweeps = 8, backend = "R", compute_edf = FALSE)
 )

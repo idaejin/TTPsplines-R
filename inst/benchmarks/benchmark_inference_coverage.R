@@ -51,7 +51,7 @@ suppressPackageStartupMessages({
   }
 
   t_fit0 <- proc.time()[[3L]]
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, family = gaussian(), rank = rank, k = k, lambda = lambda,
     control = tt_control(max_sweeps = 12, compute_edf = TRUE, seed = seed)
   )

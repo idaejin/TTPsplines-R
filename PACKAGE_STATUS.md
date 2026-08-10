@@ -24,7 +24,7 @@ backend   ∈ {auto, R, Rcpp, keras*}
   hybrid = experimental ALS→LBFGS polish
 ```
 
-Public entry: `ttpspline(..., optimizer=, backend=, init=)` plus `tt_initialize()`.
+Public entry: `ttps(..., optimizer=, backend=, init=)` plus `tt_initialize()`.
 
 ## 1. Files created (high level)
 
@@ -56,7 +56,7 @@ Lab scripts/docs/outputs **not moved or deleted**. As of 2026-08-10 the lab **in
 
 ## 3. API implemented
 
-- `ttpspline(y, X, family, rank, k, lambda, control, …)`
+- `ttps(y, X, family, rank, k, lambda, control, …)` — preferred; `ttpspline()` identical alias
 - `tt_control()`, `tt_rank()`, `tt_initialize()`, `tt_complexity()`, `tt_rank_profile()`
 - S3: `print`, `summary`, `predict`, `fitted`, `residuals`, `coef`, `deviance`, `plot`
 - `glam_fit_gaussian()` for grid compression benchmarks
@@ -106,13 +106,13 @@ update_lambda(method = ...)  # extend switch
 devtools::load_all("01_PROJECTS/ttpsplines-pkg")
 
 # Gaussian  -> auto selects ALS
-fit <- ttpspline(y, X, family = gaussian(), rank = 3, k = 8, lambda = "cGCV")
+fit <- ttps(y, X, family = gaussian(), rank = 3, k = 8, lambda = "cGCV")
 
 # Poisson   -> auto selects PIRLS-ALS
-fit <- ttpspline(y, X, family = poisson(),  rank = 3, k = 8, lambda = 1)
+fit <- ttps(y, X, family = poisson(),  rank = 3, k = 8, lambda = 1)
 
 # Bernoulli -> auto selects LBFGS
-fit <- ttpspline(y, X, family = binomial(), rank = 3, k = 8, lambda = 1)
+fit <- ttps(y, X, family = binomial(), rank = 3, k = 8, lambda = 1)
 
 summary(fit)  # shows Requested / Selected / Reason
 ```

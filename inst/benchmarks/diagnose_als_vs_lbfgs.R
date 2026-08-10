@@ -40,7 +40,7 @@ local({
   te <- holdout_gaussian(n_te = 2500L, d = d, seed = 211L)
 
   .fit_als <- function(init, r, sweeps, tol, lambda) {
-    ttpspline(
+    ttps(
       dat$y, dat$X, family = gaussian(), rank = r, k = k,
       lambda = lambda, optimizer = "ALS", init = init,
       control = tt_control(
@@ -50,7 +50,7 @@ local({
     )
   }
   .fit_lbfgs <- function(init, r, maxit, lambda) {
-    ttpspline(
+    ttps(
       dat$y, dat$X, family = gaussian(), rank = r, k = k,
       lambda = lambda, optimizer = "LBFGS", init = init,
       control = tt_control(
@@ -182,7 +182,7 @@ local({
   message("\n--- C. cGCV λ trajectories (shared init) ---")
   for (r in ranks) {
     init <- tt_initialize(dat$X, rank = r, k = k, seed = 123L, sd = 0.1)
-    als_c <- ttpspline(
+    als_c <- ttps(
       dat$y, dat$X, family = gaussian(), rank = r, k = k,
       lambda = "cGCV", optimizer = "ALS", init = init,
       control = tt_control(
@@ -190,7 +190,7 @@ local({
         lambda_bounds = c(1e-2, 1e2), compute_edf = FALSE
       )
     )
-    lbf_c <- ttpspline(
+    lbf_c <- ttps(
       dat$y, dat$X, family = gaussian(), rank = r, k = k,
       lambda = "cGCV", optimizer = "LBFGS", init = init,
       control = tt_control(

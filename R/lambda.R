@@ -64,7 +64,7 @@ parse_lambda_spec <- function(lambda, d, control = NULL) {
 #' Update one core's λ and coefficients under a smoothing method.
 #'
 #' Workspace must cache `S`, `b`, `P` (and weighted `Xw`,`yw` for GCV RSS).
-#' Future releases may add `cFS` / `cREML` here without changing [ttpspline()].
+#' Future releases may add `cFS` / `cREML` here without changing [ttps()].
 #'
 #' @keywords internal
 update_lambda <- function(method, workspace, ...) {

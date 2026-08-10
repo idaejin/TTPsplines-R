@@ -22,7 +22,7 @@ Scattered design on \eqn{[0,1]^4} with
 \examples{
 data(sobol_g)
 X <- as.matrix(sobol_g[, paste0("x", 1:4)])
-fit <- ttpspline(sobol_g$y, X, rank = 2, k = 6, lambda = 1,
+fit <- ttps(sobol_g$y, X, rank = 2, k = 6, lambda = 1,
                  control = tt_control(max_sweeps = 6, compute_edf = FALSE))
 }
 \seealso{

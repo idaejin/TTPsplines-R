@@ -28,11 +28,11 @@ audit_surface_seed <- function(name, sim_fun, ranks = 1:5, k = 6,
                         rule = "1se", seed = seed + 17L, control = ctrl)
   cv_time <- proc.time()[["elapsed"]] - t0
   oracle_rmse <- vapply(ranks, function(r) {
-    fit <- ttpspline(y, X, rank = r, k = k, lambda = 1, control = ctrl)
+    fit <- ttps(y, X, rank = r, k = k, lambda = 1, control = ctrl)
     sqrt(mean((fitted(fit) - f)^2))
   }, numeric(1))
   r_ora <- ranks[which.min(oracle_rmse)]
-  fit_ora <- ttpspline(y, X, rank = r_ora, k = k, lambda = 1, control = ctrl)
+  fit_ora <- ttps(y, X, rank = r_ora, k = k, lambda = 1, control = ctrl)
   fit_min <- tt_rank_refit(sel, rank = sel$rank_min)
   fit_se1 <- tt_rank_refit(sel)
   rmse <- function(fit) sqrt(mean((fitted(fit) - f)^2))

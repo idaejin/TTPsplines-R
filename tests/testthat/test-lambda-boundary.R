@@ -19,7 +19,7 @@ test_that("cGCV fit stores lambda_boundary and summary labels cumulative iters",
   # Strong directional structure tends to push anisotropic cGCV to bounds
   f <- 3 * sin(2 * pi * X[, 1]) + 0.05 * X[, 2] + 0.01 * X[, 3]
   y <- f + rnorm(n, 0, 0.2)
-  fit <- suppressWarnings(ttpspline(
+  fit <- suppressWarnings(ttps(
     y, X, family = gaussian(), rank = 2, k = 6, lambda = "cGCV",
     control = tt_control(
       max_sweeps = 8L, backend = "R", compute_edf = FALSE,
@@ -64,7 +64,7 @@ test_that("summary marks optimizer iterations as cumulative when present", {
   n <- 100
   X <- matrix(runif(n * 2), n, 2)
   y <- rbinom(n, 1, 0.4)
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, family = binomial(), rank = 2, k = 4, lambda = 1,
     control = tt_control(lbfgs_maxit = 40L, backend = "R", compute_edf = FALSE)
   )
@@ -77,7 +77,7 @@ test_that("summary does not claim lambda evaluations under fixed λ", {
   n <- 80
   X <- matrix(runif(n * 2), n, 2)
   y <- sin(2 * pi * X[, 1]) + rnorm(n, 0, 0.2)
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, family = gaussian(), rank = 2, k = 5, lambda = 1,
     control = tt_control(max_sweeps = 4L, backend = "R", compute_edf = FALSE)
   )

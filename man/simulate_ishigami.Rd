@@ -32,6 +32,6 @@ Inputs are drawn uniformly on \eqn{[-\pi,\pi]^3}.
 }
 \examples{
 dat <- simulate_ishigami(n = 400, sigma = 0.15, seed = 1)
-fit <- ttpspline(dat$y, dat$X, rank = 2, k = 8, lambda = 1,
+fit <- ttps(dat$y, dat$X, rank = 2, k = 8, lambda = 1,
                  control = tt_control(max_sweeps = 8, compute_edf = FALSE))
 }

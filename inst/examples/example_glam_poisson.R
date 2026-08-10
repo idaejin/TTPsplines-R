@@ -47,7 +47,7 @@ cat(sprintf(
 X <- as.matrix(expand.grid(age = glam_poisson$age, year = glam_poisson$year))
 y <- as.numeric(glam_poisson$Y)
 off <- log(as.numeric(glam_poisson$exposure))
-fit_tt <- ttpspline(
+fit_tt <- ttps(
   y, X, family = poisson(), rank = 3, k = 10, lambda = c(10, 1),
   offset = off,
   control = tt_control(

@@ -29,11 +29,11 @@ tt_rank_select(
 )
 }
 \arguments{
-\item{y, X}{Response and covariate matrix (as in \code{\link[=ttpspline]{ttpspline()}}).}
+\item{y, X}{Response and covariate matrix (as in \code{\link[=ttps]{ttps()}}).}
 
 \item{ranks}{Integer vector of candidate \strong{uniform} ranks (default \code{1:5}).}
 
-\item{family, k, degree, penalty_order, lambda, optimizer, backend, control, knots, offset, weights}{Passed through to \code{\link[=ttpspline]{ttpspline()}} on each fold (and on final refit).}
+\item{family, k, degree, penalty_order, lambda, optimizer, backend, control, knots, offset, weights}{Passed through to \code{\link[=ttps]{ttps()}} on each fold (and on final refit).}
 
 \item{folds}{Number of CV folds (default 5).}
 
@@ -57,7 +57,7 @@ An object of class \code{"tt_rank_selection"}.
 \description{
 Chooses a uniform TT rank \(r\) (chain \verb{(1,r,...,r,1)}) using out-of-sample
 predictive loss only — never simulation truth. Fitting stays separate:
-\code{\link[=ttpspline]{ttpspline()}} still requires an explicit \code{rank}; use \code{\link[=tt_rank_refit]{tt_rank_refit()}} after
+\code{\link[=ttps]{ttps()}} still requires an explicit \code{rank}; use \code{\link[=tt_rank_refit]{tt_rank_refit()}} after
 selection to fit on all data at the chosen rank.
 }
 \details{
@@ -84,6 +84,6 @@ fit <- tt_rank_refit(sel)
 
 }
 \seealso{
-\code{\link[=tt_rank_refit]{tt_rank_refit()}}, \code{\link[=ttpspline]{ttpspline()}}, \code{\link[=tt_rank_profile]{tt_rank_profile()}} (in-sample
+\code{\link[=tt_rank_refit]{tt_rank_refit()}}, \code{\link[=ttps]{ttps()}}, \code{\link[=tt_rank_profile]{tt_rank_profile()}} (in-sample
 rank diagnostic, not CV).
 }

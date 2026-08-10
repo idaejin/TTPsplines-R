@@ -34,6 +34,6 @@ Simulate a Sobol g-function sample.
 }
 \examples{
 dat <- simulate_sobol_g(n = 500, d = 4, seed = 2)
-fit <- ttpspline(dat$y, dat$X, rank = 2, k = 6, lambda = 1,
+fit <- ttps(dat$y, dat$X, rank = 2, k = 6, lambda = 1,
                  control = tt_control(max_sweeps = 6, compute_edf = FALSE))
 }

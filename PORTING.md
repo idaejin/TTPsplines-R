@@ -13,7 +13,7 @@
 
 ## Done in v0 prototype
 
-- Public API `ttpspline()` / controls / rank / complexity / S3  
+- Public API `ttps()` / controls / rank / complexity / S3  
 - Gaussian ALS + cGCV (R + Rcpp)  
 - Poisson / Bernoulli PIRLS (+ family-aware `optimizer="auto"`)  
 - Conditional experimental solvers (Damped-Newton-ALS, LBFGS-ALS, GD)  

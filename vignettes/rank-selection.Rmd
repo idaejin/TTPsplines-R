@@ -13,7 +13,7 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 
 # Setup
 
-`ttpspline()` **never** chooses the TT rank for you: `rank = 2` means
+`ttps()` **never** chooses the TT rank for you: `rank = 2` means
 exactly rank 2. Predictive selection is a separate step:
 
 ```{r}
@@ -47,7 +47,7 @@ compression). Smoothing \(\lambda\) is a different knob
 ```{r complexity}
 data(ishigami)
 X_i <- as.matrix(ishigami[, c("x1", "x2", "x3")])
-fit0 <- ttpspline(
+fit0 <- ttps(
   ishigami$y, X_i, rank = 2, k = 8, lambda = 1,
   control = tt_control(max_sweeps = 6, compute_edf = TRUE)
 )

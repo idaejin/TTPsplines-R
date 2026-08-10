@@ -22,7 +22,7 @@ interior ranks — a scaling statement, not an exact identity.
 \]
 
 Rank is **structural capacity**; \(\lambda\) is **smoothness**. Rank is
-**not** chosen inside `ttpspline()`:
+**not** chosen inside `ttps()`:
 
 ```r
 sel <- tt_rank_select(...)

@@ -32,7 +32,7 @@ tt_rank_profile(
 
 \item{control}{A \code{\link[=tt_control]{tt_control()}} list.}
 
-\item{...}{Passed to \code{\link[=ttpspline]{ttpspline()}} (overrides \code{rank}).}
+\item{...}{Passed to \code{\link[=ttps]{ttps()}} (overrides \code{rank}).}
 }
 \value{
 Object of class \code{"tt_rank_profile"}.

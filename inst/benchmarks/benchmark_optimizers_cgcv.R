@@ -66,7 +66,7 @@ local({
         )
         t0 <- proc.time()[["elapsed"]]
         fit <- tryCatch(
-          ttpspline(
+          ttps(
             dat$y, dat$X,
             family = fam_obj[[fam_name]],
             rank = r,

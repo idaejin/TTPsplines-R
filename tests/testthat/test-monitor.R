@@ -9,7 +9,7 @@ test_that("monitor enables trace and prints progress", {
   expect_true(isTRUE(ctrl$monitor))
 
   out <- capture.output({
-    fit <- ttpspline(
+    fit <- ttps(
       y, X, family = gaussian(), rank = 2, k = 4, lambda = 1,
       monitor = TRUE,
       control = tt_control(max_sweeps = 3L, backend = "R", compute_edf = FALSE)

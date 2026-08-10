@@ -4,6 +4,9 @@
 #' array is represented in Tensor-Train (TT) format. Observations may be
 #' arbitrarily scattered in \eqn{[a,b]^d}; no data grid is required.
 #'
+#' The preferred name is [ttps()]. [ttpspline()] is an identical alias kept
+#' for backward compatibility.
+#'
 #' Three orthogonal choices:
 #' \itemize{
 #'   \item \code{optimizer}: estimation philosophy —
@@ -66,8 +69,8 @@
 #' ## Packaged classic surfaces
 #' data(ishigami)
 #' X <- as.matrix(ishigami[, c("x1", "x2", "x3")])
-#' fit <- ttpspline(ishigami$y, X, rank = 2, k = 6, lambda = 1,
-#'                  control = tt_control(max_sweeps = 6, compute_edf = FALSE))
+#' fit <- ttps(ishigami$y, X, rank = 2, k = 6, lambda = 1,
+#'             control = tt_control(max_sweeps = 6, compute_edf = FALSE))
 #' summary(fit)
 #'
 #' data(sobol_g)
@@ -81,43 +84,44 @@
 #'
 #' ## Gaussian (auto -> ALS)
 #' y <- f + rnorm(n, 0, 0.3)
-#' fit_g <- ttpspline(y, X, family = gaussian(), rank = 2, k = 6,
-#'                    lambda = 1, control = tt_control(max_sweeps = 8))
+#' fit_g <- ttps(y, X, family = gaussian(), rank = 2, k = 6,
+#'               lambda = 1, control = tt_control(max_sweeps = 8))
 #' tt_complexity(fit_g)
 #'
 #' ## Poisson (auto -> PIRLS-ALS)
 #' yp <- rpois(n, exp(f - mean(f) + log(2)))
-#' fit_p <- ttpspline(yp, X, family = poisson(), rank = 2, k = 6, lambda = 1,
-#'                    control = tt_control(pirls_maxit = 15, compute_edf = FALSE))
+#' fit_p <- ttps(yp, X, family = poisson(), rank = 2, k = 6, lambda = 1,
+#'               control = tt_control(pirls_maxit = 15, compute_edf = FALSE))
 #' fit_p$optimizer_used
 #'
 #' ## Bernoulli (auto -> LBFGS)
 #' yb <- rbinom(n, 1, plogis(1.2 * (f - mean(f))))
-#' fit_b <- ttpspline(yb, X, family = binomial(), rank = 2, k = 6, lambda = 5,
-#'                    control = tt_control(lbfgs_maxit = 100, compute_edf = FALSE))
+#' fit_b <- ttps(yb, X, family = binomial(), rank = 2, k = 6, lambda = 5,
+#'               control = tt_control(lbfgs_maxit = 100, compute_edf = FALSE))
 #' fit_b$optimizer_used
 #' predict(fit_b, X[1:3, ], type = "response")
 #'
 #' ## Watch iteration progress
 #' \dontrun{
-#' fit_m <- ttpspline(ishigami$y, X, rank = 2, k = 6, lambda = 1,
-#'                    monitor = TRUE, control = tt_control(max_sweeps = 8))
+#' fit_m <- ttps(ishigami$y, X, rank = 2, k = 6, lambda = 1,
+#'               monitor = TRUE, control = tt_control(max_sweeps = 8))
 #' }
 #'
+#' @rdname ttps
 #' @export
-ttpspline <- function(y,
-                      X,
-                      family = stats::gaussian(),
-                      rank = 3,
-                      k = 10,
-                      degree = 3,
-                      penalty_order = 2,
-                      lambda = "cGCV",
-                      optimizer = c("auto", "ALS", "PIRLS-ALS",
-                                    "Damped-Newton-ALS", "LBFGS-ALS",
-                                    "GD", "LBFGS", "hybrid", "Adam"),
-                      backend = c("auto", "R", "Rcpp", "keras"),
-                      init = NULL,
+ttps <- function(y,
+                 X,
+                 family = stats::gaussian(),
+                 rank = 3,
+                 k = 10,
+                 degree = 3,
+                 penalty_order = 2,
+                 lambda = "cGCV",
+                 optimizer = c("auto", "ALS", "PIRLS-ALS",
+                               "Damped-Newton-ALS", "LBFGS-ALS",
+                               "GD", "LBFGS", "hybrid", "Adam"),
+                 backend = c("auto", "R", "Rcpp", "keras"),
+                 init = NULL,
                       control = tt_control(),
                       monitor = FALSE,
                       knots = NULL,
@@ -160,7 +164,7 @@ ttpspline <- function(y,
   # Internal dispatch token (PIRLS-ALS shares the ALS/PIRLS code path).
   optimizer <- opt_res$dispatch
   backend_arg <- match.arg(backend)
-  # Prefer explicit ttpspline(backend=...) over control when not auto
+  # Prefer explicit ttps(backend=...) over control when not auto
   if (!identical(backend_arg, "auto")) {
     control$backend <- backend_arg
   }
@@ -321,6 +325,10 @@ ttpspline <- function(y,
     class = "ttpspline"
   )
 }
+
+#' @rdname ttps
+#' @export
+ttpspline <- ttps
 
 #' Resolve public optimizer choice to a dispatch token + transparency fields.
 #'

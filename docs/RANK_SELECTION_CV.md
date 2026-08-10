@@ -5,7 +5,7 @@
 
 ## DECISION — fitting vs selection stay separate
 
-`ttpspline(..., rank = r)` means **exactly** that rank. No automatic rank
+`ttps(..., rank = r)` means **exactly** that rank. No automatic rank
 inside the fitter. Users who want data-driven \(r\) call:
 
 ```r

@@ -13,12 +13,12 @@ test_that("0/1 weights match subset fit for Poisson", {
   )
   # Shared knots so basis margins match (subset alone would rebuild knots)
   bs <- build_marginal_bases(X, k = 6, degree = 3)
-  fit_w <- ttpspline(
+  fit_w <- ttps(
     y, X, family = poisson(), rank = 2, k = 6, lambda = 1,
     weights = w, knots = bs$knots, control = ctrl
   )
   idx <- which(w > 0)
-  fit_sub <- ttpspline(
+  fit_sub <- ttps(
     y[idx], X[idx, , drop = FALSE], family = poisson(),
     rank = 2, k = 6, lambda = 1, knots = bs$knots, control = ctrl
   )
@@ -38,7 +38,7 @@ test_that("Gaussian ALS respects observation weights", {
   y <- sin(2 * pi * X[, 1]) + rnorm(n, 0, 0.2)
   w <- rep(1, n)
   w[1:20] <- 0
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, rank = 2, k = 5, lambda = 1,
     weights = w,
     control = tt_control(max_sweeps = 6, backend = "R", compute_edf = FALSE,
@@ -60,12 +60,12 @@ test_that("weights validate non-negative and positive sum", {
   X <- matrix(runif(n * 2), n, 2)
   y <- rnorm(n)
   expect_error(
-    ttpspline(y, X, rank = 1, k = 4, lambda = 1, weights = -1,
+    ttps(y, X, rank = 1, k = 4, lambda = 1, weights = -1,
               control = tt_control(max_sweeps = 2, compute_edf = FALSE)),
     "non-negative"
   )
   expect_error(
-    ttpspline(y, X, rank = 1, k = 4, lambda = 1, weights = rep(0, n),
+    ttps(y, X, rank = 1, k = 4, lambda = 1, weights = rep(0, n),
               control = tt_control(max_sweeps = 2, compute_edf = FALSE)),
     "sum\\(weights\\)"
   )
@@ -82,12 +82,12 @@ test_that("Rcpp backend accepts weights (Gaussian + Poisson 0/1)", {
   bs <- build_marginal_bases(X, k = 6, degree = 3)
 
   yg <- f + rnorm(n, 0, 0.25)
-  g_r <- ttpspline(
+  g_r <- ttps(
     yg, X, rank = 2, k = 5, lambda = 1, weights = w, knots = bs$knots,
     control = tt_control(max_sweeps = 8, backend = "R", compute_edf = FALSE,
                          seed = 2L)
   )
-  g_c <- ttpspline(
+  g_c <- ttps(
     yg, X, rank = 2, k = 5, lambda = 1, weights = w, knots = bs$knots,
     control = tt_control(max_sweeps = 8, backend = "Rcpp", compute_edf = FALSE,
                          seed = 2L)
@@ -101,11 +101,11 @@ test_that("Rcpp backend accepts weights (Gaussian + Poisson 0/1)", {
     pirls_maxit = 15, max_sweeps = 6, backend = "Rcpp",
     compute_edf = FALSE, seed = 7L
   )
-  fit_w <- ttpspline(
+  fit_w <- ttps(
     y, X, family = poisson(), rank = 2, k = 6, lambda = 1,
     weights = w, knots = bs$knots, control = ctrl
   )
-  fit_sub <- ttpspline(
+  fit_sub <- ttps(
     y[idx], X[idx, , drop = FALSE], family = poisson(),
     rank = 2, k = 6, lambda = 1, knots = bs$knots, control = ctrl
   )

@@ -33,7 +33,7 @@ local({
   tab <- prof$table
   tab$rmse_test_truth <- NA_real_
   for (i in seq_len(nrow(tab))) {
-    fit <- ttpspline(
+    fit <- ttps(
       dat$y, dat$X, family = gaussian(), rank = tab$rank[i], k = 8L,
       lambda = "cGCV", control = ctrl
     )

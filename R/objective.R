@@ -1,6 +1,6 @@
 #' Training penalized objective (same definition for ALS and L-BFGS).
 #'
-#' @param fit A [ttpspline()] object.
+#' @param fit A [ttps()] object.
 #' @param X Training covariates used to build bases (required).
 #' @param y Optional response (defaults to `fit$y`).
 #' @return List with `value`, `nll_or_sse`, `penalty`, `rss`, `eta`.

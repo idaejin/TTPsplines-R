@@ -33,7 +33,7 @@ X <- as.matrix(ishigami[, c("x1", "x2", "x3")])
 set.seed(2)
 eta <- ishigami$f - mean(ishigami$f) + log(3)
 y_p <- rpois(nrow(ishigami), exp(eta))
-fit_p <- ttpspline(
+fit_p <- ttps(
   y_p, X, family = poisson(), rank = 2, k = 6, lambda = 1,
   control = tt_control(pirls_maxit = 20, backend = "R", compute_edf = FALSE)
 )
@@ -47,7 +47,7 @@ predict(fit_p, X[1:5, ], type = "response")
 set.seed(3)
 eta_b <- 1.2 * scale(ishigami$f)[, 1]
 y_b <- rbinom(nrow(ishigami), 1, plogis(eta_b))
-fit_b <- ttpspline(
+fit_b <- ttps(
   y_b, X, family = binomial(), rank = 2, k = 6, lambda = 5,
   control = tt_control(lbfgs_maxit = 150, backend = "R", compute_edf = FALSE)
 )
@@ -62,7 +62,7 @@ argument.
 # Grid Poisson via GLAM
 
 For **regular arrays** (e.g. age × year counts with exposure), use
-`glam_fit_poisson()` instead of scattering the grid into `ttpspline()` —
+`glam_fit_poisson()` instead of scattering the grid into `ttps()` —
 see `vignette("glam-poisson")` and `data(glam_poisson)`.
 
 # See also

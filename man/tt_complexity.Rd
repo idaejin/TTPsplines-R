@@ -7,7 +7,7 @@
 tt_complexity(fit = NULL, p = NULL, rank = NULL, d = NULL, edf = NULL)
 }
 \arguments{
-\item{fit}{A \code{\link[=ttpspline]{ttpspline()}} object, or a list with \code{d}, \code{k} (or \code{basis_dim} /
+\item{fit}{A \code{\link[=ttps]{ttps()}} object, or a list with \code{d}, \code{k} (or \code{basis_dim} /
 \code{p}), and \code{rank} (full chain or as accepted by \code{\link[=tt_rank]{tt_rank()}}).}
 
 \item{p}{Optional basis sizes (scalar or length-\code{d}); overrides \code{fit$k}.}

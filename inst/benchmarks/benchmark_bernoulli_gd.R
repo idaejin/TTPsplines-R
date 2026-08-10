@@ -108,7 +108,7 @@ local({
   }
 
   .fit_one <- function(init, opt, r, lam, seed = NA_integer_) {
-    fit <- ttpspline(
+    fit <- ttps(
       y, X, family = binomial(), rank = r, k = k, lambda = lam,
       optimizer = opt, init = init, control = .ctrl(opt)
     )

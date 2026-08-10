@@ -13,7 +13,7 @@
 #' @examples
 #' data(ishigami)
 #' X <- as.matrix(ishigami[, c("x1", "x2", "x3")])
-#' fit <- ttpspline(ishigami$y, X, rank = 2, k = 8, lambda = 1,
+#' fit <- ttps(ishigami$y, X, rank = 2, k = 8, lambda = 1,
 #'                  control = tt_control(max_sweeps = 8, compute_edf = FALSE))
 "ishigami"
 
@@ -32,7 +32,7 @@
 #' @examples
 #' data(sobol_g)
 #' X <- as.matrix(sobol_g[, paste0("x", 1:4)])
-#' fit <- ttpspline(sobol_g$y, X, rank = 2, k = 6, lambda = 1,
+#' fit <- ttps(sobol_g$y, X, rank = 2, k = 6, lambda = 1,
 #'                  control = tt_control(max_sweeps = 6, compute_edf = FALSE))
 "sobol_g"
 
@@ -50,7 +50,7 @@
 #' @examples
 #' data(friedman)
 #' X <- as.matrix(friedman[, paste0("x", 1:5)])
-#' fit <- ttpspline(friedman$y, X, rank = 3, k = 6, lambda = 1,
+#' fit <- ttps(friedman$y, X, rank = 3, k = 6, lambda = 1,
 #'                  control = tt_control(max_sweeps = 8, compute_edf = FALSE))
 "friedman"
 

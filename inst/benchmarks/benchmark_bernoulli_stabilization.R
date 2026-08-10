@@ -237,7 +237,7 @@ local({
   }
 
   .fit_new_als <- function(init, r, lam) {
-    ttpspline(
+    ttps(
       y, X, family = binomial(), rank = r, k = k, lambda = lam,
       optimizer = "ALS", init = init,
       control = tt_control(
@@ -248,7 +248,7 @@ local({
   }
 
   .fit_lbfgs <- function(init, r, lam) {
-    ttpspline(
+    ttps(
       y, X, family = binomial(), rank = r, k = k, lambda = lam,
       optimizer = "LBFGS", init = init,
       control = tt_control(
@@ -400,7 +400,7 @@ local({
         } else {
           tt_control(backend = "R", lbfgs_maxit = 300L, compute_edf = FALSE)
         }
-        fit <- ttpspline(
+        fit <- ttps(
           y, X, family = binomial(), rank = r, k = k, lambda = 1,
           optimizer = opt, init = init, control = ctrl
         )

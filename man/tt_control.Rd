@@ -2,7 +2,7 @@
 % Please edit documentation in R/control.R
 \name{tt_control}
 \alias{tt_control}
-\title{Control parameters for \code{\link[=ttpspline]{ttpspline()}}.}
+\title{Control parameters for \code{\link[=ttps]{ttps()}}.}
 \usage{
 tt_control(
   max_sweeps = 50,

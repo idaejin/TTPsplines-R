@@ -20,7 +20,7 @@ f <- sin(2 * pi * X[, 1]) * cos(2 * pi * X[, 2]) + 0.4 * X[, 3]
 eta <- 1.5 * (f - mean(f))
 y <- rbinom(n, 1, plogis(eta))
 
-fit <- ttpspline(
+fit <- ttps(
   y, X,
   family = binomial(),
   rank = 2,

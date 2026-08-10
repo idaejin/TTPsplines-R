@@ -80,7 +80,7 @@ local({
   for (r in rank_grid) {
     init <- tt_initialize(X, rank = r, k = k, seed = 123L, sd = 0.05)
     # Fit briefly only to get a nontrivial point, then evaluate both paths
-    fit_a <- ttpspline(
+    fit_a <- ttps(
       y, X, family = binomial(), rank = r, k = k, lambda = 1,
       optimizer = "ALS", init = init,
       control = tt_control(backend = "R", pirls_maxit = 3L,
@@ -296,14 +296,14 @@ local({
   sep_rows <- list()
   for (r in rank_grid) {
     init <- tt_initialize(X, rank = r, k = k, seed = 123L, sd = 0.05)
-    fit_als <- ttpspline(
+    fit_als <- ttps(
       y, X, family = binomial(), rank = r, k = k, lambda = 1,
       optimizer = "ALS", init = init,
       control = tt_control(backend = "R", pirls_maxit = 50L,
                            als_sweeps_per_pirls = 3L, tol = 1e-8,
                            compute_edf = FALSE, damping = TRUE, seed = 123)
     )
-    fit_lbf <- ttpspline(
+    fit_lbf <- ttps(
       y, X, family = binomial(), rank = r, k = k, lambda = 1,
       optimizer = "LBFGS", init = init,
       control = tt_control(backend = "R", lbfgs_maxit = 400L,
@@ -447,7 +447,7 @@ local({
     init <- tt_initialize(X, rank = r, k = k, seed = 123L, sd = 0.05)
     for (nsw in als_sweep_grid) {
       t0 <- proc.time()[["elapsed"]]
-      fit <- ttpspline(
+      fit <- ttps(
         y, X, family = binomial(), rank = r, k = k, lambda = 1,
         optimizer = "ALS", init = init,
         control = tt_control(backend = "R", pirls_maxit = 40L,
@@ -462,7 +462,7 @@ local({
                       r, nsw, m$objective, m$rmse_eta_test, m$max_abs_eta))
     }
     # LBFGS reference
-    fit <- ttpspline(
+    fit <- ttps(
       y, X, family = binomial(), rank = r, k = k, lambda = 1,
       optimizer = "LBFGS", init = init,
       control = tt_control(backend = "R", lbfgs_maxit = 400L, compute_edf = FALSE)
@@ -482,7 +482,7 @@ local({
   for (r in rank_grid) {
     init <- tt_initialize(X, rank = r, k = k, seed = 123L, sd = 0.05)
     for (pm in pirls_grid) {
-      fit <- ttpspline(
+      fit <- ttps(
         y, X, family = binomial(), rank = r, k = k, lambda = 1,
         optimizer = "ALS", init = init,
         control = tt_control(backend = "R", pirls_maxit = pm,
@@ -508,7 +508,7 @@ local({
                            als_sweeps_per_pirls = 10L, compute_edf = FALSE,
                            damping = TRUE)
     ctrl_lbf <- tt_control(backend = "R", lbfgs_maxit = 400L, compute_edf = FALSE)
-    A <- ttpspline(y, X, family = binomial(), rank = r, k = k, lambda = 1,
+    A <- ttps(y, X, family = binomial(), rank = r, k = k, lambda = 1,
                    optimizer = "ALS", init = init, control = ctrl_als)
     # LBFGS from A with SAME intercept (public API would reset intercept)
     basis_A <- eval_marginal_bases(X, A$knots, A$degree)
@@ -525,9 +525,9 @@ local({
     A2_fit$fitted.values <- plogis(A2_fit$linear.predictors)
     A2_fit$deviance <- glm_deviance(binomial(), y, A2_fit$fitted.values)
 
-    B <- ttpspline(y, X, family = binomial(), rank = r, k = k, lambda = 1,
+    B <- ttps(y, X, family = binomial(), rank = r, k = k, lambda = 1,
                    optimizer = "LBFGS", init = init, control = ctrl_lbf)
-    B2 <- ttpspline(y, X, family = binomial(), rank = r, k = k, lambda = 1,
+    B2 <- ttps(y, X, family = binomial(), rank = r, k = k, lambda = 1,
                     optimizer = "ALS", init = B$cores, control = ctrl_als)
     oa <- .obj(A); oa2 <- tt_objective(A2_fit, X, y)
     ob <- .obj(B); ob2 <- .obj(B2)
@@ -571,7 +571,7 @@ local({
     for (s in seq_len(n_init)) {
       init <- tt_initialize(X, rank = r, k = k, seed = 2000L + s, sd = 0.05)
       for (opt in c("ALS", "LBFGS")) {
-        fit <- ttpspline(
+        fit <- ttps(
           y, X, family = binomial(), rank = r, k = k, lambda = 1,
           optimizer = opt, init = init,
           control = if (opt == "ALS")
@@ -607,7 +607,7 @@ local({
     init <- tt_initialize(X, rank = r, k = k, seed = 123L, sd = 0.05)
     for (lam in lambdas) {
       for (opt in c("ALS", "LBFGS")) {
-        fit <- ttpspline(
+        fit <- ttps(
           y, X, family = binomial(), rank = r, k = k, lambda = lam,
           optimizer = opt, init = init,
           control = if (opt == "ALS")
@@ -636,7 +636,7 @@ local({
   for (r in c(2L, 4L)) {
     init <- tt_initialize(X2, rank = r, k = 5, seed = 1, sd = 0.05)
     for (opt in c("ALS", "LBFGS")) {
-      fit <- ttpspline(
+      fit <- ttps(
         y2, X2, family = binomial(), rank = r, k = 5, lambda = 1,
         optimizer = opt, init = init,
         control = if (opt == "ALS")
@@ -664,7 +664,7 @@ local({
   edf_rows <- list()
   r <- 2L
   init <- tt_initialize(X, rank = r, k = k, seed = 123L, sd = 0.05)
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, family = binomial(), rank = r, k = k, lambda = 1,
     optimizer = "ALS", init = init,
     control = tt_control(backend = "R", pirls_maxit = 20L, als_sweeps_per_pirls = 5L,

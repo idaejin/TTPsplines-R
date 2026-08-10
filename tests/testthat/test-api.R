@@ -25,9 +25,9 @@ test_that("same init yields ALS and LBFGS eta close (fixed lambda)", {
   init <- tt_initialize(X, rank = 2, k = 5, seed = 7, sd = 0.1)
   ctrl <- tt_control(max_sweeps = 25, lbfgs_maxit = 200, backend = "R",
                      seed = 7, init_sd = 0.1, tol = 1e-8)
-  fit_als <- ttpspline(y, X, rank = 2, k = 5, lambda = 1,
+  fit_als <- ttps(y, X, rank = 2, k = 5, lambda = 1,
                        optimizer = "ALS", init = init, control = ctrl)
-  fit_lbfgs <- ttpspline(y, X, rank = 2, k = 5, lambda = 1,
+  fit_lbfgs <- ttps(y, X, rank = 2, k = 5, lambda = 1,
                          optimizer = "LBFGS", init = init, control = ctrl)
   # Compare fitted surfaces, not cores (gauge)
   rmse <- sqrt(mean((fit_als$linear.predictors - fit_lbfgs$linear.predictors)^2))
@@ -41,7 +41,7 @@ test_that("Adam fails with clear optional-backend message", {
   X <- matrix(runif(40 * 2), 40, 2)
   y <- rnorm(40)
   expect_error(
-    ttpspline(y, X, rank = 1, k = 4, lambda = 1, optimizer = "Adam",
+    ttps(y, X, rank = 1, k = 4, lambda = 1, optimizer = "Adam",
               control = tt_control(backend = "R", max_sweeps = 2)),
     "Adam"
   )
@@ -55,7 +55,7 @@ test_that("joint EDF is finite for small Gaussian fits", {
   n <- 200
   X <- matrix(runif(n * 3), n, 3)
   y <- sin(2 * pi * X[, 1]) + rnorm(n, 0, 0.3)
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, rank = 2, k = 5, lambda = 1,
     control = tt_control(max_sweeps = 8, backend = "R", compute_edf = TRUE)
   )
@@ -69,7 +69,7 @@ test_that("anisotropic fixed lambda accepted", {
   n <- 180
   X <- matrix(runif(n * 3), n, 3)
   y <- rnorm(n)
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, rank = 1, k = 5, lambda = c(0.5, 2, 1),
     control = tt_control(max_sweeps = 4, backend = "R")
   )

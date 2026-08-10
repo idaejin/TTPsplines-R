@@ -1,5 +1,5 @@
 # Minimal GLAM helpers for fixed-λ grid benchmarks (Currie–Durbán–Eilers).
-# Scattered-data users should prefer [ttpspline()].
+# Scattered-data users should prefer [ttps()].
 
 #' @keywords internal
 #' @noRd
@@ -173,7 +173,7 @@ glam_grid_bases <- function(axes, k = 10, degree = 3L) {
 #' Fixed-λ Gaussian GLAM on a d-way grid (Currie–Durbán–Eilers).
 #'
 #' Exposed for compression benchmarks; scattered-data users should
-#' prefer [ttpspline()].
+#' prefer [ttps()].
 #'
 #' @param Y d-way array.
 #' @param B_list Marginal bases (`n_k × p_k`).

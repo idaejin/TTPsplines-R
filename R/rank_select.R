@@ -2,16 +2,16 @@
 #'
 #' Chooses a uniform TT rank \(r\) (chain `(1,r,...,r,1)`) using out-of-sample
 #' predictive loss only — never simulation truth. Fitting stays separate:
-#' [ttpspline()] still requires an explicit `rank`; use [tt_rank_refit()] after
+#' [ttps()] still requires an explicit `rank`; use [tt_rank_refit()] after
 #' selection to fit on all data at the chosen rank.
 #'
 #' Inner smoothing (`lambda` fixed or `"cGCV"`) is estimated **only** on each
 #' fold's training portion (no validation leakage into cGCV).
 #'
-#' @param y,X Response and covariate matrix (as in [ttpspline()]).
+#' @param y,X Response and covariate matrix (as in [ttps()]).
 #' @param ranks Integer vector of candidate **uniform** ranks (default `1:5`).
 #' @param family,k,degree,penalty_order,lambda,optimizer,backend,control,knots,offset,weights
-#'   Passed through to [ttpspline()] on each fold (and on final refit).
+#'   Passed through to [ttps()] on each fold (and on final refit).
 #' @param folds Number of CV folds (default 5).
 #' @param rule `"1se"` (default, parsimonious) or `"min"` (minimum mean CV).
 #' @param metric `"auto"` (family-aware) or one of `"rmse"`, `"poisson_deviance"`,
@@ -29,7 +29,7 @@
 #' EDF = effective fitted flexibility. These are not interchangeable:
 #' \(r \neq \lambda \neq \mathrm{EDF}\).
 #'
-#' @seealso [tt_rank_refit()], [ttpspline()], [tt_rank_profile()] (in-sample
+#' @seealso [tt_rank_refit()], [ttps()], [tt_rank_profile()] (in-sample
 #'   rank diagnostic, not CV).
 #'
 #' @examples
@@ -158,7 +158,7 @@ tt_rank_select <- function(y,
       w_te <- weights_full[test]
       t0 <- proc.time()[["elapsed"]]
       fit <- tryCatch(
-        ttpspline(
+        ttps(
           y[train], X[train, , drop = FALSE],
           family = fam,
           rank = r,
@@ -254,10 +254,10 @@ tt_rank_select <- function(y,
   )
 }
 
-#' Refit [ttpspline()] on all data at the selected TT rank.
+#' Refit [ttps()] on all data at the selected TT rank.
 #'
 #' Uses the fitting arguments stored on a `"tt_rank_selection"` object.
-#' Does **not** change [ttpspline()] defaults: this is the explicit final fit
+#' Does **not** change [ttps()] defaults: this is the explicit final fit
 #' after model selection.
 #'
 #' @param object A `"tt_rank_selection"` from [tt_rank_select()].
@@ -266,7 +266,7 @@ tt_rank_select <- function(y,
 #' @param control Optional [tt_control()] override (default: selection control,
 #'   but `compute_edf` restored to the stored value / `TRUE` if you pass a new
 #'   control).
-#' @param ... Passed to [ttpspline()] (override stored args).
+#' @param ... Passed to [ttps()] (override stored args).
 #' @return A `"ttpspline"` fit.
 #' @export
 tt_rank_refit <- function(object,

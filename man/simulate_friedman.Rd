@@ -23,6 +23,6 @@ Simulate a Friedman #1 sample (d = 5).
 }
 \examples{
 dat <- simulate_friedman(n = 600, sigma = 1, seed = 3)
-fit <- ttpspline(dat$y, dat$X, rank = 3, k = 6, lambda = 1,
+fit <- ttps(dat$y, dat$X, rank = 3, k = 6, lambda = 1,
                  control = tt_control(max_sweeps = 8, compute_edf = FALSE))
 }

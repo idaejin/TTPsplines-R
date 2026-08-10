@@ -8,6 +8,6 @@ update_lambda(method, workspace, ...)
 }
 \description{
 Workspace must cache \code{S}, \code{b}, \code{P} (and weighted \code{Xw},\code{yw} for GCV RSS).
-Future releases may add \code{cFS} / \code{cREML} here without changing \code{\link[=ttpspline]{ttpspline()}}.
+Future releases may add \code{cFS} / \code{cREML} here without changing \code{\link[=ttps]{ttps()}}.
 }
 \keyword{internal}

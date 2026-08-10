@@ -56,7 +56,7 @@ Same statistical model for all optimizers: non-additive TT P-spline surface on s
 ## Public API
 
 ```r
-ttpspline(y, X, family, rank, k, degree, penalty_order,
+ttps(y, X, family, rank, k, degree, penalty_order,
           lambda, optimizer, backend, init, control, knots)
 tt_control(...); tt_rank(); tt_initialize(); tt_complexity(); tt_rank_profile()
 tt_has_keras(); tt_keras_status()
@@ -129,24 +129,24 @@ Lab + `inst/benchmarks/` remain the reference. Optimizer comparison benchmarks s
 
 ```r
 # Fixed isotropic
-fit <- ttpspline(y, X, rank = 3, lambda = 1)
+fit <- ttps(y, X, rank = 3, lambda = 1)
 
 # Fixed anisotropic
-fit <- ttpspline(y, X, rank = 3, lambda = c(0.1, 1, 10, 1, 0.5))
+fit <- ttps(y, X, rank = 3, lambda = c(0.1, 1, 10, 1, 0.5))
 
 # Automatic cGCV
-fit <- ttpspline(y, X, rank = 3, lambda = "cGCV")
+fit <- ttps(y, X, rank = 3, lambda = "cGCV")
 
 # L-BFGS + cGCV
-fit <- ttpspline(y, X, rank = 3, optimizer = "LBFGS", lambda = "cGCV")
+fit <- ttps(y, X, rank = 3, optimizer = "LBFGS", lambda = "cGCV")
 
 # Adam — errors with install/status guidance until implemented
-# fit <- ttpspline(y, X, rank = 3, optimizer = "Adam", lambda = "cGCV")
+# fit <- ttps(y, X, rank = 3, optimizer = "Adam", lambda = "cGCV")
 
 # Fair optimizer comparison
 init <- tt_initialize(X, rank = 3, seed = 123)
-fit_als   <- ttpspline(y, X, rank = 3, lambda = 1, optimizer = "ALS",   init = init)
-fit_lbfgs <- ttpspline(y, X, rank = 3, lambda = 1, optimizer = "LBFGS", init = init)
+fit_als   <- ttps(y, X, rank = 3, lambda = 1, optimizer = "ALS",   init = init)
+fit_lbfgs <- ttps(y, X, rank = 3, lambda = 1, optimizer = "LBFGS", init = init)
 ```
 
 **Priority:** correctness > reproducibility > stability > efficiency > API polish.

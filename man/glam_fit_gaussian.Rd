@@ -17,5 +17,5 @@ glam_fit_gaussian(Y, B_list, lambda = 1, penalty_order = 2L)
 }
 \description{
 Exposed for compression benchmarks; scattered-data users should
-prefer \code{\link[=ttpspline]{ttpspline()}}.
+prefer \code{\link[=ttps]{ttps()}}.
 }

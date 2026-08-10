@@ -33,7 +33,7 @@ test_that("packaged datasets load and fit with ttpspline", {
   e <- new.env(parent = emptyenv())
   load(rda, envir = e)
   X <- as.matrix(e$ishigami[, c("x1", "x2", "x3")])
-  fit <- ttpspline(
+  fit <- ttps(
     e$ishigami$y, X, rank = 2, k = 5, lambda = 1,
     control = tt_control(max_sweeps = 4, backend = "R", compute_edf = FALSE)
   )

@@ -16,7 +16,7 @@
 #' Methodological reading: rank \eqn{r} is \emph{structural}
 #' capacity; \eqn{\boldsymbol{\lambda}} / EDF is \emph{smoothness} complexity.
 #'
-#' @param fit A [ttpspline()] object, or a list with `d`, `k` (or `basis_dim` /
+#' @param fit A [ttps()] object, or a list with `d`, `k` (or `basis_dim` /
 #'   `p`), and `rank` (full chain or as accepted by [tt_rank()]).
 #' @param p Optional basis sizes (scalar or length-`d`); overrides `fit$k`.
 #' @param rank Optional rank (scalar / internal / full chain).

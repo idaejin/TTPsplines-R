@@ -7,7 +7,7 @@
 tt_objective(fit, X, y = NULL)
 }
 \arguments{
-\item{fit}{A \code{\link[=ttpspline]{ttpspline()}} object.}
+\item{fit}{A \code{\link[=ttps]{ttps()}} object.}
 
 \item{X}{Training covariates used to build bases (required).}
 

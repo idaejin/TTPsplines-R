@@ -1,4 +1,4 @@
-#' Control parameters for [ttpspline()].
+#' Control parameters for [ttps()].
 #'
 #' Separates algorithmic knobs from the model API. Optimizer-specific fields
 #' for L-BFGS / Adam are reserved; Adam/Keras is optional and not required

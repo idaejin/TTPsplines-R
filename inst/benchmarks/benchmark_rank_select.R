@@ -26,14 +26,14 @@ audit_one <- function(name, y, X, f_true, ranks = 1:5, k = 6,
   cv_time <- proc.time()[["elapsed"]] - t0
 
   oracle_rmse <- vapply(ranks, function(r) {
-    fit <- ttpspline(y, X, rank = r, k = k, lambda = 1, control = ctrl)
+    fit <- ttps(y, X, rank = r, k = k, lambda = 1, control = ctrl)
     sqrt(mean((fitted(fit) - f_true)^2))
   }, numeric(1))
   r_oracle <- ranks[which.min(oracle_rmse)]
 
   fit_sel <- tt_rank_refit(sel)
   fit_min <- tt_rank_refit(sel, rank = sel$rank_min)
-  fit_ora <- ttpspline(y, X, rank = r_oracle, k = k, lambda = 1, control = ctrl)
+  fit_ora <- ttps(y, X, rank = r_oracle, k = k, lambda = 1, control = ctrl)
 
   rmse <- function(fit) sqrt(mean((fitted(fit) - f_true)^2))
   data.frame(

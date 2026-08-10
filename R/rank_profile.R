@@ -6,7 +6,7 @@
 #'
 #' @inheritParams ttpspline
 #' @param ranks Numeric vector of scalar ranks to try.
-#' @param ... Passed to [ttpspline()] (overrides `rank`).
+#' @param ... Passed to [ttps()] (overrides `rank`).
 #' @return Object of class `"tt_rank_profile"`.
 #' @seealso [tt_rank_select()]
 #' @export
@@ -20,7 +20,7 @@ tt_rank_profile <- function(y,
                             ...) {
   rows <- lapply(ranks, function(r) {
     t0 <- proc.time()[["elapsed"]]
-    fit <- ttpspline(
+    fit <- ttps(
       y, X, family = family, rank = r, k = k, lambda = lambda,
       control = control, ...
     )

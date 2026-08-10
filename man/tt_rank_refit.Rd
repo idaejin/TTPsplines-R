@@ -2,7 +2,7 @@
 % Please edit documentation in R/rank_select.R
 \name{tt_rank_refit}
 \alias{tt_rank_refit}
-\title{Refit \code{\link[=ttpspline]{ttpspline()}} on all data at the selected TT rank.}
+\title{Refit \code{\link[=ttps]{ttps()}} on all data at the selected TT rank.}
 \usage{
 tt_rank_refit(object, y = NULL, X = NULL, rank = NULL, control = NULL, ...)
 }
@@ -17,13 +17,13 @@ tt_rank_refit(object, y = NULL, X = NULL, rank = NULL, control = NULL, ...)
 but \code{compute_edf} restored to the stored value / \code{TRUE} if you pass a new
 control).}
 
-\item{...}{Passed to \code{\link[=ttpspline]{ttpspline()}} (override stored args).}
+\item{...}{Passed to \code{\link[=ttps]{ttps()}} (override stored args).}
 }
 \value{
 A \code{"ttpspline"} fit.
 }
 \description{
 Uses the fitting arguments stored on a \code{"tt_rank_selection"} object.
-Does \strong{not} change \code{\link[=ttpspline]{ttpspline()}} defaults: this is the explicit final fit
+Does \strong{not} change \code{\link[=ttps]{ttps()}} defaults: this is the explicit final fit
 after model selection.
 }

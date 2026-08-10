@@ -180,7 +180,7 @@ f_friedman <- function(x) {
 #' @export
 #' @examples
 #' dat <- simulate_ishigami(n = 400, sigma = 0.15, seed = 1)
-#' fit <- ttpspline(dat$y, dat$X, rank = 2, k = 8, lambda = 1,
+#' fit <- ttps(dat$y, dat$X, rank = 2, k = 8, lambda = 1,
 #'                  control = tt_control(max_sweeps = 8, compute_edf = FALSE))
 simulate_ishigami <- function(n = 800, sigma = 0.15, seed = 1,
                               a = 7, b = 0.1, family = "gaussian") {
@@ -207,7 +207,7 @@ simulate_ishigami <- function(n = 800, sigma = 0.15, seed = 1,
 #' @export
 #' @examples
 #' dat <- simulate_sobol_g(n = 500, d = 4, seed = 2)
-#' fit <- ttpspline(dat$y, dat$X, rank = 2, k = 6, lambda = 1,
+#' fit <- ttps(dat$y, dat$X, rank = 2, k = 6, lambda = 1,
 #'                  control = tt_control(max_sweeps = 6, compute_edf = FALSE))
 simulate_sobol_g <- function(n = 800, d = 4,
                              a = c(0, 0.5, 3, 9, 99, 99),
@@ -235,7 +235,7 @@ simulate_sobol_g <- function(n = 800, d = 4,
 #' @export
 #' @examples
 #' dat <- simulate_friedman(n = 600, sigma = 1, seed = 3)
-#' fit <- ttpspline(dat$y, dat$X, rank = 3, k = 6, lambda = 1,
+#' fit <- ttps(dat$y, dat$X, rank = 3, k = 6, lambda = 1,
 #'                  control = tt_control(max_sweeps = 8, compute_edf = FALSE))
 simulate_friedman <- function(n = 800, sigma = 1, seed = 3,
                               family = "gaussian") {

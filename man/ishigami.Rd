@@ -22,7 +22,7 @@ Ishigami surface (see \code{\link[=f_ishigami]{f_ishigami()}} / \code{\link[=sim
 \examples{
 data(ishigami)
 X <- as.matrix(ishigami[, c("x1", "x2", "x3")])
-fit <- ttpspline(ishigami$y, X, rank = 2, k = 8, lambda = 1,
+fit <- ttps(ishigami$y, X, rank = 2, k = 8, lambda = 1,
                  control = tt_control(max_sweeps = 8, compute_edf = FALSE))
 }
 \seealso{

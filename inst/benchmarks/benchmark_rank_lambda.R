@@ -44,7 +44,7 @@ rows <- list()
 for (lam in lambdas) {
   for (r in ranks) {
     t0 <- proc.time()[["elapsed"]]
-    fit <- ttpspline(y, X, rank = r, k = k, lambda = lam, control = ctrl)
+    fit <- ttps(y, X, rank = r, k = k, lambda = lam, control = ctrl)
     rows[[length(rows) + 1L]] <- row_fit("fixed", as.character(lam), r, fit,
                                          proc.time()[["elapsed"]] - t0)
   }
@@ -65,7 +65,7 @@ tab_fixed <- do.call(rbind, rows)
 rows_c <- list()
 for (r in ranks) {
   t0 <- proc.time()[["elapsed"]]
-  fit <- ttpspline(y, X, rank = r, k = k, lambda = "cGCV", control = ctrl)
+  fit <- ttps(y, X, rank = r, k = k, lambda = "cGCV", control = ctrl)
   rows_c[[length(rows_c) + 1L]] <- row_fit(
     "cGCV", paste(sprintf("%.3g", fit$lambda), collapse = ","), r, fit,
     proc.time()[["elapsed"]] - t0

@@ -1,3 +1,8 @@
+test_that("ttps and ttpspline are identical aliases", {
+  expect_identical(ttps, ttpspline)
+  expect_true(is.function(ttps))
+})
+
 test_that("tt_rank builds chains", {
   expect_equal(tt_rank(3, d = 4), c(1L, 3L, 3L, 3L, 1L))
   expect_equal(tt_rank(c(2, 4, 3), d = 4), c(1L, 2L, 4L, 3L, 1L))
@@ -9,7 +14,7 @@ test_that("gaussian fixed-lambda fits and predicts", {
   X <- matrix(runif(n * 3), n, 3)
   f <- sin(2 * pi * X[, 1]) * cos(2 * pi * X[, 2]) + X[, 3]
   y <- f + rnorm(n, 0, 0.3)
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, family = gaussian(), rank = 2, k = 6, lambda = 1,
     control = tt_control(max_sweeps = 6, backend = "R", seed = 1)
   )
@@ -27,7 +32,7 @@ test_that("gaussian cGCV runs", {
   n <- 250
   X <- matrix(runif(n * 3), n, 3)
   y <- sin(2 * pi * X[, 1]) + rnorm(n, 0, 0.4)
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, family = gaussian(), rank = 2, k = 6, lambda = "cGCV",
     control = tt_control(max_sweeps = 5, backend = "R",
                          lambda_bounds = c(1e-2, 1e2), seed = 2)
@@ -42,7 +47,7 @@ test_that("poisson PIRLS finite", {
   X <- matrix(runif(n * 3), n, 3)
   eta <- 0.6 * sin(2 * pi * X[, 1]) + 0.4 * cos(2 * pi * X[, 2]) + log(2)
   y <- rpois(n, exp(eta))
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, family = poisson(), rank = 2, k = 6, lambda = 1,
     control = tt_control(pirls_maxit = 10, als_sweeps_per_pirls = 2,
                          backend = "R", seed = 3)
@@ -58,7 +63,7 @@ test_that("bernoulli auto uses LBFGS and stays numerically stable", {
   X <- matrix(runif(n * 3), n, 3)
   eta <- 1.2 * sin(2 * pi * X[, 1]) * cos(2 * pi * X[, 2])
   y <- rbinom(n, 1, plogis(eta))
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, family = binomial(), rank = 2, k = 6, lambda = 5,
     control = tt_control(backend = "R", lbfgs_maxit = 200L, seed = 4,
                          compute_edf = FALSE)
@@ -78,7 +83,7 @@ test_that("bernoulli can still request ALS explicitly", {
   n <- 200
   X <- matrix(runif(n * 3), n, 3)
   y <- rbinom(n, 1, plogis(sin(2 * pi * X[, 1])))
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, family = binomial(), rank = 2, k = 5, lambda = 5,
     optimizer = "ALS",
     control = tt_control(backend = "R", pirls_maxit = 15L,
@@ -97,7 +102,7 @@ test_that("unimplemented lambda methods are reserved", {
   X <- matrix(runif(50 * 2), 50, 2)
   y <- rnorm(50)
   expect_error(
-    ttpspline(y, X, rank = 1, k = 5, lambda = "cFS",
+    ttps(y, X, rank = 1, k = 5, lambda = "cFS",
               control = tt_control(max_sweeps = 2, backend = "R")),
     "not implemented"
   )

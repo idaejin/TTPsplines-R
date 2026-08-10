@@ -5,7 +5,7 @@ test_that("Bernoulli penalized objective matches LBFGS internal evaluator", {
   eta <- 1.1 * sin(2 * pi * X[, 1]) * cos(2 * pi * X[, 2])
   y <- rbinom(n, 1, plogis(eta))
   init <- tt_initialize(X, rank = 2, k = 5, seed = 1, sd = 0.05)
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, family = binomial(), rank = 2, k = 5, lambda = 1,
     optimizer = "ALS", init = init,
     control = tt_control(backend = "R", pirls_maxit = 2L,

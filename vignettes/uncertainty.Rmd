@@ -48,7 +48,7 @@ n <- 400
 X <- matrix(runif(n * 2), n, 2)
 f <- sin(2 * pi * X[, 1]) * cos(2 * pi * X[, 2])
 y <- f + rnorm(n, 0, 0.3)
-fit <- ttpspline(
+fit <- ttps(
   y, X, family = gaussian(), rank = 2, k = 6, lambda = 1,
   control = tt_control(max_sweeps = 10, seed = 1)
 )

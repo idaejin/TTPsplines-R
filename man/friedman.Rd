@@ -21,7 +21,7 @@ Scattered design on \eqn{[0,1]^5} (see \code{\link[=f_friedman]{f_friedman()}} /
 \examples{
 data(friedman)
 X <- as.matrix(friedman[, paste0("x", 1:5)])
-fit <- ttpspline(friedman$y, X, rank = 3, k = 6, lambda = 1,
+fit <- ttps(friedman$y, X, rank = 3, k = 6, lambda = 1,
                  control = tt_control(max_sweeps = 8, compute_edf = FALSE))
 }
 \seealso{

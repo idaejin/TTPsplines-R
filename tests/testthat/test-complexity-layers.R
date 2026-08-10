@@ -14,7 +14,7 @@ test_that("tt_complexity on a fit attaches EDF without confusing it with N_TT", 
   n <- 120
   X <- matrix(runif(n * 3), n, 3)
   y <- rnorm(n)
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, rank = 2, k = 5, lambda = 2,
     control = tt_control(max_sweeps = 5, backend = "R", compute_edf = TRUE)
   )

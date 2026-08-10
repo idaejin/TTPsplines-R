@@ -17,7 +17,7 @@ test_that("Bernoulli PIRLS accepted objectives are non-increasing", {
   eta <- 1.2 * sin(2 * pi * X[, 1]) * cos(2 * pi * X[, 2])
   y <- rbinom(n, 1, plogis(eta))
   init <- tt_initialize(X, rank = 2, k = 5, seed = 2, sd = 0.05)
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, family = binomial(), rank = 2, k = 5, lambda = 1,
     optimizer = "ALS", init = init,
     control = tt_control(
@@ -45,9 +45,9 @@ test_that("Gaussian and Poisson still fit after Bernoulli PIRLS changes", {
   f <- sin(2 * pi * X[, 1]) + 0.3 * X[, 2]
   yg <- f + rnorm(n, 0, 0.25)
   yp <- rpois(n, exp(0.4 * f + log(2)))
-  fg <- ttpspline(yg, X, family = gaussian(), rank = 2, k = 5, lambda = 1,
+  fg <- ttps(yg, X, family = gaussian(), rank = 2, k = 5, lambda = 1,
                   control = tt_control(backend = "R", max_sweeps = 8, compute_edf = FALSE))
-  fp <- ttpspline(yp, X, family = poisson(), rank = 2, k = 5, lambda = 1,
+  fp <- ttps(yp, X, family = poisson(), rank = 2, k = 5, lambda = 1,
                   control = tt_control(backend = "R", pirls_maxit = 10,
                                        als_sweeps_per_pirls = 2, compute_edf = FALSE))
   expect_true(is.finite(fg$deviance))

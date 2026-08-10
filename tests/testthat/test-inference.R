@@ -7,7 +7,7 @@ test_that("Gaussian Bayesian/frequentist vcov is finite, SPD-ish", {
   X <- matrix(runif(n * 2), n, 2)
   f <- sin(2 * pi * X[, 1]) * cos(2 * pi * X[, 2])
   y <- f + rnorm(n, 0, 0.25)
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, family = gaussian(), rank = 2, k = 5, lambda = 1,
     control = tt_control(max_sweeps = 8, compute_edf = TRUE, seed = 11)
   )
@@ -30,7 +30,7 @@ test_that("predict se.fit and confidence intervals (Gaussian)", {
   n <- 100
   X <- matrix(runif(n * 2), n, 2)
   y <- X[, 1] + 0.5 * X[, 2] + rnorm(n, 0, 0.2)
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, rank = 2, k = 5, lambda = 2,
     control = tt_control(max_sweeps = 6, compute_edf = FALSE, seed = 12)
   )
@@ -52,7 +52,7 @@ test_that("prediction Jacobian matches finite differences", {
   n <- 80
   X <- matrix(runif(n * 2), n, 2)
   y <- sin(2 * pi * X[, 1]) + rnorm(n, 0, 0.2)
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, rank = 2, k = 5, lambda = 1,
     control = tt_control(max_sweeps = 6, compute_edf = FALSE, seed = 13)
   )
@@ -71,7 +71,7 @@ test_that("prediction SE is gauge-invariant", {
   n <- 100
   X <- matrix(runif(n * 2), n, 2)
   y <- sin(2 * pi * X[, 1]) * X[, 2] + rnorm(n, 0, 0.2)
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, rank = 2, k = 5, lambda = 1,
     control = tt_control(max_sweeps = 8, compute_edf = FALSE, seed = 14)
   )
@@ -99,7 +99,7 @@ test_that("cGCV still uses conditional inference", {
   X <- matrix(runif(n * 2), n, 2)
   # Mildly noisy additive signal — cGCV should stay interior with default bounds
   y <- sin(2 * pi * X[, 1]) + 0.5 * X[, 2] + rnorm(n, 0, 0.4)
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, rank = 2, k = 5, lambda = "cGCV",
     control = tt_control(max_sweeps = 8, compute_edf = FALSE, seed = 15)
   )
@@ -117,7 +117,7 @@ test_that("GLM se.fit errors clearly (Gate 1 only)", {
   X <- matrix(runif(n * 2), n, 2)
   eta <- X[, 1] - X[, 2]
   y <- rpois(n, exp(eta - mean(eta) + log(2)))
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, family = poisson(), rank = 2, k = 5, lambda = 1,
     control = tt_control(pirls_maxit = 10, compute_edf = FALSE, seed = 16)
   )

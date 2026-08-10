@@ -13,7 +13,7 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 
 # Grid arrays vs scattered TT
 
-`ttpspline()` targets **scattered** covariates with a Tensor-Train coefficient
+`ttps()` targets **scattered** covariates with a Tensor-Train coefficient
 array. When responses live on a **regular multiway grid**, the
 **Currie–Durbán–Eilers** GLAM framework (generalized linear array models)
 evaluates the same tensor-product P-spline without forming the Kronecker
@@ -58,7 +58,7 @@ rmse_log(fit$mu, glam_poisson$mu)
 # Comparison with TTPsplines
 
 The same age × year cells can be treated as **scattered** observations and fit
-with `ttpspline()` (Poisson / `PIRLS-ALS`). Currie–Durbán–Eilers GLAM keeps the
+with `ttps()` (Poisson / `PIRLS-ALS`). Currie–Durbán–Eilers GLAM keeps the
 array algebra; TT compresses the coefficient tensor. Both accept an exposure
 `offset` on the linear predictor
 (\(\eta = \mathrm{offset} + \alpha + f(x)\)).
@@ -72,7 +72,7 @@ y <- as.numeric(glam_poisson$Y)
 mu_true <- as.numeric(glam_poisson$mu)
 off <- log(as.numeric(glam_poisson$exposure))
 
-fit_tt <- ttpspline(
+fit_tt <- ttps(
   y, X,
   family = poisson(),
   rank = 3, k = 10, lambda = c(10, 1),
@@ -108,7 +108,7 @@ tt_complexity(fit_tt)
 
 GLAM uses the full \(k\times k\) coefficient array; TT stores fewer parameters
 at modest rank while staying close to the GLAM mean surface on this example.
-For scattered Poisson / Bernoulli (no grid), prefer `ttpspline()` directly —
+For scattered Poisson / Bernoulli (no grid), prefer `ttps()` directly —
 see `vignette("generalized")`. For Gaussian GLAM vs TT with CV ranks and
 separated timings, see `vignette("glam-vs-tt")`.
 

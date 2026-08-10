@@ -20,7 +20,7 @@ f <- sin(2 * pi * X[, 1]) * cos(2 * pi * X[, 2]) + 0.4 * X[, 3]
 eta <- f - mean(f) + log(3)
 y <- rpois(n, exp(eta))
 
-fit <- ttpspline(
+fit <- ttps(
   y, X,
   family = poisson(),
   rank = 2,

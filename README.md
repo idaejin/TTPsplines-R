@@ -55,7 +55,7 @@ X <- matrix(runif(n * 3), n, 3)
 f <- sin(2 * pi * X[, 1]) * cos(2 * pi * X[, 2]) + 0.5 * X[, 3]
 y <- f + rnorm(n, sd = 0.25)
 
-fit <- ttpspline(
+fit <- ttps(
   y, X,
   family = gaussian(),
   rank = 2,
@@ -89,7 +89,7 @@ f <- sin(2 * pi * X[, 1]) * cos(2 * pi * X[, 2]) + 0.4 * X[, 3]
 eta <- f - mean(f) + log(3)
 y <- rpois(n, exp(eta))
 
-fit_p <- ttpspline(
+fit_p <- ttps(
   y, X,
   family = poisson(),
   rank = 2,
@@ -116,7 +116,7 @@ f <- sin(2 * pi * X[, 1]) * cos(2 * pi * X[, 2]) + 0.4 * X[, 3]
 eta <- 1.5 * (f - mean(f))
 y <- rbinom(n, 1, plogis(eta))
 
-fit_b <- ttpspline(
+fit_b <- ttps(
   y, X,
   family = binomial(),
   rank = 2,
@@ -142,9 +142,9 @@ Always overridable:
 
 ```r
 # Explicit overrides (research / benchmarking)
-fit_b_als <- ttpspline(y, X, family = binomial(), rank = 2, k = 8, lambda = 5,
+fit_b_als <- ttps(y, X, family = binomial(), rank = 2, k = 8, lambda = 5,
                        optimizer = "PIRLS-ALS")
-fit_g_lb  <- ttpspline(yg, X, family = gaussian(), rank = 2, k = 8, lambda = 1,
+fit_g_lb  <- ttps(yg, X, family = gaussian(), rank = 2, k = 8, lambda = 1,
                        optimizer = "LBFGS")
 ```
 
@@ -157,9 +157,9 @@ Fit fields: `optimizer_requested`, `optimizer_used`, `optimizer_reason`
 
 ```r
 # either form enables the same iteration logs
-fit <- ttpspline(y, X, family = gaussian(), rank = 2, k = 8, lambda = 1,
+fit <- ttps(y, X, family = gaussian(), rank = 2, k = 8, lambda = 1,
                  monitor = TRUE)
-fit <- ttpspline(y, X, family = gaussian(), rank = 2, k = 8, lambda = 1,
+fit <- ttps(y, X, family = gaussian(), rank = 2, k = 8, lambda = 1,
                  control = tt_control(monitor = TRUE, max_sweeps = 12))
 # equivalent: tt_control(trace = TRUE)
 ```
@@ -187,7 +187,7 @@ data(sobol_g)    # d=4
 data(friedman)   # d=5
 
 X <- as.matrix(ishigami[, c("x1", "x2", "x3")])
-fit <- ttpspline(ishigami$y, X, rank = 2, k = 8, lambda = 1)
+fit <- ttps(ishigami$y, X, rank = 2, k = 8, lambda = 1)
 summary(fit)
 ```
 
@@ -200,7 +200,7 @@ Script: `Rscript inst/examples/example_test_functions.R`.
 
 ## Choosing the TT rank (CV + 1-SE)
 
-`ttpspline(..., rank = r)` always uses that exact rank (no auto-selection).
+`ttps(..., rank = r)` always uses that exact rank (no auto-selection).
 For predictive choice of \(r\):
 
 ```r
@@ -215,7 +215,7 @@ Vignette: `vignette("rank-selection", package = "TTPsplines")`.
 ## Choosing λ (cGCV)
 
 ```r
-fit <- ttpspline(y, X, rank = 2, k = 8, lambda = "cGCV")
+fit <- ttps(y, X, rank = 2, k = 8, lambda = "cGCV")
 fit$lambda
 fit$lambda_boundary   # check for bound hits
 ```
@@ -260,7 +260,7 @@ Scripts: `inst/examples/example_glam_poisson.R`,
 | TT-ALS / PIRLS / global L-BFGS | TT-cFS, cREML |
 | Family-aware `auto` optimizer | rank-/λ-adaptive `auto` |
 | Gaussian / Poisson / Bernoulli | SA-CAB, SOP, DMRG |
-| `lambda` fixed / `"cGCV"` | automatic rank inside `ttpspline()` |
+| `lambda` fixed / `"cGCV"` | automatic rank inside `ttps()` |
 | `tt_rank_select()` + `tt_rank_refit()` | LRT / bootstrap rank tests |
 | Experimental: `GD`, `Damped-Newton-ALS`, `LBFGS-ALS` | mixed effects / TMB |
 | GLAM Gaussian + Poisson (fixed λ, d≤3) | higher-d GLAM / REML |

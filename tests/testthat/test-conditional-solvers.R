@@ -4,7 +4,7 @@ test_that("conditional Q_k objective matches global objective contributions", {
   X <- matrix(runif(n * 2), n, 2)
   y <- rbinom(n, 1, 0.45)
   init <- tt_initialize(X, rank = 2, k = 5, seed = 1, sd = 0.05)
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, family = binomial(), rank = 2, k = 5, lambda = 1,
     optimizer = "LBFGS", init = init,
     control = tt_control(backend = "R", lbfgs_maxit = 30L, compute_edf = FALSE)
@@ -48,7 +48,7 @@ test_that("all solvers evaluate the same penalized objective on shared cores", {
   y <- rbinom(n, 1, plogis(sin(2 * pi * X[, 1])))
   init <- tt_initialize(X, rank = 2, k = 5, seed = 2, sd = 0.05)
   # Short LBFGS to get a nontrivial point
-  fit0 <- ttpspline(
+  fit0 <- ttps(
     y, X, family = binomial(), rank = 2, k = 5, lambda = 1,
     optimizer = "LBFGS", init = init,
     control = tt_control(backend = "R", lbfgs_maxit = 20L, compute_edf = FALSE)
@@ -118,7 +118,7 @@ test_that("Damped-Newton-ALS accepted steps are monotone in global objective", {
   eta <- 1.1 * sin(2 * pi * X[, 1]) * cos(2 * pi * X[, 2])
   y <- rbinom(n, 1, plogis(eta))
   init <- tt_initialize(X, rank = 2, k = 5, seed = 5, sd = 0.05)
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, family = binomial(), rank = 2, k = 5, lambda = 1,
     optimizer = "Damped-Newton-ALS", init = init,
     control = tt_control(
@@ -142,7 +142,7 @@ test_that("LBFGS-ALS does not increase conditional objectives on smoke fit", {
   X <- matrix(runif(n * 3), n, 3)
   y <- rbinom(n, 1, plogis(0.8 * sin(2 * pi * X[, 1])))
   init <- tt_initialize(X, rank = 2, k = 5, seed = 6, sd = 0.05)
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, family = binomial(), rank = 2, k = 5, lambda = 1,
     optimizer = "LBFGS-ALS", init = init,
     control = tt_control(

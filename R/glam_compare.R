@@ -272,7 +272,7 @@ compare_glam_tt_gaussian <- function(d = 3L,
   # ---- TT fits on training -------------------------------------------------
   fit_tt <- function(r) {
     t1 <- proc.time()[["elapsed"]]
-    fit <- ttpspline(
+    fit <- ttps(
       Y_vec, X_train,
       family = stats::gaussian(),
       rank = r,

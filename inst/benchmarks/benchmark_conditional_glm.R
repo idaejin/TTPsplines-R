@@ -183,7 +183,7 @@ local({
   }
 
   .fit_bern <- function(init, opt, r, lam, seed, dat, te) {
-    fit <- ttpspline(
+    fit <- ttps(
       dat$y, dat$X, family = binomial(), rank = r, k = k, lambda = lam,
       optimizer = opt, init = init, control = .ctrl(opt)
     )
@@ -191,7 +191,7 @@ local({
   }
 
   .fit_pois <- function(init, opt, r, lam, seed, dat, te) {
-    fit <- ttpspline(
+    fit <- ttps(
       dat$y, dat$X, family = poisson(), rank = r, k = k, lambda = lam,
       optimizer = opt, init = init, control = .ctrl(opt)
     )

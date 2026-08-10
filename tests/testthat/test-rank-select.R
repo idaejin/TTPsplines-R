@@ -115,12 +115,12 @@ test_that("cGCV path uses training rows only (no validation leakage)", {
   fold_id <- .tt_make_fold_id(n, 3L, seed = 99L)
   # Fit one fold manually: train-only cGCV
   train <- fold_id != 1L
-  fit_tr <- ttpspline(y[train], X[train, , drop = FALSE], rank = 1, k = 5,
+  fit_tr <- ttps(y[train], X[train, , drop = FALSE], rank = 1, k = 5,
                       lambda = "cGCV", control = ctrl)
   # Poison validation y; training unchanged → same lambda if we refit train
   y2 <- y
   y2[!train] <- y2[!train] + 50
-  fit_tr2 <- ttpspline(y2[train], X[train, , drop = FALSE], rank = 1, k = 5,
+  fit_tr2 <- ttps(y2[train], X[train, , drop = FALSE], rank = 1, k = 5,
                        lambda = "cGCV", control = ctrl)
   expect_equal(fit_tr$lambda, fit_tr2$lambda, tolerance = 1e-10)
 

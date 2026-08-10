@@ -6,7 +6,7 @@ test_that("GD uses same objective/grad machinery as LBFGS (Bernoulli)", {
   y <- rbinom(n, 1, plogis(eta))
   init <- tt_initialize(X, rank = 2, k = 5, seed = 3, sd = 0.05)
 
-  fit_gd <- ttpspline(
+  fit_gd <- ttps(
     y, X, family = binomial(), rank = 2, k = 5, lambda = 1,
     optimizer = "GD", init = init,
     control = tt_control(
@@ -14,7 +14,7 @@ test_that("GD uses same objective/grad machinery as LBFGS (Bernoulli)", {
       gd_linesearch = TRUE, compute_edf = FALSE, seed = 3
     )
   )
-  fit_lb <- ttpspline(
+  fit_lb <- ttps(
     y, X, family = binomial(), rank = 2, k = 5, lambda = 1,
     optimizer = "LBFGS", init = init,
     control = tt_control(backend = "R", lbfgs_maxit = 300L, compute_edf = FALSE)
@@ -38,7 +38,7 @@ test_that("PIRLS-ALS is an alias for the structure-aware GLM path", {
   n <- 120
   X <- matrix(runif(n * 2), n, 2)
   y <- rbinom(n, 1, plogis(sin(2 * pi * X[, 1])))
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, family = binomial(), rank = 2, k = 5, lambda = 5,
     optimizer = "PIRLS-ALS",
     control = tt_control(
@@ -57,7 +57,7 @@ test_that("GD Armijo line search decreases the objective", {
   X <- matrix(runif(n * 3), n, 3)
   y <- sin(2 * pi * X[, 1]) + rnorm(n, 0, 0.3)
   init <- tt_initialize(X, rank = 2, k = 5, seed = 1, sd = 0.1)
-  fit <- ttpspline(
+  fit <- ttps(
     y, X, family = gaussian(), rank = 2, k = 5, lambda = 1,
     optimizer = "GD", init = init,
     control = tt_control(

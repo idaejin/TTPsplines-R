@@ -35,7 +35,7 @@ local({
         lambda_bounds = c(1e-1, 1e2)
       )
       t0 <- proc.time()[["elapsed"]]
-      fit <- ttpspline(
+      fit <- ttps(
         dat$y, dat$X,
         family = binomial(),
         rank = r,

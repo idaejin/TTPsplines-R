@@ -62,7 +62,7 @@ local({
   for (r in c(1L, 2L, 3L, 4L, 6L)) {
     ctrl <- .default_control(backend = "auto", max_sweeps = 15L, seed = 3L)
     t1 <- proc.time()[["elapsed"]]
-    fit <- ttpspline(
+    fit <- ttps(
       y_sc, X_sc,
       family = gaussian(),
       rank = r,
