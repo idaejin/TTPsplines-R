@@ -52,7 +52,16 @@ tt_control(
   block_lbfgs_sweeps = 40L,
   compute_edf = TRUE,
   edf_max_npar = 2500L,
-  warn_lambda_boundary = TRUE
+  warn_lambda_boundary = TRUE,
+  cgcv_update = c("outer_simultaneous", "sequential"),
+  cgcv_damping = 0.25,
+  cgcv_max_log10_step = 1,
+  cgcv_parameterization = c("free", "scale_anisotropy"),
+  cgcv_trace = TRUE,
+  cgcv_margin_order = NULL,
+  cgcv_fit_sweeps = NULL,
+  cgcv_lambda0_method = c("fixed_start", "log_grid"),
+  cgcv_lambda0_grid = NULL
 )
 }
 \arguments{
@@ -154,6 +163,33 @@ Skipped automatically when packed TT size exceeds \code{edf_max_npar}.}
 \item{edf_max_npar}{Maximum packed TT parameters for joint EDF (memory guard).}
 
 \item{warn_lambda_boundary}{Soft warning when cGCV λ hits search bounds.}
+
+\item{cgcv_update}{cGCV dynamics: \code{"outer_simultaneous"} (default; fit all
+cores at fixed λ, freeze, Jacobi proposals, damped/trust update) or
+\code{"sequential"} (legacy Gauss–Seidel; can cascade to λ_max on Chicago
+Poisson under the global penalty).}
+
+\item{cgcv_damping}{Log-scale mixing weight \(\rho\in(0,1]\) toward the
+raw proposal (default \code{0.25}).}
+
+\item{cgcv_max_log10_step}{Trust region: max \(|\Delta\log_{10}\lambda|\)
+per update (default \code{1}). Use \code{Inf} to disable.}
+
+\item{cgcv_parameterization}{\code{"free"} (default) or \code{"scale_anisotropy"}
+(\(\lambda_m=\lambda_0\omega_m\), \(\prod\omega_m=1\)).}
+
+\item{cgcv_trace}{Store per-update cGCV diagnostics on the fit (\code{TRUE}).}
+
+\item{cgcv_margin_order}{Optional permutation of \code{1:d} for sequential
+updates (order-sensitivity diagnostics).}
+
+\item{cgcv_fit_sweeps}{ALS sweeps in each outer fit step (\code{NULL} →
+\code{max_sweeps}).}
+
+\item{cgcv_lambda0_method}{For scale–anisotropy: \code{"fixed_start"} or
+\code{"log_grid"} overall-scale search.}
+
+\item{cgcv_lambda0_grid}{Optional numeric grid for \code{"log_grid"}.}
 }
 \value{
 A list of class \code{"tt_control"}.

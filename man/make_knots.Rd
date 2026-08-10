@@ -4,7 +4,7 @@
 \alias{make_knots}
 \title{Open knot sequence for a univariate B-spline basis.}
 \usage{
-make_knots(x, k, degree = 3)
+make_knots(x, k, degree = 3, xl = NULL, xr = NULL)
 }
 \description{
 Open knot sequence for a univariate B-spline basis.

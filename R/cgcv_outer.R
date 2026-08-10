@@ -173,11 +173,19 @@
   prop
 }
 
-#' Build conditional cGCV workspace for margin k (global P_full).
+#' Build conditional cGCV / core-update workspace for margin k (global P_full).
+#'
+#' @param use_spectral If `NULL`, uses `control$use_spectral_gcv`. Pass
+#'   `FALSE` for fixed-λ solves (spectral factorization is only useful for
+#'   repeated cGCV evaluations).
+#' @param compute_op_norms Operator-norm diagnostics for cGCV traces (expensive
+#'   eigen); leave `FALSE` on the hot ALS/PIRLS path.
 #' @keywords internal
 #' @noRd
 .cgcv_core_workspace <- function(cores, k, lambda, basis, target, ranks,
-                                 control, weight = NULL, penalty_order = 2L) {
+                                 control, weight = NULL, penalty_order = 2L,
+                                 use_spectral = NULL,
+                                 compute_op_norms = FALSE) {
   L <- left_interfaces(cores, basis)
   R <- right_interfaces(cores, basis)
   Xk <- tt_design_core(L[[k]], R[[k]], basis[[k]])
@@ -186,31 +194,33 @@
     penalty_order = penalty_order,
     cyclic = attr(basis, "cyclic")
   )
+  use_spec <- if (is.null(use_spectral)) {
+    isTRUE(control$use_spectral_gcv)
+  } else {
+    isTRUE(use_spectral)
+  }
   ws <- make_core_workspace(
     target, Xk, pen_k$P_own, lambda[k],
     control$lambda_bounds, control$tol_lambda,
     weight = weight,
-    use_spectral = isTRUE(control$use_spectral_gcv),
+    use_spectral = use_spec,
     P0 = pen_k$P_other
   )
   list(
     workspace = ws,
     P_own = pen_k$P_own,
     P_other = pen_k$P_other,
-    P_own_op = .matrix_op_norm(pen_k$P_own),
-    P_other_op = .matrix_op_norm(pen_k$P_other)
+    P_own_op = if (isTRUE(compute_op_norms)) .matrix_op_norm(pen_k$P_own) else NA_real_,
+    P_other_op = if (isTRUE(compute_op_norms)) .matrix_op_norm(pen_k$P_other) else NA_real_
   )
 }
 
 #' Evaluate cGCV / ed / RSS at a given λ_k without writing cores.
+#' Uses `ws$spectral` built once in [make_core_workspace()].
 #' @keywords internal
 #' @noRd
 .cgcv_eval_at <- function(ws, lambda_k) {
-  cache <- if (isTRUE(ws$use_spectral)) {
-    .make_gcv_spectral_cache(ws$S, ws$P, P0 = ws$P0)
-  } else {
-    NULL
-  }
+  cache <- .cgcv_spectral_from_workspace(ws)
   if (is.null(cache)) {
     .conditional_gcv(ws$yw, ws$Xw, ws$S, ws$P, ws$b, lambda_k, P0 = ws$P0)
   } else {
@@ -237,7 +247,9 @@
   for (k in seq_len(d)) {
     built <- .cgcv_core_workspace(
       cores, k, lambda, basis, target, ranks, control,
-      weight = weight, penalty_order = penalty_order
+      weight = weight, penalty_order = penalty_order,
+      use_spectral = isTRUE(control$use_spectral_gcv),
+      compute_op_norms = TRUE
     )
     ws <- built$workspace
     upd <- update_lambda_cgcv(ws)

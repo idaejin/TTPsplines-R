@@ -84,3 +84,25 @@ gaussian_core_update_p0_cpp <- function(yc, Left, Right, Bk, penalty, lambda, P0
     .Call(`_TTPsplines_gaussian_core_update_p0_cpp`, yc, Left, Right, Bk, penalty, lambda, P0)
 }
 
+#' Precompute right ordinary / cumulative-penalty bond environments.
+#' Returns list(R0, RP); each length-d, R0[[k]] / RP[[k]] are r_k x r_k.
+tt_penalty_prepare_right_envs_cpp <- function(cores_list, lambda, DtD_list) {
+    .Call(`_TTPsplines_tt_penalty_prepare_right_envs_cpp`, cores_list, lambda, DtD_list)
+}
+
+#' Absorb one core into left environments.
+tt_penalty_left_env_absorb_cpp <- function(L0, LP, Ct, DtD, lambda_t) {
+    .Call(`_TTPsplines_tt_penalty_left_env_absorb_cpp`, L0, LP, Ct, DtD, lambda_t)
+}
+
+#' Assemble P_own (unscaled), P_other, P_full from environments.
+tt_penalty_from_envs_cpp <- function(L0, LP, R0, RP, DtD_k, lambda_k, p) {
+    .Call(`_TTPsplines_tt_penalty_from_envs_cpp`, L0, LP, R0, RP, DtD_k, lambda_k, p)
+}
+
+#' Exact conditional P_k^full via left/right cumulative penalty environments.
+#' k is 1-based. Prefer this over the legacy unit-core path.
+tt_conditional_penalty_full_env_cpp <- function(cores_list, k, lambda, DtD_list) {
+    .Call(`_TTPsplines_tt_conditional_penalty_full_env_cpp`, cores_list, k, lambda, DtD_list)
+}
+

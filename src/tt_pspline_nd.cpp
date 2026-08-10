@@ -1214,3 +1214,213 @@ arma::vec gaussian_core_update_p0_cpp(const arma::vec& yc,
   arma::vec rhs = X.t() * yc;
   return arma::solve(system, rhs, arma::solve_opts::likely_sympd);
 }
+
+// ---------------------------------------------------------------------------
+// Cached TT penalty environments (left / own / right)
+// P_full = λ_k kron(R0, kron(DtD, L0)) + kron(R0, kron(I, LP)) + kron(RP, kron(I, L0))
+// ---------------------------------------------------------------------------
+
+static arma::mat sym_avg(const arma::mat& A) {
+  return 0.5 * (A + A.t());
+}
+
+static arma::mat left_transfer_gram(const arma::mat& L, const arma::cube& Ct) {
+  const int p = Ct.n_cols;
+  const int rr = Ct.n_slices;
+  arma::mat Gn(rr, rr, arma::fill::zeros);
+  for (int j = 0; j < p; ++j) {
+    arma::mat C = core_slice_j(Ct, j);
+    Gn += C.t() * L * C;
+  }
+  return sym_avg(Gn);
+}
+
+static arma::mat right_transfer_gram(const arma::mat& E, const arma::cube& Ct) {
+  const int rl = Ct.n_rows;
+  const int p = Ct.n_cols;
+  arma::mat Gn(rl, rl, arma::fill::zeros);
+  for (int j = 0; j < p; ++j) {
+    arma::mat C = core_slice_j(Ct, j);
+    Gn += C * E * C.t();
+  }
+  return sym_avg(Gn);
+}
+
+static arma::mat left_transfer_pen_site(const arma::mat& L0,
+                                        const arma::cube& Ct,
+                                        const arma::mat& DtD,
+                                        double lambda_t) {
+  const int p = Ct.n_cols;
+  const int rr = Ct.n_slices;
+  arma::mat Gn(rr, rr, arma::fill::zeros);
+  if (lambda_t == 0.0) return Gn;
+  std::vector<arma::mat> Ms(p);
+  for (int j = 0; j < p; ++j) {
+    arma::mat C = core_slice_j(Ct, j);
+    Ms[j] = L0 * C;
+  }
+  for (int j = 0; j < p; ++j) {
+    arma::mat Cj = core_slice_j(Ct, j);
+    for (int jp = 0; jp < p; ++jp) {
+      const double dval = DtD(j, jp);
+      if (dval != 0.0) Gn += (lambda_t * dval) * (Cj.t() * Ms[jp]);
+    }
+  }
+  return sym_avg(Gn);
+}
+
+static arma::mat right_transfer_pen_site(const arma::mat& E0,
+                                         const arma::cube& Ct,
+                                         const arma::mat& DtD,
+                                         double lambda_t) {
+  const int rl = Ct.n_rows;
+  const int p = Ct.n_cols;
+  arma::mat Gn(rl, rl, arma::fill::zeros);
+  if (lambda_t == 0.0) return Gn;
+  std::vector<arma::mat> Cs(p);
+  std::vector<arma::mat> ECt(p);
+  for (int j = 0; j < p; ++j) {
+    Cs[j] = core_slice_j(Ct, j);
+    ECt[j] = E0 * Cs[j].t();
+  }
+  for (int j = 0; j < p; ++j) {
+    for (int jp = 0; jp < p; ++jp) {
+      const double dval = DtD(j, jp);
+      if (dval != 0.0) Gn += (lambda_t * dval) * (Cs[j] * ECt[jp]);
+    }
+  }
+  return sym_avg(Gn);
+}
+
+static void left_env_absorb(arma::mat& L0, arma::mat& LP,
+                            const arma::cube& Ct, const arma::mat& DtD,
+                            double lambda_t) {
+  arma::mat L0_new = left_transfer_gram(L0, Ct);
+  arma::mat LP_new = left_transfer_gram(LP, Ct) +
+      left_transfer_pen_site(L0, Ct, DtD, lambda_t);
+  L0 = std::move(L0_new);
+  LP = std::move(LP_new);
+}
+
+static void right_env_absorb(arma::mat& R0, arma::mat& RP,
+                             const arma::cube& Ct, const arma::mat& DtD,
+                             double lambda_t) {
+  arma::mat R0_new = right_transfer_gram(R0, Ct);
+  arma::mat RP_new = right_transfer_gram(RP, Ct) +
+      right_transfer_pen_site(R0, Ct, DtD, lambda_t);
+  R0 = std::move(R0_new);
+  RP = std::move(RP_new);
+}
+
+static arma::vec normalize_lambda_arma(const arma::vec& lambda, int d) {
+  if (static_cast<int>(lambda.n_elem) == 1) {
+    arma::vec out(d);
+    out.fill(lambda(0));
+    return out;
+  }
+  if (static_cast<int>(lambda.n_elem) != d) {
+    stop("lambda length mismatch");
+  }
+  return lambda;
+}
+
+//' Precompute right ordinary / cumulative-penalty bond environments.
+//' Returns list(R0, RP); each length-d, R0[[k]] / RP[[k]] are r_k x r_k.
+// [[Rcpp::export]]
+List tt_penalty_prepare_right_envs_cpp(const List& cores_list,
+                                       const arma::vec& lambda,
+                                       const List& DtD_list) {
+  std::vector<arma::cube> cores = list_to_cubes(cores_list);
+  const int d = cores.size();
+  if (static_cast<int>(DtD_list.size()) != d) {
+    stop("tt_penalty_prepare_right_envs_cpp: DtD_list length mismatch");
+  }
+  arma::vec lam = normalize_lambda_arma(lambda, d);
+  std::vector<arma::mat> DtD(d);
+  for (int m = 0; m < d; ++m) DtD[m] = as<arma::mat>(DtD_list[m]);
+
+  List R0(d);
+  List RP(d);
+  arma::mat cur0(1, 1, arma::fill::ones);
+  arma::mat curP(1, 1, arma::fill::zeros);
+  R0[d - 1] = cur0;
+  RP[d - 1] = curP;
+  if (d == 1) {
+    return List::create(_["R0"] = R0, _["RP"] = RP);
+  }
+  for (int t = d; t >= 2; --t) {
+    const int tt = t - 1; // 0-based core index
+    right_env_absorb(cur0, curP, cores[tt], DtD[tt], lam(tt));
+    R0[t - 2] = cur0;
+    RP[t - 2] = curP;
+  }
+  return List::create(_["R0"] = R0, _["RP"] = RP);
+}
+
+//' Absorb one core into left environments.
+// [[Rcpp::export]]
+List tt_penalty_left_env_absorb_cpp(const arma::mat& L0,
+                                    const arma::mat& LP,
+                                    const arma::cube& Ct,
+                                    const arma::mat& DtD,
+                                    double lambda_t) {
+  arma::mat L0w = L0;
+  arma::mat LPw = LP;
+  left_env_absorb(L0w, LPw, Ct, DtD, lambda_t);
+  return List::create(_["L0"] = L0w, _["LP"] = LPw);
+}
+
+//' Assemble P_own (unscaled), P_other, P_full from environments.
+// [[Rcpp::export]]
+List tt_penalty_from_envs_cpp(const arma::mat& L0,
+                              const arma::mat& LP,
+                              const arma::mat& R0,
+                              const arma::mat& RP,
+                              const arma::mat& DtD_k,
+                              double lambda_k,
+                              int p) {
+  arma::mat Ip = arma::eye(p, p);
+  arma::mat P_own = arma::kron(R0, arma::kron(DtD_k, L0));
+  arma::mat P_left = arma::kron(R0, arma::kron(Ip, LP));
+  arma::mat P_right = arma::kron(RP, arma::kron(Ip, L0));
+  arma::mat P_other = P_left + P_right;
+  arma::mat P_full = lambda_k * P_own + P_other;
+  return List::create(
+      _["P_own"] = sym_avg(P_own),
+      _["P_other"] = sym_avg(P_other),
+      _["P_full"] = sym_avg(P_full),
+      _["method"] = "tt_env_cpp");
+}
+
+//' Exact conditional P_k^full via left/right cumulative penalty environments.
+//' k is 1-based. Prefer this over the legacy unit-core path.
+// [[Rcpp::export]]
+List tt_conditional_penalty_full_env_cpp(const List& cores_list,
+                                         int k,
+                                         const arma::vec& lambda,
+                                         const List& DtD_list) {
+  std::vector<arma::cube> cores = list_to_cubes(cores_list);
+  const int d = cores.size();
+  if (k < 1 || k > d) stop("tt_conditional_penalty_full_env_cpp: k out of range");
+  if (static_cast<int>(DtD_list.size()) != d) {
+    stop("tt_conditional_penalty_full_env_cpp: DtD_list length mismatch");
+  }
+  arma::vec lam = normalize_lambda_arma(lambda, d);
+  std::vector<arma::mat> DtD(d);
+  for (int m = 0; m < d; ++m) DtD[m] = as<arma::mat>(DtD_list[m]);
+
+  const int kk = k - 1;
+  List right = tt_penalty_prepare_right_envs_cpp(cores_list, lam, DtD_list);
+  List R0s = right["R0"];
+  List RPs = right["RP"];
+  arma::mat R0 = as<arma::mat>(R0s[kk]);
+  arma::mat RP = as<arma::mat>(RPs[kk]);
+
+  arma::mat L0(1, 1, arma::fill::ones);
+  arma::mat LP(1, 1, arma::fill::zeros);
+  for (int t = 0; t < kk; ++t) {
+    left_env_absorb(L0, LP, cores[t], DtD[t], lam(t));
+  }
+  const int p = cores[kk].n_cols;
+  return tt_penalty_from_envs_cpp(L0, LP, R0, RP, DtD[kk], lam(kk), p);
+}

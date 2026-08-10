@@ -210,6 +210,213 @@ core_penalty_own_exact <- function(cores, k, DtD) {
   kronecker(W_R, kronecker(DtD, W_L))
 }
 
+# ---- Cached left/right TT penalty environments ----------------------------
+# P_k^full = P_left + P_own + P_right with
+#   P_own   = λ_k kron(R0, kron(DtD_k, L0))
+#   P_left  = kron(R0, kron(I_p, LP))     # sum_{m<k} λ_m P_{k,m}
+#   P_right = kron(RP, kron(I_p, L0))     # sum_{m>k} λ_m P_{k,m}
+
+#' Ordinary left transfer: L (r_in x r_in) through core -> r_out x r_out.
+#' @keywords internal
+#' @noRd
+.tt_left_transfer_gram <- function(L, Ct) {
+  rl <- dim(Ct)[1L]
+  p <- dim(Ct)[2L]
+  rr <- dim(Ct)[3L]
+  Gn <- matrix(0, rr, rr)
+  for (j in seq_len(p)) {
+    C <- matrix(Ct[, j, ], rl, rr)
+    Gn <- Gn + crossprod(C, L %*% C)
+  }
+  (Gn + t(Gn)) / 2
+}
+
+#' Ordinary right transfer: E (r_out x r_out) through core -> r_in x r_in.
+#' @keywords internal
+#' @noRd
+.tt_right_transfer_gram <- function(E, Ct) {
+  rl <- dim(Ct)[1L]
+  p <- dim(Ct)[2L]
+  rr <- dim(Ct)[3L]
+  Gn <- matrix(0, rl, rl)
+  for (j in seq_len(p)) {
+    C <- matrix(Ct[, j, ], rl, rr)
+    Gn <- Gn + C %*% E %*% t(C)
+  }
+  (Gn + t(Gn)) / 2
+}
+
+#' Site penalty contribution on a left transfer (adds λ DtD at this core).
+#' @keywords internal
+#' @noRd
+.tt_left_transfer_pen_site <- function(L0, Ct, DtD, lambda_t) {
+  rl <- dim(Ct)[1L]
+  p <- dim(Ct)[2L]
+  rr <- dim(Ct)[3L]
+  if (lambda_t == 0) return(matrix(0, rr, rr))
+  Ms <- vector("list", p)
+  for (j in seq_len(p)) {
+    C <- matrix(Ct[, j, ], rl, rr)
+    Ms[[j]] <- L0 %*% C
+  }
+  Gn <- matrix(0, rr, rr)
+  for (j in seq_len(p)) {
+    Cj <- matrix(Ct[, j, ], rl, rr)
+    for (jp in seq_len(p)) {
+      dval <- DtD[j, jp]
+      if (dval != 0) {
+        Gn <- Gn + (lambda_t * dval) * crossprod(Cj, Ms[[jp]])
+      }
+    }
+  }
+  (Gn + t(Gn)) / 2
+}
+
+#' Site penalty contribution on a right transfer.
+#' @keywords internal
+#' @noRd
+.tt_right_transfer_pen_site <- function(E0, Ct, DtD, lambda_t) {
+  rl <- dim(Ct)[1L]
+  p <- dim(Ct)[2L]
+  rr <- dim(Ct)[3L]
+  if (lambda_t == 0) return(matrix(0, rl, rl))
+  # Gn = λ sum_{j,j'} DtD[j,j'] C_j E0 C_{j'}^T
+  Cs <- vector("list", p)
+  for (j in seq_len(p)) Cs[[j]] <- matrix(Ct[, j, ], rl, rr)
+  # Precompute E0 C_j^T
+  ECt <- vector("list", p)
+  for (j in seq_len(p)) ECt[[j]] <- E0 %*% t(Cs[[j]])
+  Gn <- matrix(0, rl, rl)
+  for (j in seq_len(p)) {
+    for (jp in seq_len(p)) {
+      dval <- DtD[j, jp]
+      if (dval != 0) {
+        Gn <- Gn + (lambda_t * dval) * (Cs[[j]] %*% ECt[[jp]])
+      }
+    }
+  }
+  (Gn + t(Gn)) / 2
+}
+
+#' Absorb core t into left environments (L0, LP) -> (L0', LP').
+#' @keywords internal
+#' @noRd
+.tt_left_env_absorb <- function(L0, LP, Ct, DtD, lambda_t) {
+  if (exists("tt_penalty_left_env_absorb_cpp", mode = "function")) {
+    return(tt_penalty_left_env_absorb_cpp(L0, LP, Ct, DtD, lambda_t))
+  }
+  list(
+    L0 = .tt_left_transfer_gram(L0, Ct),
+    LP = .tt_left_transfer_gram(LP, Ct) +
+      .tt_left_transfer_pen_site(L0, Ct, DtD, lambda_t)
+  )
+}
+
+#' Absorb core t into right environments (R0, RP) on its right bond -> left bond.
+#' @keywords internal
+#' @noRd
+.tt_right_env_absorb <- function(R0, RP, Ct, DtD, lambda_t) {
+  list(
+    R0 = .tt_right_transfer_gram(R0, Ct),
+    RP = .tt_right_transfer_gram(RP, Ct) +
+      .tt_right_transfer_pen_site(R0, Ct, DtD, lambda_t)
+  )
+}
+
+#' Precompute right ordinary / cumulative-penalty environments for a sweep.
+#'
+#' `R0[[k]]`, `RP[[k]]` are `r_k x r_k` matrices on the bond to the right of
+#' core `k` (contraction of cores `k+1..d`). For the last core, both are `1x1`.
+#'
+#' @keywords internal
+#' @noRd
+tt_penalty_prepare_right_envs <- function(cores, lambda, DtD_list) {
+  d <- length(cores)
+  lambda <- as.numeric(lambda)
+  if (length(lambda) == 1L) lambda <- rep(lambda, d)
+  if (exists("tt_penalty_prepare_right_envs_cpp", mode = "function")) {
+    return(tt_penalty_prepare_right_envs_cpp(cores, lambda, DtD_list))
+  }
+  R0 <- vector("list", d)
+  RP <- vector("list", d)
+  # Bond after core d
+  cur0 <- matrix(1, 1, 1)
+  curP <- matrix(0, 1, 1)
+  R0[[d]] <- cur0
+  RP[[d]] <- curP
+  if (d == 1L) {
+    return(list(R0 = R0, RP = RP))
+  }
+  for (t in d:2) {
+    absb <- .tt_right_env_absorb(
+      cur0, curP, cores[[t]], DtD_list[[t]], lambda[t]
+    )
+    cur0 <- absb$R0
+    curP <- absb$RP
+    R0[[t - 1L]] <- cur0
+    RP[[t - 1L]] <- curP
+  }
+  list(R0 = R0, RP = RP)
+}
+
+#' Assemble P_own / P_other / P_full from left/right environments at core k.
+#'
+#' `P_own` is returned **without** λ_k (same contract as
+#' [core_penalty_own_exact()]); callers form `λ_k P_own + P_other`.
+#' @keywords internal
+#' @noRd
+tt_penalty_from_envs <- function(L0, LP, R0, RP, DtD_k, lambda_k, p) {
+  if (exists("tt_penalty_from_envs_cpp", mode = "function")) {
+    return(tt_penalty_from_envs_cpp(L0, LP, R0, RP, DtD_k, lambda_k, as.integer(p)))
+  }
+  Ip <- diag(p)
+  P_own <- kronecker(R0, kronecker(DtD_k, L0))
+  P_left <- kronecker(R0, kronecker(Ip, LP))
+  P_right <- kronecker(RP, kronecker(Ip, L0))
+  P_other <- P_left + P_right
+  P_full <- as.numeric(lambda_k) * P_own + P_other
+  list(
+    P_own = 0.5 * (P_own + t(P_own)),
+    P_other = 0.5 * (P_other + t(P_other)),
+    P_full = 0.5 * (P_full + t(P_full)),
+    method = "tt_env"
+  )
+}
+
+#' Exact conditional P_k^full via left/right cumulative penalty environments.
+#'
+#' Algebraically equivalent to [tt_conditional_penalty_full_tt()] / the dense
+#' reference, but avoids the O(m_k^2) unit-core loop.
+#'
+#' @keywords internal
+#' @noRd
+tt_conditional_penalty_full_env <- function(cores, k, lambda, DtD_list) {
+  d <- length(cores)
+  k <- as.integer(k)
+  lambda <- as.numeric(lambda)
+  if (length(lambda) == 1L) lambda <- rep(lambda, d)
+  if (exists("tt_conditional_penalty_full_env_cpp", mode = "function")) {
+    return(tt_conditional_penalty_full_env_cpp(cores, k, lambda, DtD_list))
+  }
+  right <- tt_penalty_prepare_right_envs(cores, lambda, DtD_list)
+  L0 <- matrix(1, 1, 1)
+  LP <- matrix(0, 1, 1)
+  if (k > 1L) {
+    for (t in seq_len(k - 1L)) {
+      absb <- .tt_left_env_absorb(
+        L0, LP, cores[[t]], DtD_list[[t]], lambda[t]
+      )
+      L0 <- absb$L0
+      LP <- absb$LP
+    }
+  }
+  p <- dim(cores[[k]])[2L]
+  tt_penalty_from_envs(
+    L0, LP, right$R0[[k]], right$RP[[k]],
+    DtD_list[[k]], lambda[k], p
+  )
+}
+
 #' Per-margin D'D list matching TT physical sizes.
 #' @keywords internal
 #' @noRd
@@ -367,23 +574,47 @@ tt_conditional_penalty_full_tt <- function(cores, k, lambda, DtD_list) {
 tt_conditional_penalty_full <- function(cores, k, lambda,
                                         penalty_order = 2L,
                                         cyclic = NULL,
-                                        max_dense = 20000L) {
+                                        max_dense = 20000L,
+                                        method = c("auto", "env", "tt_cpp", "tt", "dense")) {
   d <- length(cores)
   lambda <- as.numeric(lambda)
   if (length(lambda) == 1L) lambda <- rep(lambda, d)
   if (length(lambda) != d) {
     stop("tt_conditional_penalty_full: lambda length mismatch.", call. = FALSE)
   }
+  method <- match.arg(method)
   DtD_list <- tt_DtD_list(cores, penalty_order, cyclic)
-  if (exists("tt_conditional_penalty_full_cpp", mode = "function")) {
+
+  # Default / env: cumulative left–own–right environments (no unit-core loop).
+  if (method %in% c("auto", "env")) {
+    if (exists("tt_conditional_penalty_full_env_cpp", mode = "function")) {
+      out <- tt_conditional_penalty_full_env_cpp(
+        cores, as.integer(k), lambda, DtD_list
+      )
+      out$method <- out$method %||% "tt_env_cpp"
+      return(out)
+    }
+    out <- tt_conditional_penalty_full_env(cores, k, lambda, DtD_list)
+    out$method <- "tt_env"
+    return(out)
+  }
+
+  # Legacy / diagnostic paths
+  if (identical(method, "tt_cpp")) {
+    if (!exists("tt_conditional_penalty_full_cpp", mode = "function")) {
+      stop("tt_conditional_penalty_full_cpp not available.", call. = FALSE)
+    }
     out <- tt_conditional_penalty_full_cpp(cores, as.integer(k), lambda, DtD_list)
     out$method <- out$method %||% "tt_cpp"
     return(out)
   }
-  p_vec <- vapply(cores, function(z) dim(z)[2L], integer(1))
-  nfull <- prod(as.numeric(p_vec))
-  mk <- length(cores[[k]])
-  if (is.finite(nfull) && nfull <= max_dense && nfull * mk <= 5e7) {
+  if (identical(method, "dense")) {
+    p_vec <- vapply(cores, function(z) dim(z)[2L], integer(1))
+    nfull <- prod(as.numeric(p_vec))
+    mk <- length(cores[[k]])
+    if (!is.finite(nfull) || nfull > max_dense || nfull * mk > 5e7) {
+      stop("dense path infeasible for these dimensions.", call. = FALSE)
+    }
     out <- tt_conditional_penalty_full_dense(cores, k, lambda, DtD_list)
     out$method <- "dense"
     return(out)

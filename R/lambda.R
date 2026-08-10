@@ -120,52 +120,128 @@ update_lambda_fixed <- function(workspace, ...) {
   M <- S + lambda * P
   if (!is.null(P0)) M <- M + P0
   g <- solve_spd_ridge(M, b)
-  rss <- sum((yw - as.numeric(Xw %*% g))^2)
+  # Prefer quadratic form (same as spectral path); Xw kept for back-compat.
+  rss <- as.numeric(sum(yw^2) - 2 * crossprod(b, g) + crossprod(g, S %*% g))
+  if (!is.finite(rss)) {
+    rss <- sum((yw - as.numeric(Xw %*% g))^2)
+  }
+  rss <- max(rss, 0)
   ed <- .ed_S(S, P, lambda, P0 = P0)
   denom <- (n - ed)^2
   value <- if (!is.finite(denom) || denom < 1e-12) Inf else n * rss / denom
   list(value = value, g = g, ed = ed, rss = rss)
 }
 
-#' Optional spectral cache for repeated GCV evals on fixed (S, P[, P0]).
-#' Uses chol(S_ridge + P0) then eigen of transformed P (dense, small m).
+#' Spectral factorization workspace for frozen conditional cGCV.
+#'
+#' For fixed \eqn{A = S + P_{-k} + \varepsilon I} and \eqn{B = P_{kk}},
+#' factor once
+#' \deqn{A = R^\top R,\quad
+#'   R^{-\top} B R^{-1} = U\,\mathrm{diag}(d)\,U^\top}
+#' and cache
+#' \eqn{\tilde b = U^\top R^{-\top} b} and
+#' \eqn{s_j = (U^\top R^{-\top} S R^{-1} U)_{jj}} so that each \eqn{\lambda}
+#' evaluation is
+#' \deqn{g(\lambda)=R^{-1}U(I+\lambda D)^{-1}\tilde b,\quad
+#'   \mathrm{ed}(\lambda)=\sum_j s_j/(1+\lambda d_j),\quad
+#'   \mathrm{RSS}=c-2b^\top g+g^\top S g.}
+#'
+#' @param S Gram matrix \eqn{X^\top W X}.
+#' @param P Own-margin penalty \eqn{P_{kk}}.
+#' @param b Cross-product \eqn{X^\top W z}.
+#' @param yw Optional weighted response (for \eqn{c=z^\top W z} and \eqn{n}).
+#' @param P0 Optional fixed offset \eqn{P_{k,-k}}.
+#' @param max_m Skip factorization when \eqn{m>\texttt{max_m}}.
+#' @return List workspace, or `NULL` if factorization fails / skipped.
 #' @keywords internal
-.make_gcv_spectral_cache <- function(S, P, P0 = NULL) {
+.make_gcv_spectral_cache <- function(S, P, b = NULL, yw = NULL, P0 = NULL,
+                                     max_m = 1500L) {
   m <- nrow(S)
-  if (m > 400L) return(NULL) # not worth for large cores
-  ridge <- ridge_scale(S, multiplier = 1e-8)
-  Sr <- S + ridge * diag(m)
-  if (!is.null(P0)) Sr <- Sr + P0
-  R <- tryCatch(chol(Sr), error = function(e) NULL)
+  if (m < 1L || m > as.integer(max_m)) return(NULL)
+  if (is.null(b)) {
+    # Back-compat: older callers passed only (S, P, P0).
+    b <- rep(0, m)
+  }
+  b <- as.numeric(b)
+  # Match .ed_S ridge scale so spectral edf ≡ tr((A+λB)^{-1} S).
+  ridge <- ridge_scale(S, multiplier = 1e-6)
+  A <- S + ridge * diag(m)
+  if (!is.null(P0)) A <- A + P0
+  R <- tryCatch(chol(A), error = function(e) NULL)
   if (is.null(R)) return(NULL)
-  # Q = R^{-T} P R^{-1}
-  tmp <- forwardsolve(t(R), P)
-  Q <- backsolve(R, tmp)
-  Q <- (Q + t(Q)) / 2
-  eg <- tryCatch(eigen(Q, symmetric = TRUE), error = function(e) NULL)
+  # C = R^{-T} P R^{-1}: first Y = P R^{-1}, then C = R^{-T} Y.
+  # (Previously used R^{-1} R^{-T} P = A^{-1} P, which is the wrong congruence.)
+  Yt <- forwardsolve(t(R), t(P)) # Yt = R^{-T} P^T ⇒ Y = P R^{-1}
+  Y <- t(Yt)
+  C <- forwardsolve(t(R), Y)
+  C <- (C + t(C)) / 2
+  eg <- tryCatch(eigen(C, symmetric = TRUE), error = function(e) NULL)
   if (is.null(eg)) return(NULL)
-  list(R = R, values = pmax(Re(eg$values), 0), vectors = Re(eg$vectors),
-       ridge = ridge)
+  U <- Re(eg$vectors)
+  dvals <- pmax(Re(eg$values), 0)
+  # transformed_b = U^T R^{-T} b
+  Rb <- forwardsolve(t(R), b)
+  transformed_b <- as.numeric(crossprod(U, Rb))
+  # ed_weights = diag(U^T R^{-T} S R^{-1} U)
+  St_t <- forwardsolve(t(R), t(S)) # St = S R^{-1}
+  St <- t(St_t)
+  St <- forwardsolve(t(R), St)     # St = R^{-T} S R^{-1}
+  St <- (St + t(St)) / 2
+  SU <- St %*% U
+  ed_weights <- as.numeric(colSums(U * SU))
+  zWz <- if (is.null(yw)) NA_real_ else sum(as.numeric(yw)^2)
+  n <- if (is.null(yw)) NA_integer_ else length(yw)
+  list(
+    R = R,
+    values = dvals,
+    vectors = U,
+    transformed_b = transformed_b,
+    ed_weights = ed_weights,
+    zWz = zWz,
+    S = S,
+    b = b,
+    ridge = ridge,
+    n = n
+  )
 }
 
-.conditional_gcv_spectral <- function(yw, Xw, S, P, b, lambda, cache, P0 = NULL) {
-  # Fall back if cache missing
-  if (is.null(cache)) return(.conditional_gcv(yw, Xw, S, P, b, lambda, P0 = P0))
-  n <- length(yw)
-  R <- cache$R
-  # Solve (S_ridge + P0 + lam P) g = b via spectral of Q
-  rhs <- forwardsolve(t(R), b)
-  U <- cache$vectors
-  d <- cache$values
-  coef_u <- as.numeric(crossprod(U, rhs)) / (1 + lambda * d)
-  Rg <- U %*% coef_u
-  g <- backsolve(R, Rg)
-  rss <- sum((yw - as.numeric(Xw %*% g))^2)
-  # ed ≈ sum 1/(1+lam d_i) for the whitened problem (approx with ridge)
-  ed <- sum(1 / (1 + lambda * d))
+#' Evaluate conditional GCV from a spectral workspace (no n×m matvec).
+#' @keywords internal
+.conditional_gcv_spectral <- function(yw, Xw, S, P, b, lambda, cache,
+                                      P0 = NULL) {
+  if (is.null(cache)) {
+    return(.conditional_gcv(yw, Xw, S, P, b, lambda, P0 = P0))
+  }
+  n <- cache$n
+  if (is.null(n) || !is.finite(n)) n <- length(yw)
+  inv <- 1 / (1 + lambda * cache$values)
+  coef_u <- cache$transformed_b * inv
+  g <- as.numeric(backsolve(cache$R, cache$vectors %*% coef_u))
+  ed <- sum(cache$ed_weights * inv)
+  zWz <- cache$zWz
+  if (!is.finite(zWz)) zWz <- sum(as.numeric(yw)^2)
+  bb <- cache$b
+  SS <- cache$S
+  rss <- as.numeric(zWz - 2 * crossprod(bb, g) + crossprod(g, SS %*% g))
+  if (!is.finite(rss) && !is.null(Xw)) {
+    rss <- sum((yw - as.numeric(Xw %*% g))^2)
+  }
+  rss <- max(rss, 0)
   denom <- (n - ed)^2
   value <- if (!is.finite(denom) || denom < 1e-12) Inf else n * rss / denom
   list(value = value, g = drop(g), ed = ed, rss = rss)
+}
+
+#' Resolve / attach spectral cache on a core workspace (build at most once).
+#' @keywords internal
+.cgcv_spectral_from_workspace <- function(workspace) {
+  if (!isTRUE(workspace$use_spectral)) return(NULL)
+  cache <- workspace$spectral
+  if (!is.null(cache)) return(cache)
+  .make_gcv_spectral_cache(
+    workspace$S, workspace$P, workspace$b,
+    yw = workspace$yw, P0 = workspace$P0
+  )
 }
 
 update_lambda_cgcv <- function(workspace, ...) {
@@ -177,8 +253,7 @@ update_lambda_cgcv <- function(workspace, ...) {
   P <- workspace$P
   P0 <- workspace$P0
   b <- workspace$b
-  use_spectral <- isTRUE(workspace$use_spectral)
-  cache <- if (use_spectral) .make_gcv_spectral_cache(S, P, P0 = P0) else NULL
+  cache <- .cgcv_spectral_from_workspace(workspace)
   n_eval <- 0L
   obj <- function(ll) {
     n_eval <<- n_eval + 1L
@@ -220,11 +295,16 @@ make_core_workspace <- function(zc, X, P, lambda0, bounds, tol,
     S <- crossprod(Xw)
     b <- as.numeric(crossprod(Xw, yw))
   }
-  list(
+  ws <- list(
     S = S, b = b, P = P, P0 = P0, X = X, Xw = Xw, yw = yw,
     lambda0 = lambda0, bounds = bounds, tol = tol,
-    use_spectral = isTRUE(use_spectral)
+    use_spectral = isTRUE(use_spectral),
+    spectral = NULL
   )
+  if (isTRUE(use_spectral)) {
+    ws$spectral <- .make_gcv_spectral_cache(S, P, b, yw = yw, P0 = P0)
+  }
+  ws
 }
 
 #' Classify each λ relative to cGCV search bounds.

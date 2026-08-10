@@ -75,7 +75,9 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
       }
       built <- .cgcv_core_workspace(
         cores, k, lambda, basis, yc, ranks, control,
-        weight = w, penalty_order = penalty_order
+        weight = w, penalty_order = penalty_order,
+        use_spectral = identical(method, "cGCV") && isTRUE(control$use_spectral_gcv),
+        compute_op_norms = do_trace
       )
       Pk <- built$P_own
       penalties[[k]] <- Pk

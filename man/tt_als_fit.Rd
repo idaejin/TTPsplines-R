@@ -20,4 +20,12 @@ tt_als_fit(
 Always uses the classical global discrete P-spline penalty on Θ via
 \(P_k^{\mathrm{full}}=A_k^\top S_{\boldsymbol\lambda} A_k\).
 }
+\details{
+cGCV modes (\code{\link[=tt_control]{tt_control()}} \code{cgcv_update}):
+\itemize{
+\item \code{"sequential"} (default): Gauss–Seidel core/λ updates (legacy dynamics).
+\item \code{"outer_simultaneous"}: fit all cores at fixed λ → freeze → Jacobi
+proposals → damped / trust-region λ update.
+}
+}
 \keyword{internal}

@@ -271,6 +271,65 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// tt_penalty_prepare_right_envs_cpp
+List tt_penalty_prepare_right_envs_cpp(const List& cores_list, const arma::vec& lambda, const List& DtD_list);
+RcppExport SEXP _TTPsplines_tt_penalty_prepare_right_envs_cpp(SEXP cores_listSEXP, SEXP lambdaSEXP, SEXP DtD_listSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const List& >::type cores_list(cores_listSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type lambda(lambdaSEXP);
+    Rcpp::traits::input_parameter< const List& >::type DtD_list(DtD_listSEXP);
+    rcpp_result_gen = Rcpp::wrap(tt_penalty_prepare_right_envs_cpp(cores_list, lambda, DtD_list));
+    return rcpp_result_gen;
+END_RCPP
+}
+// tt_penalty_left_env_absorb_cpp
+List tt_penalty_left_env_absorb_cpp(const arma::mat& L0, const arma::mat& LP, const arma::cube& Ct, const arma::mat& DtD, double lambda_t);
+RcppExport SEXP _TTPsplines_tt_penalty_left_env_absorb_cpp(SEXP L0SEXP, SEXP LPSEXP, SEXP CtSEXP, SEXP DtDSEXP, SEXP lambda_tSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type L0(L0SEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type LP(LPSEXP);
+    Rcpp::traits::input_parameter< const arma::cube& >::type Ct(CtSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type DtD(DtDSEXP);
+    Rcpp::traits::input_parameter< double >::type lambda_t(lambda_tSEXP);
+    rcpp_result_gen = Rcpp::wrap(tt_penalty_left_env_absorb_cpp(L0, LP, Ct, DtD, lambda_t));
+    return rcpp_result_gen;
+END_RCPP
+}
+// tt_penalty_from_envs_cpp
+List tt_penalty_from_envs_cpp(const arma::mat& L0, const arma::mat& LP, const arma::mat& R0, const arma::mat& RP, const arma::mat& DtD_k, double lambda_k, int p);
+RcppExport SEXP _TTPsplines_tt_penalty_from_envs_cpp(SEXP L0SEXP, SEXP LPSEXP, SEXP R0SEXP, SEXP RPSEXP, SEXP DtD_kSEXP, SEXP lambda_kSEXP, SEXP pSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type L0(L0SEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type LP(LPSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type R0(R0SEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type RP(RPSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type DtD_k(DtD_kSEXP);
+    Rcpp::traits::input_parameter< double >::type lambda_k(lambda_kSEXP);
+    Rcpp::traits::input_parameter< int >::type p(pSEXP);
+    rcpp_result_gen = Rcpp::wrap(tt_penalty_from_envs_cpp(L0, LP, R0, RP, DtD_k, lambda_k, p));
+    return rcpp_result_gen;
+END_RCPP
+}
+// tt_conditional_penalty_full_env_cpp
+List tt_conditional_penalty_full_env_cpp(const List& cores_list, int k, const arma::vec& lambda, const List& DtD_list);
+RcppExport SEXP _TTPsplines_tt_conditional_penalty_full_env_cpp(SEXP cores_listSEXP, SEXP kSEXP, SEXP lambdaSEXP, SEXP DtD_listSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const List& >::type cores_list(cores_listSEXP);
+    Rcpp::traits::input_parameter< int >::type k(kSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type lambda(lambdaSEXP);
+    Rcpp::traits::input_parameter< const List& >::type DtD_list(DtD_listSEXP);
+    rcpp_result_gen = Rcpp::wrap(tt_conditional_penalty_full_env_cpp(cores_list, k, lambda, DtD_list));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_TTPsplines_tt_design_core_d_cpp", (DL_FUNC) &_TTPsplines_tt_design_core_d_cpp, 3},
@@ -289,6 +348,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"_TTPsplines_tt_conditional_penalty_full_cpp", (DL_FUNC) &_TTPsplines_tt_conditional_penalty_full_cpp, 4},
     {"_TTPsplines_tt_global_penalty_value_cpp", (DL_FUNC) &_TTPsplines_tt_global_penalty_value_cpp, 3},
     {"_TTPsplines_gaussian_core_update_p0_cpp", (DL_FUNC) &_TTPsplines_gaussian_core_update_p0_cpp, 7},
+    {"_TTPsplines_tt_penalty_prepare_right_envs_cpp", (DL_FUNC) &_TTPsplines_tt_penalty_prepare_right_envs_cpp, 3},
+    {"_TTPsplines_tt_penalty_left_env_absorb_cpp", (DL_FUNC) &_TTPsplines_tt_penalty_left_env_absorb_cpp, 5},
+    {"_TTPsplines_tt_penalty_from_envs_cpp", (DL_FUNC) &_TTPsplines_tt_penalty_from_envs_cpp, 7},
+    {"_TTPsplines_tt_conditional_penalty_full_env_cpp", (DL_FUNC) &_TTPsplines_tt_conditional_penalty_full_env_cpp, 4},
     {NULL, NULL, 0}
 };
 

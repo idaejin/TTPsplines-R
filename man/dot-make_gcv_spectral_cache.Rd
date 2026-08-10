@@ -2,13 +2,37 @@
 % Please edit documentation in R/lambda.R
 \name{.make_gcv_spectral_cache}
 \alias{.make_gcv_spectral_cache}
-\title{Optional spectral cache for repeated GCV evals on fixed (S, P\link{, P0}).
-Uses chol(S_ridge + P0) then eigen of transformed P (dense, small m).}
+\title{Spectral factorization workspace for frozen conditional cGCV.}
 \usage{
-.make_gcv_spectral_cache(S, P, P0 = NULL)
+.make_gcv_spectral_cache(S, P, b = NULL, yw = NULL, P0 = NULL, max_m = 1500L)
+}
+\arguments{
+\item{S}{Gram matrix \eqn{X^\top W X}.}
+
+\item{P}{Own-margin penalty \eqn{P_{kk}}.}
+
+\item{b}{Cross-product \eqn{X^\top W z}.}
+
+\item{yw}{Optional weighted response (for \eqn{c=z^\top W z} and \eqn{n}).}
+
+\item{P0}{Optional fixed offset \eqn{P_{k,-k}}.}
+
+\item{max_m}{Skip factorization when \eqn{m>\texttt{max_m}}.}
+}
+\value{
+List workspace, or \code{NULL} if factorization fails / skipped.
 }
 \description{
-Optional spectral cache for repeated GCV evals on fixed (S, P\link{, P0}).
-Uses chol(S_ridge + P0) then eigen of transformed P (dense, small m).
+For fixed \eqn{A = S + P_{-k} + \varepsilon I} and \eqn{B = P_{kk}},
+factor once
+\deqn{A = R^\top R,\quad
+  R^{-\top} B R^{-1} = U\,\mathrm{diag}(d)\,U^\top}
+and cache
+\eqn{\tilde b = U^\top R^{-\top} b} and
+\eqn{s_j = (U^\top R^{-\top} S R^{-1} U)_{jj}} so that each \eqn{\lambda}
+evaluation is
+\deqn{g(\lambda)=R^{-1}U(I+\lambda D)^{-1}\tilde b,\quad
+  \mathrm{ed}(\lambda)=\sum_j s_j/(1+\lambda d_j),\quad
+  \mathrm{RSS}=c-2b^\top g+g^\top S g.}
 }
 \keyword{internal}

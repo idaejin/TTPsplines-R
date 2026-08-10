@@ -43,7 +43,13 @@
 #'   used in both `W` and `z`.
 #' @param seed RNG seed for TT core initialization.
 #' @param init_sd SD for random TT initialization.
-#' @param als_sweeps_per_pirls Inner ALS sweeps per PIRLS iteration.
+#' @param als_sweeps_per_pirls Inner ALS sweeps per PIRLS iteration (default
+#'   `1`). Extra inner sweeps multiply `P_k^{full}` builds; on Chicago Poisson
+#'   \(r=3\), `1` matched deviance of `3` at ~5–6× lower wall time.
+#' @param als_sweeps_adaptive If `TRUE` (default), allow additional inner ALS
+#'   sweeps up to `als_sweeps_per_pirls_max` when the working predictor is still
+#'   moving after the base sweep count.
+#' @param als_sweeps_per_pirls_max Cap on adaptive inner sweeps (default `3`).
 #' @param hybrid_lbfgs_maxit Max L-BFGS iterations after ALS warm-start when
 #'   `optimizer = "hybrid"` (experimental Bernoulli polish).
 #' @param dn_max_sweeps Max outer sweeps for Damped-Newton-ALS.
@@ -114,7 +120,9 @@ tt_control <- function(max_sweeps = 50,
                        binomial_weight_floor = 1e-4,
                        seed = 1,
                        init_sd = 0.15,
-                       als_sweeps_per_pirls = 4,
+                       als_sweeps_per_pirls = 1,
+                       als_sweeps_adaptive = TRUE,
+                       als_sweeps_per_pirls_max = 3L,
                        hybrid_lbfgs_maxit = 50L,
                        dn_max_sweeps = 40L,
                        dn_armijo_c = 1e-4,
@@ -190,6 +198,8 @@ tt_control <- function(max_sweeps = 50,
       seed = as.integer(seed),
       init_sd = as.numeric(init_sd),
       als_sweeps_per_pirls = as.integer(als_sweeps_per_pirls),
+      als_sweeps_adaptive = isTRUE(als_sweeps_adaptive),
+      als_sweeps_per_pirls_max = as.integer(als_sweeps_per_pirls_max),
       hybrid_lbfgs_maxit = as.integer(hybrid_lbfgs_maxit),
       dn_max_sweeps = as.integer(dn_max_sweeps),
       dn_armijo_c = as.numeric(dn_armijo_c),

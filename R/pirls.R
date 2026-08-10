@@ -86,12 +86,21 @@ tt_pirls_fit_sequential <- function(y, basis, family, ranks, lambda_spec, contro
     z <- work$z
 
     # --- inner weighted ALS ---
-    for (sw in seq_len(control$als_sweeps_per_pirls)) {
+    base_sw <- max(1L, as.integer(control$als_sweeps_per_pirls %||% 1L))
+    max_sw <- if (isTRUE(control$als_sweeps_adaptive %||% TRUE)) {
+      max(base_sw, as.integer(control$als_sweeps_per_pirls_max %||% 3L))
+    } else {
+      base_sw
+    }
+    for (sw in seq_len(max_sw)) {
       zc <- z - offset - intercept
+      eta_before <- if (sw >= base_sw) tt_eta(offset, intercept, cores, basis) else NULL
       for (k in margin_order) {
         built <- .cgcv_core_workspace(
           cores, k, lambda, basis, zc, ranks, control,
-          weight = w, penalty_order = penalty_order
+          weight = w, penalty_order = penalty_order,
+          use_spectral = identical(method, "cGCV") && isTRUE(control$use_spectral_gcv),
+          compute_op_norms = do_trace
         )
         Pk <- built$P_own
         penalties[[k]] <- Pk
@@ -161,6 +170,10 @@ tt_pirls_fit_sequential <- function(y, basis, family, ranks, lambda_spec, contro
       f <- tt_contraction(cores, basis)
       intercept <- sum(w * (z - offset - f)) / max(sum(w), 1e-12)
       n_als_sweeps_total <- n_als_sweeps_total + 1L
+      if (sw >= base_sw && !is.null(eta_before)) {
+        eta_after <- tt_eta(offset, intercept, cores, basis)
+        if (max(abs(eta_after - eta_before)) < control$tol) break
+      }
     }
 
     cores_cand <- cores
