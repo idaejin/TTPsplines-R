@@ -6,18 +6,25 @@
 \usage{
 make_core_workspace(
   zc,
-  X,
+  X = NULL,
   P,
   lambda0,
   bounds,
   tol,
   weight = NULL,
   use_spectral = FALSE,
-  P0 = NULL
+  P0 = NULL,
+  S = NULL,
+  b = NULL,
+  yw = NULL
 )
 }
 \arguments{
 \item{P0}{Optional fixed penalty offset (for exact P_k^full cross-margin terms).}
+
+\item{S, b}{Optional precomputed Gram / RHS (skips forming products from X).}
+
+\item{yw}{Optional weighted response for cGCV RSS / spectral cache.}
 }
 \description{
 Build cached conditional workspace for core k (Gaussian or weighted).

@@ -56,10 +56,30 @@
 #' @param offset Optional numeric vector of length `n` (or scalar) added to the
 #'   linear predictor, e.g. `log(exposure)` for Poisson. Default `NULL` (zeros).
 #' @param linear Optional unpenalized parametric design matrix (`n × p`), e.g.
-#'   `model.matrix(~ 0 + dow + ns(time, df), data)`. Do **not** include an
-#'   intercept column (`ttps` already estimates one). Estimated jointly with the
-#'   TT smooth via block-coordinate updates (ALS / PIRLS-ALS). Currently
-#'   unsupported for LBFGS / GD / hybrid / Adam / LBFGS-ALS / DN-ALS (error).
+#'   `model.matrix(~ 0 + dow, data)`. Do **not** include an intercept column
+#'   (`ttps` already estimates one). Estimated jointly with the TT surface via
+#'   block-coordinate updates (ALS / PIRLS-ALS).
+#' @param smooth Optional additive 1D smooths (mgcv-like). A named list of
+#'   specs, e.g.
+#'   `list(time = list(x = d$time, bs = "ps", k = 20, m = 2))` or
+#'   `list(hour = list(x = hour, bs = "cc", k = 12, m = 2, period = c(0, 24)))`.
+#'   `bs`: `"ps"` (open P-spline) or `"cc"` (circular). `m` is the difference
+#'   penalty order. Per-term smoothing: `lambda` (numeric or `"cGCV"`, default
+#'   from `lambda_smooth`) **or** `target_edf` (choose \(\lambda\) so
+#'   \(\mathrm{edf}(\lambda)\approx\) target; requires `m < target_edf <= k`).
+#'   Unsupported for LBFGS / GD / hybrid / Adam / LBFGS-ALS / DN-ALS (error).
+#' @param lambda_smooth Default smoother penalty for terms in `smooth` that
+#'   omit `lambda` and `target_edf` (`"cGCV"` or a nonnegative scalar).
+#' @param null_space How to treat the discrete P-spline penalty null space:
+#'   \itemize{
+#'     \item `"joint"` (default) — single TT on the full coefficient array
+#'       (current behaviour; small uniform \(r\) may truncate \(\mathcal N(S)\)).
+#'     \item `"profiled"` — **experimental** Gaussian null-space–preserving
+#'       fit: profile \(\beta_0\) exactly and ALS-update cores on
+#'       \(Q_0 y\) and \(Q_0 Z_k\) (empirical orthogonalization). Not yet
+#'       available for GLM / cyclic / `linear` / `smooth`. Requires
+#'       \(q^d \le\) `control$null_space_max_npar` (default 4096).
+#'   }
 #' @param weights Optional non-negative observation weights of length `n`
 #'   (or scalar). `NULL` means all ones. Zero weights exclude observations from
 #'   the likelihood (useful for masking empty array cells).
@@ -132,10 +152,14 @@ ttps <- function(y,
                       knots = NULL,
                       offset = NULL,
                       linear = NULL,
+                      smooth = NULL,
+                      lambda_smooth = "cGCV",
                       weights = NULL,
                       cyclic = NULL,
-                      period = NULL) {
+                      period = NULL,
+                      null_space = c("joint", "profiled")) {
   cl <- match.call()
+  null_space <- match.arg(null_space)
   fam <- normalize_family(family)
   y <- as.numeric(y)
   X <- as.matrix(X)
@@ -155,6 +179,7 @@ ttps <- function(y,
   offset <- normalize_offset(offset, length(y))
   weights <- normalize_weights(weights, length(y))
   linear <- normalize_linear(linear, length(y))
+  smooth <- normalize_smooth(smooth, length(y), lambda_smooth = lambda_smooth)
 
   if (!inherits(control, "tt_control")) {
     control <- do.call(tt_control, as.list(control))
@@ -168,21 +193,21 @@ ttps <- function(y,
   optimizer_used <- opt_res$used
   optimizer_reason <- opt_res$reason
   optimizer <- opt_res$dispatch
-  # linear= forces structure-aware ALS/PIRLS (incl. binomial auto→LBFGS)
-  if (!is.null(linear)) {
+  # linear=/smooth= force structure-aware ALS/PIRLS (incl. binomial auto→LBFGS)
+  if (!is.null(linear) || !is.null(smooth)) {
     unsupported <- c("LBFGS", "GD", "hybrid", "Adam",
                      "Damped-Newton-ALS", "LBFGS-ALS")
     if (identical(optimizer_requested, "auto") &&
         identical(optimizer_used, "LBFGS")) {
       optimizer_used <- "PIRLS-ALS"
       optimizer_reason <- paste(
-        "linear= uses PIRLS-ALS for binomial",
+        "linear=/smooth= uses PIRLS-ALS for binomial",
         "(LBFGS path not extended yet)"
       )
       optimizer <- "ALS"
     } else if (optimizer_used %in% unsupported) {
       stop(
-        "`linear=` is currently supported only with optimizer in ",
+        "`linear=` / `smooth=` are currently supported only with optimizer in ",
         "{'auto','ALS','PIRLS-ALS'} (structure-aware path).",
         call. = FALSE
       )
@@ -194,10 +219,10 @@ ttps <- function(y,
   if (!identical(backend_arg, "auto")) {
     control$backend <- backend_arg
   }
-  # linear= is implemented on the R ALS/PIRLS path
-  if (!is.null(linear) &&
+  # linear=/smooth= are implemented on the R ALS/PIRLS path
+  if ((!is.null(linear) || !is.null(smooth)) &&
       (identical(backend_arg, "Rcpp") || identical(control$backend, "Rcpp"))) {
-    warning("`linear=` uses the R backend; ignoring backend='Rcpp'.",
+    warning("`linear=` / `smooth=` use the R backend; ignoring backend='Rcpp'.",
             call. = FALSE)
     control$backend <- "R"
     backend_arg <- "R"
@@ -248,22 +273,58 @@ ttps <- function(y,
          call. = FALSE)
   }
 
-  raw <- .ttpspline_dispatch(
-    y = y,
-    basis = basis,
-    fam = fam,
-    key = key,
-    ranks = ranks,
-    lambda_spec = lambda_spec,
-    control = control,
-    penalty_order = penalty_order,
-    optimizer = optimizer,
-    backend = backend,
-    init_cores = init,
-    offset = offset,
-    weights = weights,
-    linear = linear
-  )
+  # Optional profiled null-space (Gaussian Q0-orthogonalized ALS).
+  null_info <- NULL
+  max_ns <- control$null_space_max_npar %||% 4096L
+
+  if (identical(null_space, "profiled")) {
+    if (!identical(key, "gaussian")) {
+      stop("null_space = 'profiled' is Gaussian-only for now.", call. = FALSE)
+    }
+    if (!is.null(linear) || !is.null(smooth)) {
+      stop("null_space = 'profiled' does not support linear= / smooth= yet.",
+           call. = FALSE)
+    }
+    if (!optimizer %in% c("auto", "ALS", "Damped-Newton-ALS", "LBFGS-ALS")) {
+      stop(
+        "null_space = 'profiled' requires ALS (got optimizer='", optimizer, "').",
+        call. = FALSE
+      )
+    }
+    if (!identical(backend, "R") && !identical(backend, "auto")) {
+      warning("null_space = 'profiled' uses the R ALS backend.", call. = FALSE)
+    }
+    if (isTRUE(control$trace)) {
+      cat(sprintf(
+        "TTPsplines | null_space=profiled | q=%d | max_npar=%d\n",
+        as.integer(penalty_order), as.integer(max_ns)
+      ))
+    }
+    raw <- tt_als_fit_profiled_null(
+      y, basis, ranks, lambda_spec, control,
+      penalty_order = penalty_order, init_cores = init,
+      offset = offset, weights = weights, max_npar = max_ns
+    )
+    null_info <- raw$null_space_info
+  } else {
+    raw <- .ttpspline_dispatch(
+      y = y,
+      basis = basis,
+      fam = fam,
+      key = key,
+      ranks = ranks,
+      lambda_spec = lambda_spec,
+      control = control,
+      penalty_order = penalty_order,
+      optimizer = optimizer,
+      backend = backend,
+      init_cores = init,
+      offset = offset,
+      weights = weights,
+      linear = linear,
+      smooth = smooth
+    )
+  }
 
   npar_tt <- tt_npar(p, ranks)
   npar_full <- dense_npar(p, d)
@@ -271,20 +332,61 @@ ttps <- function(y,
   residuals_resp <- y - raw$mu
 
   edf <- NA_real_
+  edf_tt <- NA_real_
+  edf_margin <- NULL
+  edf_margin_cond <- NULL
   edf_note <- "not computed"
   if (isTRUE(control$compute_edf) && !is.null(raw$penalties)) {
     w_edf <- tt_edf_weights(raw, key, y, weights = weights)
-    edf <- tt_joint_edf(
-      raw$cores, basis, raw$penalties, as.numeric(raw$lambda),
-      weight = w_edf, max_npar = control$edf_max_npar
-    )
-    if (is.finite(edf)) {
-      edf_note <- "joint linearized TT map at convergence"
-    } else if (npar_tt > control$edf_max_npar) {
-      edf_note <- sprintf("skipped (npar_TT=%d > edf_max_npar=%d)",
-                          npar_tt, control$edf_max_npar)
+    mnames <- colnames(X)
+    null_proj <- if (identical(null_space, "profiled") &&
+                     !is.null(null_info$projector)) {
+      null_info$projector
     } else {
-      edf_note <- "failed or skipped (see control$compute_edf / edf_max_npar)"
+      NULL
+    }
+    parts <- tt_joint_edf_parts(
+      raw$cores, basis, raw$penalties, as.numeric(raw$lambda),
+      weight = w_edf, max_npar = control$edf_max_npar,
+      null_proj = null_proj, names = mnames
+    )
+    edf_margin <- parts$edf_margin
+    edf_margin_cond <- tt_margin_edf_cond(
+      raw$cores, basis, raw$penalties, as.numeric(raw$lambda),
+      weight = w_edf, names = mnames
+    )
+    if (identical(null_space, "profiled") && !is.null(null_proj)) {
+      edf_tt <- parts$edf
+      p0 <- as.integer(null_info$design_rank %||% null_info$projector$rank)
+      edf <- if (is.finite(edf_tt)) p0 + edf_tt else NA_real_
+      if (is.finite(edf)) {
+        edf_note <- sprintf(
+          paste0(
+            "GDF_total = rank(X0)=%d + GDF_TT_perp=%.2f (Q0-residualized); ",
+            "edf_margin = block tr(H_kk) of TT-perp (sums to edf_tt); ",
+            "edf_margin_cond = ALS/cGCV diagnostic"
+          ),
+          p0, edf_tt
+        )
+      } else {
+        edf_note <- "profiled GDF failed or skipped"
+      }
+    } else {
+      edf <- parts$edf
+      edf_tt <- edf
+      if (is.finite(edf)) {
+        edf_note <- paste0(
+          "joint linearized TT map; edf_margin = block tr(H_kk) ",
+          "(sums to edf); edf_margin_cond = ALS/cGCV diagnostic"
+        )
+      } else if (npar_tt > control$edf_max_npar) {
+        edf_note <- sprintf(
+          "joint skipped (npar_TT=%d > edf_max_npar=%d); margin EDF may still be set",
+          npar_tt, control$edf_max_npar
+        )
+      } else {
+        edf_note <- "failed or skipped (see control$compute_edf / edf_max_npar)"
+      }
     }
   } else if (!isTRUE(control$compute_edf)) {
     edf_note <- "disabled (control$compute_edf = FALSE)"
@@ -324,13 +426,19 @@ ttps <- function(y,
       intercept = raw$intercept %||% 0,
       beta = raw$beta %||% numeric(0),
       linear = linear,
+      smooth = raw$smooth %||% smooth,
       offset = offset,
+      null_space = null_space,
+      null_space_info = null_info,
       weights = weights,
       fitted.values = raw$mu,
       linear.predictors = raw$eta,
       residuals = residuals_resp,
       deviance = raw$deviance,
       edf = edf,
+      edf_tt = edf_tt,
+      edf_margin = edf_margin,
+      edf_margin_cond = edf_margin_cond,
       edf_note = edf_note,
       npar_tt = npar_tt,
       npar_tt_intrinsic = npar_tt_intrinsic,
@@ -415,15 +523,16 @@ ttpspline <- ttps
 .ttpspline_dispatch <- function(y, basis, fam, key, ranks, lambda_spec,
                                 control, penalty_order, optimizer, backend,
                                 init_cores, offset = NULL, weights = NULL,
-                                linear = NULL) {
+                                linear = NULL, smooth = NULL) {
   offset <- normalize_offset(offset, length(y))
   weights <- normalize_weights(weights, length(y))
   linear <- normalize_linear(linear, length(y))
-  if (!is.null(linear) &&
+  smooth <- normalize_smooth(smooth, length(y))
+  if ((!is.null(linear) || !is.null(smooth)) &&
       optimizer %in% c("Adam", "hybrid", "LBFGS", "GD",
                        "Damped-Newton-ALS", "LBFGS-ALS")) {
     stop(
-      "`linear=` is not supported with optimizer='", optimizer, "'.",
+      "`linear=` / `smooth=` are not supported with optimizer='", optimizer, "'.",
       call. = FALSE
     )
   }
@@ -467,7 +576,7 @@ ttpspline <- ttps
               call. = FALSE)
       out <- tt_als_fit(y, basis, ranks, lambda_spec, control, penalty_order,
                        init_cores = init_cores, offset = offset, weights = weights,
-                       linear = linear)
+                       linear = linear, smooth = smooth)
       out$optimizer <- "Damped-Newton-ALS"
       out$backend <- "R"
       return(out)
@@ -484,7 +593,7 @@ ttpspline <- ttps
               call. = FALSE)
       out <- tt_als_fit(y, basis, ranks, lambda_spec, control, penalty_order,
                        init_cores = init_cores, offset = offset, weights = weights,
-                       linear = linear)
+                       linear = linear, smooth = smooth)
       out$optimizer <- "LBFGS-ALS"
       out$backend <- "R"
       return(out)
@@ -497,26 +606,26 @@ ttpspline <- ttps
 
   # ALS / PIRLS-ALS (default structure-aware path)
   if (identical(key, "gaussian")) {
-    if (identical(backend, "Rcpp") && is.null(linear)) {
+    if (identical(backend, "Rcpp") && is.null(linear) && is.null(smooth)) {
       tt_als_fit_rcpp(y, basis, ranks, lambda_spec, control, penalty_order,
                       init_cores = init_cores, offset = offset, weights = weights,
-                      linear = linear)
+                      linear = linear, smooth = smooth)
     } else {
       out <- tt_als_fit(y, basis, ranks, lambda_spec, control, penalty_order,
                        init_cores = init_cores, offset = offset, weights = weights,
-                       linear = linear)
+                       linear = linear, smooth = smooth)
       out$backend <- "R"
       out
     }
   } else {
-    if (identical(backend, "Rcpp") && is.null(linear)) {
+    if (identical(backend, "Rcpp") && is.null(linear) && is.null(smooth)) {
       tt_pirls_fit_rcpp(y, basis, fam, ranks, lambda_spec, control, penalty_order,
                         init_cores = init_cores, offset = offset, weights = weights,
-                        linear = linear)
+                        linear = linear, smooth = smooth)
     } else {
       tt_pirls_fit(y, basis, fam, ranks, lambda_spec, control, penalty_order,
                   init_cores = init_cores, offset = offset, weights = weights,
-                  linear = linear)
+                  linear = linear, smooth = smooth)
     }
   }
 }

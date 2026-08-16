@@ -1,0 +1,5 @@
+"mode","scenario","rep","elapsed_sec","status"
+"SMOKE","smooth_smooth",1,1.42,"ok"
+"SMOKE","smooth_smooth",2,0.825,"ok"
+"SMOKE","strong_aniso",1,0.873,"ok"
+"SMOKE","strong_aniso",2,0.892,"ok"

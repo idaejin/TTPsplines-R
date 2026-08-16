@@ -1,0 +1,6 @@
+PASS
+finite=TRUE | valley_ok=TRUE | id_ok=TRUE | expand_ok=TRUE | expand_clean=TRUE | has_region=TRUE
+  pass     theta1    theta2    theta3 t2_lo     t2_hi              lambda2_id
+1 TRUE 0.01476149 -5.285714 -1.815289   -11 -3.320312 effectively_unpenalized
+  expanded n_expansions winner_source outer_stable n_region batches elapsed
+1        2            2  region_point         TRUE       20       3 479.877

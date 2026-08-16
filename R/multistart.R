@@ -60,6 +60,8 @@ ttps_multistart <- function(y,
                             knots = NULL,
                             offset = NULL,
                             linear = NULL,
+                            smooth = NULL,
+                            lambda_smooth = "cGCV",
                             weights = NULL,
                             cyclic = NULL,
                             period = NULL,
@@ -114,6 +116,8 @@ ttps_multistart <- function(y,
         knots = knots,
         offset = offset,
         linear = linear,
+        smooth = smooth,
+        lambda_smooth = lambda_smooth,
         weights = weights,
         cyclic = cyclic,
         period = period
@@ -268,10 +272,10 @@ print.ttps_multistart <- function(x, ...) {
     cat(sprintf("  Frac. boundary by margin: %s\n",
                 paste(sprintf("%s=%.2f", names(fb), fb), collapse = ", ")))
     if (any(fb >= 0.8, na.rm = TRUE)) {
-      cat("  Note: stable boundary hits across starts → interpret as margin/null/r,\n")
+      cat("  Note: stable boundary hits across starts -> interpret as margin/null/r,\n")
       cat("        not a single bad ALS initialization.\n")
     } else if (any(fb > 0 & fb < 0.8, na.rm = TRUE)) {
-      cat("  Note: unstable boundary hits → check initialization / raise n_starts.\n")
+      cat("  Note: unstable boundary hits -> check initialization / raise n_starts.\n")
     }
   }
   cat("\nBest fit:\n")

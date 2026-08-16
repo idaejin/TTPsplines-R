@@ -11,7 +11,9 @@ tt_blend_params(
   intercept_new,
   alpha,
   beta_old = NULL,
-  beta_new = NULL
+  beta_new = NULL,
+  smooth_old = NULL,
+  smooth_new = NULL
 )
 }
 \description{

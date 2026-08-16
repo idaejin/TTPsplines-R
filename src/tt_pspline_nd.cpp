@@ -13,6 +13,10 @@
 
 using namespace Rcpp;
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 namespace {
 
 inline arma::mat core_slice_j(const arma::cube& core, int j) {
@@ -54,6 +58,248 @@ arma::mat tt_design_core_d_cpp(const arma::mat& Left,
     }
   }
   return X;
+}
+
+namespace {
+
+inline void fill_row_design_vec(const arma::mat& Left,
+                                const arma::mat& Right,
+                                const arma::mat& Bk,
+                                int i,
+                                arma::vec& x) {
+  // vec order: a fastest, then j, then b (matches tt_design_core_d_cpp)
+  const int rl = Left.n_cols;
+  const int rr = Right.n_cols;
+  const int p = Bk.n_cols;
+  int col = 0;
+  for (int b = 0; b < rr; ++b) {
+    const double rb = Right(i, b);
+    for (int j = 0; j < p; ++j) {
+      const double bj = Bk(i, j) * rb;
+      for (int a = 0; a < rl; ++a) {
+        x(col++) = Left(i, a) * bj;
+      }
+    }
+  }
+}
+
+}  // namespace
+
+//' Weighted Gram + RHS from TT design factors without returning X.
+//'
+//' Methods:
+//' - `"blas"`: materialize X then BLAS `X' diag(w) X` / `X' (w*z)` (reference).
+//' - `"fused"`: per-observation outer products (no n×q matrix).
+//' - `"fused_blocked"`: tile rows, small X blocks + BLAS syrk/gemm;
+//'   optional OpenMP reduction over observations via `n_threads`.
+//' - `"kron"`: per-observation Kronecker expansion of (RR')⊗(BB')⊗(LL').
+//'
+//' Vectorization matches [tt_design_core_d_cpp]: a fastest, then j, then b
+//' so \(x_i = R_i \otimes B_i \otimes L_i\).
+//'
+//' @param n_threads Threads for `fused_blocked` observation reduction (`1` = serial).
+//' @keywords internal
+// [[Rcpp::export]]
+List tt_gram_rhs_cpp(const arma::mat& Left,
+                     const arma::mat& Right,
+                     const arma::mat& Bk,
+                     const arma::vec& z,
+                     Rcpp::Nullable<Rcpp::NumericVector> weight = R_NilValue,
+                     std::string method = "fused_blocked",
+                     int block_size = 64,
+                     int n_threads = 1) {
+  const int n = Bk.n_rows;
+  const int rl = Left.n_cols;
+  const int rr = Right.n_cols;
+  const int p = Bk.n_cols;
+  if (Left.n_rows != n || Right.n_rows != n) {
+    stop("tt_gram_rhs_cpp: Left/Right/Bk nrow mismatch");
+  }
+  if (static_cast<int>(z.n_elem) != n) stop("tt_gram_rhs_cpp: z length mismatch");
+  const int q = rl * p * rr;
+  arma::vec w = arma::ones<arma::vec>(n);
+  if (weight.isNotNull()) {
+    w = Rcpp::as<arma::vec>(weight);
+    if (static_cast<int>(w.n_elem) != n) stop("tt_gram_rhs_cpp: weight length mismatch");
+  }
+
+  arma::mat S(q, q, arma::fill::zeros);
+  arma::vec b(q, arma::fill::zeros);
+  int threads_used = 1;
+  bool omp_enabled = false;
+#ifdef _OPENMP
+  omp_enabled = true;
+#endif
+
+  if (method == "blas") {
+    arma::mat X = tt_design_core_d_cpp(Left, Right, Bk);
+    arma::vec sw(n);
+    for (int i = 0; i < n; ++i) {
+      const double wi = w(i);
+      sw(i) = (std::isfinite(wi) && wi > 0.0) ? std::sqrt(wi) : 0.0;
+    }
+    arma::mat Xw = X;
+    Xw.each_col() %= sw;
+    arma::vec zw = sw % z;
+    S = Xw.t() * Xw;
+    b = Xw.t() * zw;
+  } else if (method == "fused") {
+    arma::vec x(q);
+    for (int i = 0; i < n; ++i) {
+      const double wi = w(i);
+      if (!(wi > 0.0) || !std::isfinite(wi)) continue;
+      fill_row_design_vec(Left, Right, Bk, i, x);
+      S += wi * (x * x.t());
+      b += (wi * z(i)) * x;
+    }
+  } else if (method == "fused_blocked") {
+    const int bs = std::max(1, block_size);
+    const int Treq = std::max(1, n_threads);
+#ifdef _OPENMP
+    if (Treq > 1 && omp_enabled) {
+      // Thread-local accumulators; partition observations; reduce once at end.
+      // No atomics / critical inside the observation loop.
+      std::vector<arma::mat> St(Treq, arma::mat(q, q, arma::fill::zeros));
+      std::vector<arma::vec> bt(Treq, arma::vec(q, arma::fill::zeros));
+      int Tact = Treq;
+#pragma omp parallel num_threads(Treq)
+      {
+        const int tid = omp_get_thread_num();
+        const int nthr = omp_get_num_threads();
+#pragma omp single
+        {
+          Tact = nthr;
+          threads_used = nthr;
+        }
+        const int i_begin = static_cast<int>(
+            (static_cast<long long>(n) * tid) / nthr);
+        const int i_end = static_cast<int>(
+            (static_cast<long long>(n) * (tid + 1)) / nthr);
+
+        arma::mat Xb(bs, q);
+        arma::vec wb(bs);
+        arma::vec zb(bs);
+        arma::mat& Sloc = St[tid];
+        arma::vec& bloc = bt[tid];
+
+        for (int i0 = i_begin; i0 < i_end; i0 += bs) {
+          const int nblock = std::min(bs, i_end - i0);
+          Xb.set_size(nblock, q);
+          wb.set_size(nblock);
+          zb.set_size(nblock);
+          for (int t = 0; t < nblock; ++t) {
+            const int i = i0 + t;
+            wb(t) = w(i);
+            zb(t) = z(i);
+            arma::vec x(q);
+            fill_row_design_vec(Left, Right, Bk, i, x);
+            Xb.row(t) = x.t();
+          }
+          arma::vec sw(nblock);
+          for (int t = 0; t < nblock; ++t) {
+            const double wi = wb(t);
+            sw(t) = (std::isfinite(wi) && wi > 0.0) ? std::sqrt(wi) : 0.0;
+          }
+          arma::mat Xw = Xb;
+          Xw.each_col() %= sw;
+          arma::vec zw = sw % zb;
+          Sloc += Xw.t() * Xw;
+          bloc += Xw.t() * zw;
+        }
+      }
+      for (int t = 0; t < Tact; ++t) {
+        S += St[t];
+        b += bt[t];
+      }
+    } else
+#endif
+    {
+      threads_used = 1;
+      arma::mat Xb(bs, q);
+      arma::vec wb(bs);
+      arma::vec zb(bs);
+      for (int i0 = 0; i0 < n; i0 += bs) {
+        const int nblock = std::min(bs, n - i0);
+        Xb.set_size(nblock, q);
+        wb.set_size(nblock);
+        zb.set_size(nblock);
+        for (int t = 0; t < nblock; ++t) {
+          const int i = i0 + t;
+          wb(t) = w(i);
+          zb(t) = z(i);
+          arma::vec x(q);
+          fill_row_design_vec(Left, Right, Bk, i, x);
+          Xb.row(t) = x.t();
+        }
+        arma::vec sw(nblock);
+        for (int t = 0; t < nblock; ++t) {
+          const double wi = wb(t);
+          sw(t) = (std::isfinite(wi) && wi > 0.0) ? std::sqrt(wi) : 0.0;
+        }
+        arma::mat Xw = Xb;
+        Xw.each_col() %= sw;
+        arma::vec zw = sw % zb;
+        S += Xw.t() * Xw;
+        b += Xw.t() * zw;
+      }
+    }
+  } else if (method == "kron") {
+    arma::vec Lrow(rl), Brow(p), Rrow(rr), x(q);
+    for (int i = 0; i < n; ++i) {
+      const double wi = w(i);
+      if (!(wi > 0.0) || !std::isfinite(wi)) continue;
+      for (int a = 0; a < rl; ++a) Lrow(a) = Left(i, a);
+      for (int j = 0; j < p; ++j) Brow(j) = Bk(i, j);
+      for (int bb = 0; bb < rr; ++bb) Rrow(bb) = Right(i, bb);
+      const int stride_j = rl;
+      const int stride_b = rl * p;
+      for (int bb = 0; bb < rr; ++bb) {
+        for (int bp = 0; bp < rr; ++bp) {
+          const double wrb = wi * Rrow(bb) * Rrow(bp);
+          if (wrb == 0.0) continue;
+          for (int j = 0; j < p; ++j) {
+            for (int jp = 0; jp < p; ++jp) {
+              const double wbj = wrb * Brow(j) * Brow(jp);
+              if (wbj == 0.0) continue;
+              const int row0 = j * stride_j + bb * stride_b;
+              const int col0 = jp * stride_j + bp * stride_b;
+              for (int a = 0; a < rl; ++a) {
+                const double la = Lrow(a);
+                if (la == 0.0) continue;
+                for (int ap = 0; ap < rl; ++ap) {
+                  S(row0 + a, col0 + ap) += wbj * la * Lrow(ap);
+                }
+              }
+            }
+          }
+        }
+      }
+      fill_row_design_vec(Left, Right, Bk, i, x);
+      b += (wi * z(i)) * x;
+    }
+  } else {
+    stop("tt_gram_rhs_cpp: method must be blas|fused|fused_blocked|kron");
+  }
+
+  S = 0.5 * (S + S.t());
+  return List::create(
+      _["S"] = S,
+      _["b"] = b,
+      _["q"] = q,
+      _["method"] = method,
+      _["n_threads"] = threads_used,
+      _["omp"] = omp_enabled);
+}
+
+//' TRUE if the shared library was built with OpenMP.
+//' @keywords internal
+// [[Rcpp::export]]
+bool tt_gram_omp_available() {
+#ifdef _OPENMP
+  return true;
+#else
+  return false;
+#endif
 }
 
 // [[Rcpp::export]]

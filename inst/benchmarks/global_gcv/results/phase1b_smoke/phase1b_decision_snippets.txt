@@ -1,0 +1,2 @@
+[smooth_smooth] mean dMSE(cGCV-oracle)=-0.006258 (CI -0.009429,-0.003086); prop cGCV better=1.00; dISE=-0.00471; multistart dMSE=-0.00211
+[strong_aniso] mean dMSE(cGCV-oracle)=-0.0001232 (CI -0.0007248,0.0004784); prop cGCV better=0.50; dISE=0.0008427; multistart dMSE=0.001761

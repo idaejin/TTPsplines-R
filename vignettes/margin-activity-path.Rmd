@@ -1,0 +1,152 @@
+---
+title: "Margin Activity Path"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Margin Activity Path}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 3.2
+)
+```
+
+# Why screen margins?
+
+`ttps()` fits a **joint** non-additive smooth on all columns of `X`.
+When many margins are null, conditional GCV on the full \(d\) can still
+assign small \(\lambda_j\) to noise directions and hurt holdout risk.
+**Margin Activity Path** ranks covariates by how much the fitted surface
+moves when each margin varies (partial range) along an isotropic
+\(\lambda\) path, then chooses a nested top-\(m\) subset by CV
+(default: one-SE rule). Selected margins are refit with `lambda = "cGCV"`.
+
+This is **not** maximum a posteriori. Prefer the full name
+*Margin Activity Path* over the ambiguous acronym "MAP".
+
+```{r}
+library(TTPsplines)
+```
+
+Formal protocol (lab): `inst/benchmarks/margin_path/PROTOCOL_MAP.md`.
+
+# Toy example (\(d=6\), two active sins)
+
+```{r data}
+set.seed(1)
+n <- 200
+d <- 6
+X <- matrix(runif(n * d), n, d)
+colnames(X) <- paste0("x", seq_len(d))
+y <- sin(2 * pi * X[, 1]) + sin(2 * pi * X[, 2]) +
+  stats::rnorm(n, sd = 0.3)
+```
+
+```{r path}
+ctrl <- tt_control(
+  max_sweeps = 5, compute_edf = FALSE, outer_maxit = 5, backend = "R"
+)
+path <- tt_margin_activity_path(
+  y, X,
+  rank = 2, k = 5,
+  lambda_path = 10^c(1.5, 1, 0.5, 0, -0.5),
+  select = "1se",
+  folds = 3,
+  seed = 1,
+  control = ctrl,
+  verbose = FALSE
+)
+path
+path$selected_names
+```
+
+```{r plot, fig.width = 8, fig.height = 3}
+plot(path)
+```
+
+# Compare to full-\(d\) cGCV
+
+```{r holdout}
+set.seed(2)
+Xte <- matrix(runif(n * d), n, d)
+colnames(Xte) <- colnames(X)
+yte <- sin(2 * pi * Xte[, 1]) + sin(2 * pi * Xte[, 2]) +
+  stats::rnorm(n, sd = 0.3)
+
+fit_full <- ttps(
+  y, X, rank = 2, k = 5, lambda = "cGCV", control = ctrl
+)
+mse <- function(fit, Xnew, ynew) {
+  mean((as.numeric(predict(fit, Xnew)) - ynew)^2)
+}
+
+data.frame(
+  method = c("full TT + cGCV", "Margin Activity Path + cGCV"),
+  n_margins = c(d, length(path$selected)),
+  test_MSE = c(
+    mse(fit_full, Xte, yte),
+    mse(path$fit, Xte[, path$selected, drop = FALSE], yte)
+  )
+)
+```
+
+# Scores only (no CV)
+
+```{r scores-only}
+path0 <- tt_margin_activity_path(
+  y, X, rank = 2, k = 5,
+  lambda_path = 10^c(1, 0, -1),
+  select = "none",
+  control = ctrl,
+  verbose = FALSE
+)
+round(sort(path0$scores, decreasing = TRUE), 3)
+```
+
+# Relation to other helpers
+
+| Helper | Role |
+|--------|------|
+| `ttps(..., lambda = "cGCV")` | Smooth on a **given** column set |
+| `tt_rank_select()` | Choose TT **rank** \(r\) by CV |
+| `tt_margin_activity_path()` | Choose **which margins** to keep |
+| `tt_margin_drop_test()` | Leave-one-out / permute test to **drop** margins |
+| `tt_edf(fit)` | Joint EDF + block `edf_margin` (sums) + `edf_margin_cond` (cGCV diag.) |
+
+Keep \(r \neq \lambda \neq\) margin set conceptually distinct. After screening,
+you may still run `tt_rank_select()` on the selected columns.
+`fit$edf_margin` partitions joint `fit$edf` via \(\operatorname{tr}(H_{kk})\);
+`fit$edf_margin_cond` is the ALS/cGCV conditional trace (not additive).
+
+# Optional: drop test
+
+```{r drop-test}
+ctrl_edf <- tt_control(
+  max_sweeps = 5, compute_edf = TRUE, outer_maxit = 5, backend = "R",
+  seed = 1
+)
+tst <- tt_margin_drop_test(
+  y, X, rank = 2, k = 5, lambda = 1, method = "nested",
+  alpha = 0.05, seed = 1, control = ctrl_edf, verbose = FALSE
+)
+tst
+tst$drop_candidate_names
+```
+
+`method = "permute"` is slower but closer to a proper null for each margin.
+
+# Fully reproducible script
+
+From the package source tree:
+
+```r
+Rscript inst/examples/reprex_margin_activity_path.R
+```
+
+Fixed seeds `20260817` / `20260818`, `backend = "R"`, and CSV outputs under
+`inst/examples/margin_activity_path_figs/reprex_*.csv`.

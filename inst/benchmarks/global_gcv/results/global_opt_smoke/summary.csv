@@ -1,0 +1,2 @@
+"scenario","mode","grid_t1","grid_t2","grid_gcv","opt_t1","opt_t2","opt_gcv","dist_to_grid_min","same_region","refine_improved","boundary","ranking_stable","n_global","n_grid","elapsed_opt"
+"smooth_smooth","SMOKE",-2.5,-2.5,0.178080284379073,-1.95889216353807,-2.92538156437713,0.176681078265692,0.688292936177933,TRUE,FALSE,FALSE,TRUE,24,36,1.813

@@ -104,10 +104,48 @@ smoothing-parameter or rank selection, and they do not correct
 approximation bias. Truth outside the band can still happen under misspecified
 \(\lambda\) / \(r\) or a coarse basis.
 
-
 # What is still open
 
 - GLM link-scale intervals (Gates 3–4)
 - cGCV / REML smoothing-parameter uncertainty
 - Rank-selection uncertainty
 - Simultaneous confidence bands
+
+# See also
+
+- `vignette("cgcv", package = "TTPsplines")` — choosing \(\lambda\)
+- `vignette("rank-selection", package = "TTPsplines")` — CV + 1-SE for \(r\)
+- `vignette("aic-bic", package = "TTPsplines")` — EDF / AIC / BIC
+- `vignette("getting-started", package = "TTPsplines")`
+- Package note: `docs/TT_INFERENCE_MARRA_WOOD.md` (source tree)
+
+# References
+
+Eilers, P. H. C. and Marx, B. D. (1996).
+Flexible smoothing with \(B\)-splines and penalties.
+*Statistical Science*, **11**, 89–121.
+<https://doi.org/10.1214/ss/1038425655>
+
+Marra, G. and Wood, S. N. (2012).
+Coverage properties of confidence intervals for generalized additive model
+components. *Scandinavian Journal of Statistics*, **39**, 53–74.
+<https://doi.org/10.1111/j.1467-9469.2011.00760.x>
+
+Nychka, D. (1988).
+Bayesian confidence intervals for smoothing splines.
+*Journal of the American Statistical Association*, **83**, 1134–1143.
+<https://doi.org/10.1080/01621459.1988.10478711>
+
+Oseledets, I. V. (2011).
+Tensor-train decomposition.
+*SIAM Journal on Scientific Computing*, **33**, 2295–2317.
+<https://doi.org/10.1137/090752286>
+
+Wahba, G. (1990).
+*Spline Models for Observational Data*.
+SIAM, CBMS-NSF Regional Conference Series in Applied Mathematics **59**.
+<https://doi.org/10.1137/1.9781611970128>
+
+Wood, S. N. (2017).
+*Generalized Additive Models: An Introduction with R* (2nd ed.).
+CRC Press.

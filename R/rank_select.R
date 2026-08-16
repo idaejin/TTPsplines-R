@@ -100,6 +100,8 @@ tt_rank_select <- function(y,
                            fold_knots = FALSE,
                            offset = NULL,
                            linear = NULL,
+                           smooth = NULL,
+                           lambda_smooth = "cGCV",
                            weights = NULL,
                            rank_chain = NULL,
                            ...) {
@@ -142,6 +144,7 @@ tt_rank_select <- function(y,
   offset_full <- normalize_offset(offset, n)
   weights_full <- normalize_weights(weights, n)
   linear_full <- normalize_linear(linear, n)
+  smooth_full <- normalize_smooth(smooth, n, lambda_smooth = lambda_smooth)
 
   fold_knots <- isTRUE(fold_knots)
   if (fold_knots && !is.null(knots)) {
@@ -186,7 +189,9 @@ tt_rank_select <- function(y,
     backend = backend,
     control = ctrl,
     knots = knots,
-    linear = linear_full
+    linear = linear_full,
+    smooth = smooth_full,
+    lambda_smooth = lambda_smooth
   )
   lambda_method <- if (is.character(lambda) && identical(lambda, "cGCV")) {
     "cGCV"
@@ -229,6 +234,15 @@ tt_rank_select <- function(y,
       w_te <- weights_full[test]
       lin_tr <- if (is.null(linear_full)) NULL else linear_full[train, , drop = FALSE]
       lin_te <- if (is.null(linear_full)) NULL else linear_full[test, , drop = FALSE]
+      sm_tr <- if (is.null(smooth_full)) NULL else subset_smooth(smooth_full, which(train))
+      sm_te <- if (is.null(smooth_full)) {
+        NULL
+      } else {
+        setNames(
+          lapply(smooth_full, function(sm) sm$x[test]),
+          names(smooth_full)
+        )
+      }
       y_tr <- y[train]
       X_tr <- X[train, , drop = FALSE]
       X_te <- X[test, , drop = FALSE]
@@ -263,6 +277,7 @@ tt_rank_select <- function(y,
             knots = knots,
             offset = off_tr,
             linear = lin_tr,
+            smooth = sm_tr,
             weights = w_tr
           ),
           error = function(e) e
@@ -302,7 +317,7 @@ tt_rank_select <- function(y,
       }
       mu <- tryCatch(
         predict(best_fit, newdata = X_te, type = "response",
-                offset = off_te, linear = lin_te),
+                offset = off_te, linear = lin_te, smooth = sm_te),
         error = function(e) NULL
       )
       if (is.null(mu) || anyNA(mu) || !all(is.finite(mu))) {
@@ -368,6 +383,7 @@ tt_rank_select <- function(y,
       variable_order = colnames(X),
       offset = offset_full,
       linear = linear_full,
+      smooth = smooth_full,
       weights = weights_full,
       knots_source = knots_source,
       fold_knots = fold_knots,
@@ -480,6 +496,14 @@ tt_rank_refit <- function(object,
     args$linear
   }
   extra$linear <- NULL
+  args$smooth <- if ("smooth" %in% names(extra)) {
+    extra$smooth
+  } else if (!is.null(object$smooth)) {
+    object$smooth
+  } else {
+    args$smooth
+  }
+  extra$smooth <- NULL
   args$weights <- if ("weights" %in% names(extra)) {
     extra$weights
   } else {

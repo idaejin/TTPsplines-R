@@ -1,0 +1,17 @@
+"mode","scenario","rep","seed","method","log_ratio","sign_pos","truth_sign","sign_match_truth"
+"SMOKE","smooth_smooth",1,20260829,"tt_grid_oracle",1,TRUE,0,NA
+"SMOKE","smooth_smooth",1,20260829,"cGCV_default",0.546403939716968,TRUE,0,NA
+"SMOKE","smooth_smooth",1,20260829,"cGCV_best_global",0.441904808476295,TRUE,0,NA
+"SMOKE","smooth_smooth",1,20260829,"full_tp_gcv",1,TRUE,0,NA
+"SMOKE","smooth_smooth",2,20260926,"tt_grid_oracle",-1,FALSE,0,NA
+"SMOKE","smooth_smooth",2,20260926,"cGCV_default",-0.447296828653626,FALSE,0,NA
+"SMOKE","smooth_smooth",2,20260926,"cGCV_best_global",-0.340533913442207,FALSE,0,NA
+"SMOKE","smooth_smooth",2,20260926,"full_tp_gcv",-1,FALSE,0,NA
+"SMOKE","strong_aniso",1,20260842,"tt_grid_oracle",-3,FALSE,1,FALSE
+"SMOKE","strong_aniso",1,20260842,"cGCV_default",4.93564242671394e-06,TRUE,1,TRUE
+"SMOKE","strong_aniso",1,20260842,"cGCV_best_global",-2.10770083386685e-06,FALSE,1,FALSE
+"SMOKE","strong_aniso",1,20260842,"full_tp_gcv",0,FALSE,1,FALSE
+"SMOKE","strong_aniso",2,20260939,"tt_grid_oracle",4,TRUE,1,TRUE
+"SMOKE","strong_aniso",2,20260939,"cGCV_default",4.07656089187457,TRUE,1,TRUE
+"SMOKE","strong_aniso",2,20260939,"cGCV_best_global",3.3099620268477,TRUE,1,TRUE
+"SMOKE","strong_aniso",2,20260939,"full_tp_gcv",4,TRUE,1,TRUE

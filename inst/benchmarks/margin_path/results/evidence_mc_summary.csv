@@ -1,0 +1,3 @@
+"dgp","B","exact_set_rate","mean_tpr_path","mean_fpr_path","mean_tpr_drop","mean_fpr_drop","mean_mse_full","mean_mse_path","mean_mse_drop","mean_mse_ratio_path"
+"additive2",20,1,1,0,1,0.1625,0.385644855625945,0.113234368466657,0.118728483148214,0.298714071016504
+"interaction",20,0.9,1,0.0625,1,0.125,0.18665751087584,0.126032752888709,0.12290532212817,0.673281773736684

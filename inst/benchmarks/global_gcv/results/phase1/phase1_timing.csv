@@ -1,0 +1,7 @@
+step,status,elapsed_sec,note
+designs,ok,0.6,QUICK scout
+surfaces,ok,20.7,re-run after scalar/NULL fix
+basins,ok,2.8,QUICK
+optimize,ok,7.7,QUICK
+mc,ok,13.5,QUICK 2 reps
+orchestrator_first_pass,partial,32.0,surfaces failed once then fixed

@@ -1,0 +1,5 @@
+"method","N","scenario","in_valley_1pct","regret_rel","n_als_total","elapsed","n_valley","n_seeds","valley_rate"
+"lhs",32,"smooth_smooth",0.5,0.019026378325706,203,1.3995,1,2,0.5
+"random",32,"smooth_smooth",0,0.035990952677479,203,1.2325,0,2,0
+"sobol_pure",32,"smooth_smooth",0,0.0454503691596443,203,1.3855,0,2,0
+"sobol_refine",32,"smooth_smooth",1,0.000340293062194909,1217,5.109,2,2,1

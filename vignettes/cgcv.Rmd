@@ -54,7 +54,7 @@ fit_fix$lambda
 updating TT cores (ALS / PIRLS), not by a full \(d\)-dimensional grid over
 the joint map.
 
-**Default dynamics** (Chicago-validated under the exact global penalty):
+**Default dynamics** (exact global penalty):
 `cgcv_update = "outer_simultaneous"` — fit all cores at fixed
 \(\boldsymbol\lambda\), freeze, Jacobi-propose every margin, then apply
 log-damping (`cgcv_damping = 0.25`) and a trust region
@@ -108,10 +108,24 @@ them as scientific nulls.
 
 # Multi-start diagnostics (nonconvex ALS)
 
-`ttps()` uses a **single** random TT initialization. Because the core
-problem is nonconvex, a \(\lambda\) on the search bound can mean either
-(i)~a statistical effect (near-null margin, low \(r\), conditional cGCV) or
-(ii)~a bad basin. Use `ttps_multistart()` to tell them apart:
+`ttps()` uses a **single** random TT initialization. Use multi-start only
+when you have a reason to doubt that start — not as the default path.
+
+**When to run it**
+
+- a margin hits `lambda_boundary` under cGCV;
+- fits change materially if you change `seed`;
+- low rank (\(r = 1,2\)) looks unstable.
+
+**Practical workflow**
+
+1. Fit once with `ttps(..., lambda = "cGCV")`.
+2. If nothing looks suspicious, stop.
+3. Otherwise call `ttps_multistart()` (typically `n_starts = 5`–`10`) and
+   keep `ms$best`.
+4. Read `ms$frac_boundary`: near 1 on margin \(k\) → statistical
+   null / weak margin / low \(r\); unstable across starts → more starts or
+   another optimizer.
 
 ```{r multistart, fig.show='hide'}
 ms <- ttps_multistart(
@@ -133,12 +147,13 @@ ms$frac_boundary
 fit_best <- ms$best
 ```
 
-- **Stable** boundary hits across starts (\(\texttt{frac\_boundary}\) near 1)
+- **Stable** boundary hits across starts (`frac_boundary` near 1)
   → interpret as margin / null space / rank, not a lucky seed.
 - **Unstable** hits → raise `n_starts`, try another optimizer, or warm-start.
 
-For multi-start inside **rank CV**, prefer
-`tt_rank_select(..., n_starts = ...)` (already fold-aware).
+Cost scales as `n_starts` times one `ttps()` fit. For multi-start inside
+**rank CV**, prefer `tt_rank_select(..., n_starts = ...)` (already
+fold-aware) rather than wrapping `ttps_multistart()` yourself.
 
 # Anisotropy on Sobol-\(g\)
 

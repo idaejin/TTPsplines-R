@@ -31,15 +31,18 @@ arbitrarily scattered — **no data grid** is required. TT itself is a
 \(O(dk)\) and do not need it; the package targets joint non-additive surfaces
 where a full tensor would cost \(O(k^d)\) and TT costs \(O(dkr^2)\).
 
-By default the package uses the **classical multidimensional P-spline
-penalty on \(\Theta\)**. TT changes representation and optimization only —
-not the statistical penalty.
+By default the package uses **classical directional discrete-difference
+(P-spline) penalties on \(\Theta\)**. Tensor-network B-splines already use
+TT of B-spline weights with such penalties in system identification; this
+package focuses on **statistical smoother practice** (GLM, cGCV, rank
+helpers, baselines), not priority for that coefficient geometry.
 
 Family-aware default solver (`optimizer = "auto"`): Gaussian → ALS,
 Poisson → PIRLS-ALS, binomial → L-BFGS. Rank \(r\) is **not** chosen inside
 `ttps()` (see `vignette("rank-selection")`); directional \(\lambda\) can
 be fixed or selected by cGCV (`vignette("cgcv")`).
-
+Keep \(r \neq \lambda \neq \mathrm{EDF}\) conceptually distinct.
+For high-\(d\) **margin screening** see `vignette("margin-activity-path")`.
 # Why these datasets?
 
 Classic UQ response surfaces are convenient demos: known truth, strong

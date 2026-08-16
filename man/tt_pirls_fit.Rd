@@ -15,7 +15,8 @@ tt_pirls_fit(
   init_cores = NULL,
   offset = NULL,
   weights = NULL,
-  linear = NULL
+  linear = NULL,
+  smooth = NULL
 )
 }
 \description{

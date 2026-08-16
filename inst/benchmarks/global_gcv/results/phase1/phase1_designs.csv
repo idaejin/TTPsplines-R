@@ -1,0 +1,5 @@
+"scenario","dataset_id","n","k","sigma","seed","best_log10_l1","best_log10_l2","best_gcv_full","min_on_boundary","interior_min_candidate","flat_1pct_count","flat_1pct_frac","coarse_by","truth_note"
+"smooth_smooth","smooth_smooth_n120_k6_s20260816",120,6,0.35,20260816,-1,-3,0.176280749250155,FALSE,TRUE,2,0.0555555555555556,2,"scenario=smooth_smooth; sigma=0.35"
+"smooth_rough","smooth_rough_n120_k6_s20260816",120,6,0.4,20260816,-5,5,0.911427153133546,TRUE,FALSE,3,0.0833333333333333,2,"scenario=smooth_rough; sigma=0.4"
+"strong_aniso","strong_aniso_n120_k6_s20260816",120,6,0.45,20260816,3,3,0.374867336956675,FALSE,TRUE,8,0.222222222222222,2,"scenario=strong_aniso; sigma=0.45"
+"weak_signal","weak_signal_n120_k6_s20260816",120,6,1,20260816,5,-1,1.00372527111349,TRUE,FALSE,1,0.0277777777777778,2,"scenario=weak_signal; sigma=1"

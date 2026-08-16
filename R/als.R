@@ -10,20 +10,20 @@
 #' @keywords internal
 tt_als_fit <- function(y, basis, ranks, lambda_spec, control, penalty_order = 2,
                        init_cores = NULL, offset = NULL, weights = NULL,
-                       linear = NULL) {
+                       linear = NULL, smooth = NULL) {
   method <- lambda_spec$method
   if (identical(method, "cGCV") &&
       identical(.cgcv_update_mode(control), "outer_simultaneous")) {
     return(tt_als_fit_cgcv_outer(
       y, basis, ranks, lambda_spec, control, penalty_order,
       init_cores = init_cores, offset = offset, weights = weights,
-      linear = linear
+      linear = linear, smooth = smooth
     ))
   }
   tt_als_fit_sequential(
     y, basis, ranks, lambda_spec, control, penalty_order,
     init_cores = init_cores, offset = offset, weights = weights,
-    linear = linear
+    linear = linear, smooth = smooth
   )
 }
 
@@ -33,7 +33,7 @@ tt_als_fit <- function(y, basis, ranks, lambda_spec, control, penalty_order = 2,
 tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
                                   penalty_order = 2, init_cores = NULL,
                                   offset = NULL, weights = NULL,
-                                  linear = NULL) {
+                                  linear = NULL, smooth = NULL) {
   d <- length(basis)
   p <- ncol(basis[[1]])
   method <- lambda_spec$method
@@ -41,10 +41,19 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
   offset <- normalize_offset(offset, length(y))
   w <- normalize_weights(weights, length(y))
   linear <- normalize_linear(linear, length(y))
+  smooth <- normalize_smooth(smooth, length(y))
   ab0 <- tt_update_intercept_beta(y, offset, f = 0, linear = linear, weights = w)
   intercept <- ab0$intercept
   beta <- ab0$beta
-  yc <- y - offset - intercept - tt_linear_contrib(linear, beta)
+  if (!is.null(smooth)) {
+    add <- tt_refresh_additive(y, offset, f_tt = 0, linear = linear,
+                               smooth = smooth, weights = w, control = control)
+    intercept <- add$intercept
+    beta <- add$beta
+    smooth <- add$smooth
+  }
+  yc <- y - offset - intercept - tt_linear_contrib(linear, beta) -
+    tt_smooth_contrib(smooth)
   if (is.null(init_cores)) {
     cores <- initialize_tt_cores(p, ranks, seed = control$seed, sd = control$init_sd)
   } else {
@@ -72,20 +81,42 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
   use_spec <- isTRUE(control$use_spectral_gcv)
 
   for (sw in seq_len(control$max_sweeps)) {
+    use_cache <- isTRUE(control$design_interface_cache %||% TRUE)
+    use_ltr <- use_cache && .tt_is_ltr_order(margin_order, d)
+    use_rtl <- use_cache && .tt_is_rtl_order(margin_order, d)
+    if (use_ltr) {
+      R_all <- .tt_design_prepare_right(cores, basis)
+      L_cur <- matrix(1, nrow(basis[[1]]), 1)
+    } else if (use_rtl) {
+      L_all <- .tt_design_prepare_left(cores, basis)
+      R_cur <- matrix(1, nrow(basis[[1]]), 1)
+    }
     for (k in margin_order) {
       if (check_q_descent) {
         q_old <- tt_gaussian_Q(
           y, cores, intercept, basis, lambda,
           offset = offset, weights = w,
           penalty_order = penalty_order, cyclic = cyclic,
-          linear = linear, beta = beta
+          linear = linear, beta = beta, smooth = smooth
         )$value
+      }
+      if (use_ltr) {
+        Left <- L_cur
+        Right <- R_all[[k]]
+      } else if (use_rtl) {
+        Left <- L_all[[k]]
+        Right <- R_cur
+      } else {
+        Left <- NULL
+        Right <- NULL
       }
       built <- .cgcv_core_workspace(
         cores, k, lambda, basis, yc, ranks, control,
         weight = w, penalty_order = penalty_order,
         use_spectral = identical(method, "cGCV") && isTRUE(control$use_spectral_gcv),
-        compute_op_norms = do_trace
+        compute_op_norms = do_trace,
+        Left = Left,
+        Right = Right
       )
       Pk <- built$P_own
       penalties[[k]] <- Pk
@@ -132,6 +163,12 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
       cores[[k]] <- array(g_use, c(ranks[k], p, ranks[k + 1L]))
       lambda[k] <- lam_new
 
+      if (use_ltr && k < d) {
+        L_cur <- .tt_design_left_absorb(L_cur, cores[[k]], basis[[k]])
+      } else if (use_rtl && k > 1L) {
+        R_cur <- .tt_design_right_absorb(R_cur, cores[[k]], basis[[k]])
+      }
+
       if (do_trace) {
         cgcv_trace[[length(cgcv_trace) + 1L]] <- data.frame(
           sweep = sw,
@@ -161,7 +198,7 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
           y, cores, intercept, basis, lambda,
           offset = offset, weights = w,
           penalty_order = penalty_order, cyclic = cyclic,
-          linear = linear, beta = beta
+          linear = linear, beta = beta, smooth = smooth
         )$value
         dq <- q_new - q_old
         if (is.finite(dq) && dq > q_max_increase) q_max_increase <- dq
@@ -170,19 +207,23 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
         }
       }
     }
-    # Refresh unpenalized (α, β) given current TT surface; update residual
+    # Refresh additive (smooth + α, β) given current TT surface; update residual
     f <- tt_contraction(cores, basis)
-    ab <- tt_update_intercept_beta(y, offset, f, linear = linear, weights = w)
-    intercept <- ab$intercept
-    beta <- ab$beta
-    yc <- y - offset - intercept - tt_linear_contrib(linear, beta)
+    add <- tt_refresh_additive(y, offset, f, linear = linear, smooth = smooth,
+                               weights = w, control = control)
+    intercept <- add$intercept
+    beta <- add$beta
+    smooth <- add$smooth
+    yc <- y - offset - intercept - tt_linear_contrib(linear, beta) -
+      tt_smooth_contrib(smooth)
 
     n_sweeps <- sw
-    eta <- tt_eta(offset, intercept, cores, basis, linear = linear, beta = beta)
+    eta <- tt_eta(offset, intercept, cores, basis,
+                  linear = linear, beta = beta, smooth = smooth)
     rss <- sum(w * (y - eta)^2)
     pen_val <- tt_global_penalty_value(
       cores, lambda, penalty_order = penalty_order, cyclic = cyclic
-    )
+    ) + tt_smooth_penalty_value(smooth)
     obj <- 0.5 * rss + pen_val
     d_eta <- if (sw == 1L) NA_real_ else sqrt(mean((eta - prev_eta)^2))
     history[[sw]] <- list(
@@ -204,13 +245,15 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
     }
   }
 
-  eta <- tt_eta(offset, intercept, cores, basis, linear = linear, beta = beta)
+  eta <- tt_eta(offset, intercept, cores, basis,
+                linear = linear, beta = beta, smooth = smooth)
   cgcv_df <- if (length(cgcv_trace)) do.call(rbind, cgcv_trace) else NULL
   list(
     cores = cores,
     intercept = intercept,
     beta = beta,
     linear = linear,
+    smooth = smooth,
     lambda = lambda,
     ranks = ranks,
     eta = eta,
@@ -257,16 +300,24 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
 tt_als_fit_cgcv_outer <- function(y, basis, ranks, lambda_spec, control,
                                   penalty_order = 2, init_cores = NULL,
                                   offset = NULL, weights = NULL,
-                                  linear = NULL) {
+                                  linear = NULL, smooth = NULL) {
   d <- length(basis)
   p <- ncol(basis[[1]])
   lambda <- as.numeric(lambda_spec$values %||% lambda_spec$lambda0)
   offset <- normalize_offset(offset, length(y))
   w <- normalize_weights(weights, length(y))
   linear <- normalize_linear(linear, length(y))
+  smooth <- normalize_smooth(smooth, length(y))
   ab0 <- tt_update_intercept_beta(y, offset, f = 0, linear = linear, weights = w)
   intercept <- ab0$intercept
   beta <- ab0$beta
+  if (!is.null(smooth)) {
+    add <- tt_refresh_additive(y, offset, f_tt = 0, linear = linear,
+                               smooth = smooth, weights = w, control = control)
+    intercept <- add$intercept
+    beta <- add$beta
+    smooth <- add$smooth
+  }
   if (is.null(init_cores)) {
     cores <- initialize_tt_cores(p, ranks, seed = control$seed, sd = control$init_sd)
   } else {
@@ -303,15 +354,18 @@ tt_als_fit_cgcv_outer <- function(y, basis, ranks, lambda_spec, control,
     ctrl_fit$max_sweeps <- fit_sweeps
     fit_fixed <- tt_als_fit_sequential(
       y, basis, ranks, fixed_spec, ctrl_fit, penalty_order,
-      init_cores = cores, offset = offset, weights = w, linear = linear
+      init_cores = cores, offset = offset, weights = w,
+      linear = linear, smooth = smooth
     )
     cores <- fit_fixed$cores
     intercept <- fit_fixed$intercept
     beta <- fit_fixed$beta
+    smooth <- fit_fixed$smooth
     penalties <- fit_fixed$penalties
 
     # ---- B/C. Frozen Jacobi proposals + damp/trust ----
-    yc <- y - offset - intercept - tt_linear_contrib(linear, beta)
+    yc <- y - offset - intercept - tt_linear_contrib(linear, beta) -
+      tt_smooth_contrib(smooth)
     step <- .cgcv_simultaneous_step(
       cores, lambda, basis, yc, ranks, control,
       weight = w, penalty_order = penalty_order
@@ -320,11 +374,12 @@ tt_als_fit_cgcv_outer <- function(y, basis, ranks, lambda_spec, control,
     lambda <- step$lambda
     n_outer <- outer
 
-    eta <- tt_eta(offset, intercept, cores, basis, linear = linear, beta = beta)
+    eta <- tt_eta(offset, intercept, cores, basis,
+                  linear = linear, beta = beta, smooth = smooth)
     rss <- sum(w * (y - eta)^2)
     pen_val <- tt_global_penalty_value(
       cores, lambda, penalty_order = penalty_order, cyclic = cyclic
-    )
+    ) + tt_smooth_penalty_value(smooth)
     obj <- 0.5 * rss + pen_val
     history[[outer]] <- list(
       outer = outer, rss = rss, objective = obj, penalty = pen_val,
@@ -351,7 +406,8 @@ tt_als_fit_cgcv_outer <- function(y, basis, ranks, lambda_spec, control,
                      lambda0 = lambda)
   fit_final <- tt_als_fit_sequential(
     y, basis, ranks, fixed_spec, control, penalty_order,
-    init_cores = cores, offset = offset, weights = w, linear = linear
+    init_cores = cores, offset = offset, weights = w,
+    linear = linear, smooth = smooth
   )
 
   # Optional λ0 grid after anisotropy settled
@@ -369,7 +425,7 @@ tt_als_fit_cgcv_outer <- function(y, basis, ranks, lambda_spec, control,
       ff <- tt_als_fit_sequential(
         y, basis, ranks, fs, control, penalty_order,
         init_cores = fit_final$cores, offset = offset, weights = w,
-        linear = linear
+        linear = linear, smooth = smooth
       )
       list(criterion = ff$deviance, fit = ff)
     })
@@ -379,7 +435,7 @@ tt_als_fit_cgcv_outer <- function(y, basis, ranks, lambda_spec, control,
     fit_final <- tt_als_fit_sequential(
       y, basis, ranks, fs, control, penalty_order,
       init_cores = fit_final$cores, offset = offset, weights = w,
-      linear = linear
+      linear = linear, smooth = smooth
     )
     lambda <- fit_final$lambda
   }
@@ -390,6 +446,7 @@ tt_als_fit_cgcv_outer <- function(y, basis, ranks, lambda_spec, control,
     intercept = fit_final$intercept,
     beta = fit_final$beta,
     linear = linear,
+    smooth = fit_final$smooth,
     lambda = fit_final$lambda,
     ranks = ranks,
     eta = fit_final$eta,
@@ -426,10 +483,10 @@ tt_als_fit_cgcv_outer <- function(y, basis, ranks, lambda_spec, control,
 #' @keywords internal
 tt_als_fit_rcpp <- function(y, basis, ranks, lambda_spec, control, penalty_order = 2,
                             init_cores = NULL, offset = NULL, weights = NULL,
-                            linear = NULL) {
+                            linear = NULL, smooth = NULL) {
   out <- tt_als_fit(y, basis, ranks, lambda_spec, control, penalty_order,
                     init_cores = init_cores, offset = offset, weights = weights,
-                    linear = linear)
+                    linear = linear, smooth = smooth)
   out$backend <- "R"
   out
 }

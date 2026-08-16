@@ -1,0 +1,2 @@
+"pass","theta1","theta2","theta3","t2_lo","t2_hi","lambda2_id","expanded","n_expansions","winner_source","outer_stable","n_region","batches","elapsed"
+TRUE,0.0147614932755689,-5.28571428571429,-1.81528938474651,-11,-3.3203125,"effectively_unpenalized","2",2,"region_point",TRUE,20,3,479.877

@@ -1,0 +1,19 @@
+=== stage A_t2lo_-8: θ2 ∈ [-8.0, 5] ===
+[global-lambda] cGCV anchor...
+[global-lambda] exploration n_sobol=256 d=3 M=12 cgcv_anchor=TRUE
+[global-lambda] refining 5 starts...
+[global-lambda] final re-eval 7 candidates (M=30, starts=3)...
+null device 
+          1 
+
+==== D3 ANISO EXPAND VERDICT: INTERIOR_MIN ====
+       verdict     stage t2_lo     opt_t1    opt_t2    opt_t3 grid_t1 grid_t2
+1 INTERIOR_MIN A_t2lo_-8    -8 0.04458534 -5.816406 -1.944454       0    -4.5
+  grid_t3     q_opt    q_grid    delta_rel in_valley same_valley aniso_ok
+1    -2.5 0.5053022 0.5103763 -0.009941977      TRUE        TRUE     TRUE
+  interior near_t2_lower min_edge_dist descending_to_edge ise_stable_along_t2
+1     TRUE         FALSE      2.183594              FALSE                TRUE
+       winner_source n_explore n_grid n_als_opt n_als_grid expanded_to_m10
+1 refined_from_sobol       267    350      4805       4550           FALSE
+Wrote /Users/daejin/Dropbox/IE/research/01_PROJECTS/ttpsplines-pkg/inst/benchmarks/global_gcv/results/global_opt_d3_aniso_expand
+Figure /Users/daejin/Dropbox/IE/research/01_PROJECTS/ttpsplines-pkg/inst/benchmarks/global_gcv/figures/global_opt_d3_aniso_expand/theta2_profile.png

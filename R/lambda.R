@@ -279,21 +279,36 @@ update_lambda_cgcv <- function(workspace, ...) {
 
 #' Build cached conditional workspace for core k (Gaussian or weighted).
 #' @param P0 Optional fixed penalty offset (for exact P_k^full cross-margin terms).
+#' @param S,b Optional precomputed Gram / RHS (skips forming products from X).
+#' @param yw Optional weighted response for cGCV RSS / spectral cache.
 #' @keywords internal
-make_core_workspace <- function(zc, X, P, lambda0, bounds, tol,
+make_core_workspace <- function(zc, X = NULL, P, lambda0, bounds, tol,
                                 weight = NULL, use_spectral = FALSE,
-                                P0 = NULL) {
-  if (is.null(weight)) {
-    S <- crossprod(X)
-    b <- as.numeric(crossprod(X, zc))
-    yw <- zc
-    Xw <- X
+                                P0 = NULL, S = NULL, b = NULL, yw = NULL) {
+  if (!is.null(S) && !is.null(b)) {
+    if (is.null(yw)) {
+      if (is.null(weight)) {
+        yw <- zc
+      } else {
+        sw <- sqrt(pmax(as.numeric(weight), 0))
+        yw <- as.numeric(zc) * sw
+      }
+    }
+    Xw <- X # may be NULL when Gram was fused
   } else {
-    sw <- sqrt(pmax(as.numeric(weight), 0))
-    Xw <- X * sw
-    yw <- zc * sw
-    S <- crossprod(Xw)
-    b <- as.numeric(crossprod(Xw, yw))
+    if (is.null(X)) stop("make_core_workspace: need X or (S, b).", call. = FALSE)
+    if (is.null(weight)) {
+      S <- crossprod(X)
+      b <- as.numeric(crossprod(X, zc))
+      yw <- zc
+      Xw <- X
+    } else {
+      sw <- sqrt(pmax(as.numeric(weight), 0))
+      Xw <- X * sw
+      yw <- zc * sw
+      S <- crossprod(Xw)
+      b <- as.numeric(crossprod(Xw, yw))
+    }
   }
   ws <- list(
     S = S, b = b, P = P, P0 = P0, X = X, Xw = Xw, yw = yw,

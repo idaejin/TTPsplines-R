@@ -6,7 +6,10 @@
 # Legacy unit-core reference (diagnostics / parity only):
 #   method = "tt_cpp"
 #
-# Related exports:
+# Related exports / kernels:
+#   tt_gram_rhs_cpp — fused / blocked / kron / blas Gram+RHS (P2b)
+#                 OpenMP opt-in via n_threads (fused_blocked only; P2b.3)
+#   tt_gram_omp_available
 #   tt_penalty_prepare_right_envs_cpp
 #   tt_penalty_left_env_absorb_cpp
 #   tt_penalty_from_envs_cpp

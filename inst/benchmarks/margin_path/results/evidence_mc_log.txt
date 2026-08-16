@@ -1,0 +1,48 @@
+[additive2] seed=1001 (1/20)
+[additive2] seed=1002 (2/20)
+[additive2] seed=1003 (3/20)
+[additive2] seed=1004 (4/20)
+[additive2] seed=1005 (5/20)
+[additive2] seed=1006 (6/20)
+[additive2] seed=1007 (7/20)
+[additive2] seed=1008 (8/20)
+[additive2] seed=1009 (9/20)
+[additive2] seed=1010 (10/20)
+[additive2] seed=1011 (11/20)
+[additive2] seed=1012 (12/20)
+[additive2] seed=1013 (13/20)
+[additive2] seed=1014 (14/20)
+[additive2] seed=1015 (15/20)
+[additive2] seed=1016 (16/20)
+[additive2] seed=1017 (17/20)
+[additive2] seed=1018 (18/20)
+[additive2] seed=1019 (19/20)
+[additive2] seed=1020 (20/20)
+[interaction] seed=1001 (1/20)
+[interaction] seed=1002 (2/20)
+[interaction] seed=1003 (3/20)
+[interaction] seed=1004 (4/20)
+[interaction] seed=1005 (5/20)
+[interaction] seed=1006 (6/20)
+[interaction] seed=1007 (7/20)
+[interaction] seed=1008 (8/20)
+[interaction] seed=1009 (9/20)
+[interaction] seed=1010 (10/20)
+[interaction] seed=1011 (11/20)
+[interaction] seed=1012 (12/20)
+[interaction] seed=1013 (13/20)
+[interaction] seed=1014 (14/20)
+[interaction] seed=1015 (15/20)
+[interaction] seed=1016 (16/20)
+[interaction] seed=1017 (17/20)
+[interaction] seed=1018 (18/20)
+[interaction] seed=1019 (19/20)
+[interaction] seed=1020 (20/20)
+          dgp  B exact_set_rate mean_tpr_path mean_fpr_path mean_tpr_drop
+1   additive2 20            1.0             1        0.0000             1
+2 interaction 20            0.9             1        0.0625             1
+  mean_fpr_drop mean_mse_full mean_mse_path mean_mse_drop mean_mse_ratio_path
+1        0.1625     0.3856449     0.1132344     0.1187285           0.2987141
+2        0.1250     0.1866575     0.1260328     0.1229053           0.6732818
+Wrote /Users/daejin/Dropbox/IE/research/01_PROJECTS/ttpsplines-pkg/inst/benchmarks/margin_path/results/evidence_mc_raw.csv
+Wrote /Users/daejin/Dropbox/IE/research/01_PROJECTS/ttpsplines-pkg/inst/benchmarks/margin_path/results/evidence_mc_summary.csv

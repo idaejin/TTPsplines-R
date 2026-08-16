@@ -1,0 +1,2 @@
+"mode","wall_sec","n_rep_requested","n_completed_keys","n_done_this_run","n_skipped","n_failed","scenarios","M_search","M_final","n","k"
+"SMOKE",0.665,2,4,0,4,0,"smooth_smooth,strong_aniso",3,8,120,6

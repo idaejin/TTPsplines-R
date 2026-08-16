@@ -297,10 +297,19 @@ tt_damped_newton_als_fit <- function(y, basis, family, ranks, lambda_spec,
 
   for (sw in seq_len(max_sweeps)) {
     obj_old <- obj
+    use_cache <- isTRUE(control$design_interface_cache %||% TRUE)
+    if (use_cache) {
+      R_all <- .tt_design_prepare_right(cores, basis)
+      L_cur <- matrix(1, nrow(basis[[1]]), 1)
+    }
     for (k in seq_len(d)) {
-      L <- left_interfaces(cores, basis)
-      R <- right_interfaces(cores, basis)
-      Xk <- tt_design_core(L[[k]], R[[k]], basis[[k]])
+      if (use_cache) {
+        Xk <- tt_design_core(L_cur, R_all[[k]], basis[[k]])
+      } else {
+        L <- left_interfaces(cores, basis)
+        R <- right_interfaces(cores, basis)
+        Xk <- tt_design_core(L[[k]], R[[k]], basis[[k]])
+      }
       g <- as.numeric(cores[[k]])
       pen_k <- tt_conditional_penalty_full(
         cores, k, lambda, penalty_order = penalty_order, cyclic = cyclic
@@ -316,6 +325,9 @@ tt_damped_newton_als_fit <- function(y, basis, family, ranks, lambda_spec,
         cores[[k]] <- array(upd$g, c(ranks[k], p, ranks[k + 1L]))
         n_core_updates <- n_core_updates + 1L
         alphas <- c(alphas, upd$alpha)
+      }
+      if (use_cache && k < d) {
+        L_cur <- .tt_design_left_absorb(L_cur, cores[[k]], basis[[k]])
       }
     }
     obj <- tt_glm_penalized_objective(y, cores, intercept, basis, penalties, lambda, fam,
@@ -426,10 +438,19 @@ tt_lbfgs_als_fit <- function(y, basis, family, ranks, lambda_spec, control,
 
   for (sw in seq_len(max_sweeps)) {
     obj_old <- obj
+    use_cache <- isTRUE(control$design_interface_cache %||% TRUE)
+    if (use_cache) {
+      R_all <- .tt_design_prepare_right(cores, basis)
+      L_cur <- matrix(1, nrow(basis[[1]]), 1)
+    }
     for (k in seq_len(d)) {
-      L <- left_interfaces(cores, basis)
-      R <- right_interfaces(cores, basis)
-      Xk <- tt_design_core(L[[k]], R[[k]], basis[[k]])
+      if (use_cache) {
+        Xk <- tt_design_core(L_cur, R_all[[k]], basis[[k]])
+      } else {
+        L <- left_interfaces(cores, basis)
+        R <- right_interfaces(cores, basis)
+        Xk <- tt_design_core(L[[k]], R[[k]], basis[[k]])
+      }
       g <- as.numeric(cores[[k]])
       pen_k <- tt_conditional_penalty_full(
         cores, k, lambda, penalty_order = penalty_order, cyclic = cyclic
@@ -444,6 +465,9 @@ tt_lbfgs_als_fit <- function(y, basis, family, ranks, lambda_spec, control,
           (is.finite(upd$q_after) && upd$q_after <= upd$q_before + 1e-8)) {
         cores[[k]] <- array(upd$g, c(ranks[k], p, ranks[k + 1L]))
         n_accepted <- n_accepted + 1L
+      }
+      if (use_cache && k < d) {
+        L_cur <- .tt_design_left_absorb(L_cur, cores[[k]], basis[[k]])
       }
     }
     obj <- tt_glm_penalized_objective(y, cores, intercept, basis, penalties, lambda, fam,

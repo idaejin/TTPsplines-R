@@ -6,7 +6,7 @@
 \alias{TTPsplines-package}
 \title{TTPsplines: Tensor-Train P-Splines for Multidimensional Smoothing and GLMs}
 \description{
-Tensor-Train (TT) compression of multidimensional P-spline coefficient arrays for non-additive smooth regression on scattered continuous covariates. Retains the classical discrete P-spline penalty on the coefficient tensor Theta; TT changes representation and optimization only. Supports Gaussian, Poisson, and Bernoulli responses via ALS / PIRLS / L-BFGS, a transparent family-aware optimizer='auto' default, fixed anisotropic smoothing, and conditional GCV (cGCV). Full-tensor / GLAM baselines are available when feasible. Development version; the public API may still change.
+Statistical Tensor-Train (TT) P-spline smoothing for non-additive multidimensional regression on scattered continuous covariates. The coefficient array Theta is stored and optimized in TT format with classical directional discrete-difference (P-spline) penalties. The package targets smoother practice -- Gaussian / Poisson / Bernoulli via ALS / PIRLS / L-BFGS, family-aware optimizer='auto', fixed or conditional GCV (cGCV) for anisotropic lambda, predictive rank helpers, and GLAM / full-tensor baselines when feasible -- rather than claiming priority for TT of B-spline coefficients with difference penalties (see related system-identification work). Development version; the public API may still change.
 }
 \seealso{
 Useful links:
@@ -17,7 +17,12 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: Dae-Jin Lee \email{daejin.lee@ie.edu} (\href{https://orcid.org/0000-0002-9090-0475}{ORCID})
+\strong{Maintainer}: Dae-Jin Lee \email{dae-jin.lee@ie.edu} (\href{https://orcid.org/0000-0002-9090-0475}{ORCID})
+
+Authors:
+\itemize{
+  \item Dae-Jin Lee \email{dae-jin.lee@ie.edu} (\href{https://orcid.org/0000-0002-9090-0475}{ORCID})
+}
 
 Other contributors:
 \itemize{

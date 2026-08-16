@@ -117,13 +117,14 @@ tt_linear_contrib <- function(linear, beta) {
   as.numeric(as.matrix(linear) %*% as.numeric(beta))
 }
 
-#' Full linear predictor η = offset + intercept + linear β + TT contraction.
+#' Full linear predictor η = offset + intercept + linear β + smooth + TT.
 #' @keywords internal
 #' @noRd
 tt_eta <- function(offset, intercept, cores, basis,
-                   linear = NULL, beta = NULL) {
+                   linear = NULL, beta = NULL, smooth = NULL) {
   as.numeric(offset) + as.numeric(intercept) +
     tt_linear_contrib(linear, beta) +
+    tt_smooth_contrib(smooth) +
     tt_contraction(cores, basis)
 }
 
@@ -255,11 +256,13 @@ tt_glm_penalized_objective <- function(y, cores, intercept, basis, penalties,
                                        weights = NULL,
                                        penalty_mode = "global",
                                        penalty_order = 2L,
-                                       linear = NULL, beta = NULL) {
+                                       linear = NULL, beta = NULL,
+                                       smooth = NULL) {
   key <- family_key(family)
   offset <- normalize_offset(offset, length(y))
   w <- normalize_weights(weights, length(y))
-  eta <- tt_eta(offset, intercept, cores, basis, linear = linear, beta = beta)
+  eta <- tt_eta(offset, intercept, cores, basis,
+                linear = linear, beta = beta, smooth = smooth)
   if (identical(key, "gaussian")) {
     rss <- sum(w * (y - eta)^2)
     nll <- 0.5 * rss
@@ -277,7 +280,7 @@ tt_glm_penalized_objective <- function(y, cores, intercept, basis, penalties,
   pen <- tt_global_penalty_value(
     cores, lambda, penalty_order = penalty_order,
     cyclic = attr(basis, "cyclic")
-  )
+  ) + tt_smooth_penalty_value(smooth)
   list(value = nll + pen, nll = nll, penalty = pen, eta = eta)
 }
 
@@ -289,7 +292,8 @@ tt_glm_penalized_objective <- function(y, cores, intercept, basis, penalties,
 #'
 #' @keywords internal
 tt_blend_params <- function(cores_old, intercept_old, cores_new, intercept_new,
-                            alpha, beta_old = NULL, beta_new = NULL) {
+                            alpha, beta_old = NULL, beta_new = NULL,
+                            smooth_old = NULL, smooth_new = NULL) {
   cores <- lapply(seq_along(cores_old), function(k) {
     cores_old[[k]] + alpha * (cores_new[[k]] - cores_old[[k]])
   })
@@ -308,6 +312,24 @@ tt_blend_params <- function(cores_old, intercept_old, cores_new, intercept_new,
       else if (!is.null(names(b0))) names(out$beta) <- names(b0)
     } else {
       out$beta <- b1
+    }
+  }
+  if (!is.null(smooth_old) || !is.null(smooth_new)) {
+    s0 <- smooth_old
+    s1 <- smooth_new
+    if (is.null(s0)) {
+      out$smooth <- s1
+    } else if (is.null(s1) || length(s0) != length(s1)) {
+      out$smooth <- s1
+    } else {
+      out$smooth <- lapply(seq_along(s0), function(j) {
+        sm <- s1[[j]]
+        sm$gamma <- as.numeric(s0[[j]]$gamma) +
+          alpha * (as.numeric(s1[[j]]$gamma) - as.numeric(s0[[j]]$gamma))
+        sm
+      })
+      names(out$smooth) <- names(s1)
+      attr(out$smooth, "ttps_smooth_ok") <- TRUE
     }
   }
   out

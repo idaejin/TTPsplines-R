@@ -1,0 +1,2 @@
+"verdict","stage","t2_lo","opt_t1","opt_t2","opt_t3","grid_t1","grid_t2","grid_t3","q_opt","q_grid","delta_rel","in_valley","same_valley","aniso_ok","interior","near_t2_lower","min_edge_dist","descending_to_edge","ise_stable_along_t2","winner_source","n_explore","n_grid","n_als_opt","n_als_grid","expanded_to_m10"
+"INTERIOR_MIN","A_t2lo_-8",-8,0.0445853387094864,-5.81640625,-1.94445418023931,0,-4.5,-2.5,0.505302150045916,0.510376299519503,-0.0099419770831129,TRUE,TRUE,TRUE,TRUE,FALSE,2.18359375,FALSE,TRUE,"refined_from_sobol",267,350,4805,4550,FALSE

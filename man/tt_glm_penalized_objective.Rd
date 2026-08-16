@@ -17,7 +17,8 @@ tt_glm_penalized_objective(
   penalty_mode = "global",
   penalty_order = 2L,
   linear = NULL,
-  beta = NULL
+  beta = NULL,
+  smooth = NULL
 )
 }
 \description{

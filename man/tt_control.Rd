@@ -54,6 +54,7 @@ tt_control(
   block_lbfgs_sweeps = 40L,
   compute_edf = TRUE,
   edf_max_npar = 2500L,
+  null_space_max_npar = 4096L,
   warn_lambda_boundary = TRUE,
   cgcv_update = c("outer_simultaneous", "sequential"),
   cgcv_damping = 0.25,
@@ -63,7 +64,10 @@ tt_control(
   cgcv_margin_order = NULL,
   cgcv_fit_sweeps = NULL,
   cgcv_lambda0_method = c("fixed_start", "log_grid"),
-  cgcv_lambda0_grid = NULL
+  cgcv_lambda0_grid = NULL,
+  design_interface_cache = TRUE,
+  gram_method = c("fused_blocked", "fused", "kron", "blas", "legacy"),
+  gram_threads = 1L
 )
 }
 \arguments{
@@ -167,10 +171,17 @@ moving after the base sweep count.}
 
 \item{block_lbfgs_sweeps}{Max outer ALS sweeps for LBFGS-ALS.}
 
-\item{compute_edf}{Compute joint linearized EDF after fit (\code{TRUE}/\code{FALSE}).
-Skipped automatically when packed TT size exceeds \code{edf_max_npar}.}
+\item{compute_edf}{Compute joint linearized EDF and per-margin summaries
+after fit (\code{TRUE}/\code{FALSE}). Joint EDF is skipped when packed TT size
+exceeds \code{edf_max_npar}. Stores \code{edf_margin} = diagonal blocks
+\(\operatorname{tr}(H_{kk})\) (sums to joint EDF) and
+\code{edf_margin_cond} = conditional ALS traces (cGCV diagnostic; not additive).
+Use \code{\link[=tt_edf]{tt_edf()}} to extract / recompute.}
 
 \item{edf_max_npar}{Maximum packed TT parameters for joint EDF (memory guard).}
+
+\item{null_space_max_npar}{Cap on \(q^d\) for \code{ttps(null_space = "profiled")}
+(default \code{4096}).}
 
 \item{warn_lambda_boundary}{Soft warning when cGCV λ hits search bounds.}
 
@@ -200,6 +211,19 @@ updates (order-sensitivity diagnostics).}
 \code{"log_grid"} overall-scale search.}
 
 \item{cgcv_lambda0_grid}{Optional numeric grid for \code{"log_grid"}.}
+
+\item{design_interface_cache}{If \code{TRUE} (default), LTR/RTL ALS sweeps
+precompute the inactive-side design interfaces once and absorb the
+updated core into the active side. Set \code{FALSE} only for equivalence
+audits (rebuilds left/right interfaces every core).}
+
+\item{gram_method}{Local Gram/RHS engine for ALS/PIRLS core updates:
+\code{"fused_blocked"} (default; no full \(n\times q\) design), \code{"fused"},
+\code{"kron"}, \code{"blas"} (materialize \(X_k\) then BLAS), or \code{"legacy"}
+(R \code{tt_design_core} + \code{crossprod}).}
+
+\item{gram_threads}{OpenMP threads for \code{fused_blocked} observation
+reduction (\code{1} = serial default until P2b.3 is ESTABLISHED).}
 }
 \value{
 A list of class \code{"tt_control"}.

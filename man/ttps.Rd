@@ -23,9 +23,12 @@ ttps(
   knots = NULL,
   offset = NULL,
   linear = NULL,
+  smooth = NULL,
+  lambda_smooth = "cGCV",
   weights = NULL,
   cyclic = NULL,
-  period = NULL
+  period = NULL,
+  null_space = c("joint", "profiled")
 )
 
 ttpspline(
@@ -46,9 +49,12 @@ ttpspline(
   knots = NULL,
   offset = NULL,
   linear = NULL,
+  smooth = NULL,
+  lambda_smooth = "cGCV",
   weights = NULL,
   cyclic = NULL,
-  period = NULL
+  period = NULL,
+  null_space = c("joint", "profiled")
 )
 }
 \arguments{
@@ -105,10 +111,22 @@ Convenient alias of \code{tt_control(monitor = TRUE)} / \code{tt_control(trace =
 linear predictor, e.g. \code{log(exposure)} for Poisson. Default \code{NULL} (zeros).}
 
 \item{linear}{Optional unpenalized parametric design matrix (\verb{n × p}), e.g.
-\code{model.matrix(~ 0 + dow + ns(time, df), data)}. Do \strong{not} include an
-intercept column (\code{ttps} already estimates one). Estimated jointly with the
-TT smooth via block-coordinate updates (ALS / PIRLS-ALS). Currently
-unsupported for LBFGS / GD / hybrid / Adam / LBFGS-ALS / DN-ALS (error).}
+\code{model.matrix(~ 0 + dow, data)}. Do \strong{not} include an intercept column
+(\code{ttps} already estimates one). Estimated jointly with the TT surface via
+block-coordinate updates (ALS / PIRLS-ALS).}
+
+\item{smooth}{Optional additive 1D smooths (mgcv-like). A named list of
+specs, e.g.
+\code{list(time = list(x = d$time, bs = "ps", k = 20, m = 2))} or
+\code{list(hour = list(x = hour, bs = "cc", k = 12, m = 2, period = c(0, 24)))}.
+\code{bs}: \code{"ps"} (open P-spline) or \code{"cc"} (circular). \code{m} is the difference
+penalty order. Per-term smoothing: \code{lambda} (numeric or \code{"cGCV"}, default
+from \code{lambda_smooth}) \strong{or} \code{target_edf} (choose \(\lambda\) so
+\(\mathrm{edf}(\lambda)\approx\) target; requires \verb{m < target_edf <= k}).
+Unsupported for LBFGS / GD / hybrid / Adam / LBFGS-ALS / DN-ALS (error).}
+
+\item{lambda_smooth}{Default smoother penalty for terms in \code{smooth} that
+omit \code{lambda} and \code{target_edf} (\code{"cGCV"} or a nonnegative scalar).}
 
 \item{weights}{Optional non-negative observation weights of length \code{n}
 (or scalar). \code{NULL} means all ones. Zero weights exclude observations from
@@ -119,6 +137,17 @@ margins (periodic B-spline basis + circular difference penalty). For
 hour-of-day, map to \(\link{0,1}\) and set that margin to \code{TRUE}.}
 
 \item{period}{Optional length-\code{d} list of \code{c(xl,xr)} for cyclic margins.}
+
+\item{null_space}{How to treat the discrete P-spline penalty null space:
+\itemize{
+\item \code{"joint"} (default) — single TT on the full coefficient array
+(current behaviour; small uniform \(r\) may truncate \(\mathcal N(S)\)).
+\item \code{"profiled"} — \strong{experimental} Gaussian null-space–preserving
+fit: profile \(\beta_0\) exactly and ALS-update cores on
+\(Q_0 y\) and \(Q_0 Z_k\) (empirical orthogonalization). Not yet
+available for GLM / cyclic / \code{linear} / \code{smooth}. Requires
+\(q^d \le\) \code{control$null_space_max_npar} (default 4096).
+}}
 }
 \value{
 An object of class \code{"ttpspline"}.

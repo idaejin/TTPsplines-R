@@ -12,7 +12,7 @@
 
 \item{type}{\code{"rmse_rank"} or \code{"tradeoff"}.}
 
-\item{...}{Passed to \code{\link[graphics:plot.default]{graphics::plot()}}.}
+\item{...}{Passed to \code{\link[graphics:plot]{graphics::plot()}}.}
 }
 \description{
 Plot GLAM-vs-TT comparison.

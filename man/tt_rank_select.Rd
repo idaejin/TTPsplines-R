@@ -28,6 +28,8 @@ tt_rank_select(
   fold_knots = FALSE,
   offset = NULL,
   linear = NULL,
+  smooth = NULL,
+  lambda_smooth = "cGCV",
   weights = NULL,
   rank_chain = NULL,
   ...

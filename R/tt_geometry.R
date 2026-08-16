@@ -15,6 +15,9 @@ initialize_tt_cores <- function(p, ranks, seed = 1, sd = 0.15) {
 }
 
 contract_left_step <- function(left, core, Bk) {
+  if (exists("contract_left_step_cpp", mode = "function")) {
+    return(contract_left_step_cpp(left, core, Bk))
+  }
   n <- nrow(Bk)
   rl <- dim(core)[1]
   p <- dim(core)[2]
@@ -28,6 +31,9 @@ contract_left_step <- function(left, core, Bk) {
 }
 
 contract_right_step <- function(right, core, Bk) {
+  if (exists("contract_right_step_cpp", mode = "function")) {
+    return(contract_right_step_cpp(right, core, Bk))
+  }
   n <- nrow(Bk)
   rl <- dim(core)[1]
   p <- dim(core)[2]
@@ -82,6 +88,9 @@ right_interfaces <- function(cores, basis) {
 #' Conditional design for vec(core_k); order a (fast), j, b (slow).
 #' @keywords internal
 tt_design_core <- function(Left, Right, Bk) {
+  if (exists("tt_design_core_d_cpp", mode = "function")) {
+    return(tt_design_core_d_cpp(Left, Right, Bk))
+  }
   n <- nrow(Bk)
   rl <- ncol(Left)
   rr <- ncol(Right)
@@ -97,6 +106,51 @@ tt_design_core <- function(Left, Right, Bk) {
     }
   }
   X
+}
+
+#' TRUE if `order` is left-to-right 1:d (enables design L/R sweep cache).
+#' @keywords internal
+#' @noRd
+.tt_is_ltr_order <- function(order, d) {
+  identical(as.integer(order), seq_len(as.integer(d)))
+}
+
+#' TRUE if `order` is right-to-left d:1.
+#' @keywords internal
+#' @noRd
+.tt_is_rtl_order <- function(order, d) {
+  identical(as.integer(order), rev(seq_len(as.integer(d))))
+}
+
+#' Prepare right interfaces once for a left-to-right ALS sweep.
+#'
+#' During LTR, cores \(G_{k+1},\ldots,G_d\) are not yet updated when core \(k\)
+#' is fitted, so the full right chain remains valid for the entire sweep.
+#' @keywords internal
+#' @noRd
+.tt_design_prepare_right <- function(cores, basis) {
+  right_interfaces(cores, basis)
+}
+
+#' Prepare left interfaces once for a right-to-left ALS sweep.
+#' @keywords internal
+#' @noRd
+.tt_design_prepare_left <- function(cores, basis) {
+  left_interfaces(cores, basis)
+}
+
+#' Absorb updated core into the running left interface (LTR).
+#' @keywords internal
+#' @noRd
+.tt_design_left_absorb <- function(Left, core, Bk) {
+  contract_left_step(Left, core, Bk)
+}
+
+#' Absorb updated core into the running right interface (RTL).
+#' @keywords internal
+#' @noRd
+.tt_design_right_absorb <- function(Right, core, Bk) {
+  contract_right_step(Right, core, Bk)
 }
 
 #' Reconstruct full coefficient tensor (dangerous for large p^d).

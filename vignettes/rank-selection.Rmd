@@ -11,21 +11,16 @@ vignette: >
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
 
-# Setup
-
 `ttps()` **never** chooses the TT rank for you: `rank = 2` means
-exactly rank 2. Predictive selection is a separate step:
+exactly rank 2. Predictive selection is a separate step
+(`tt_rank_select()`). This vignette first shows what \(r\) means on a
+small \(d=3\) example, then selects \(r\) by CV on Friedman (\(d=5\)).
 
 ```{r}
 library(TTPsplines)
-data(friedman)
-# short subsample keeps the vignette install-time friendly
-idx <- seq_len(250)
-X <- as.matrix(friedman[idx, paste0("x", 1:5)])
-y <- friedman$y[idx]
 ```
 
-# Complexity layers
+# Complexity layers (Ishigami, \(d=3\))
 
 \[
 \boxed{r \neq \lambda \neq \mathrm{EDF}}.
@@ -42,7 +37,8 @@ y <- friedman$y[idx]
 
 Increasing \(r\) enlarges the TT manifold (more stored parameters, less
 compression). Smoothing \(\lambda\) is a different knob
-(`vignette("cgcv")`).
+(`vignette("cgcv")`). Ishigami keeps the arithmetic readable
+(\(k=8\) \(\Rightarrow\) \(8^3=512\) full-tensor coefficients).
 
 ```{r complexity}
 data(ishigami)
@@ -54,7 +50,19 @@ fit0 <- ttps(
 tt_complexity(fit0)
 ```
 
-# Cross-validation + 1-SE
+# Predictive selection (Friedman, \(d=5\))
+
+Now choose \(r\) by cross-validation where the full tensor is larger.
+A short subsample keeps the vignette install-time friendly.
+
+```{r friedman}
+data(friedman)
+idx <- seq_len(250)
+X <- as.matrix(friedman[idx, paste0("x", 1:5)])
+y <- friedman$y[idx]
+```
+
+## Cross-validation + 1-SE
 
 `tt_rank_select()` uses a **single** K-fold split shared across candidate
 ranks, a family-aware validation loss (RMSE for Gaussian), then:
@@ -101,7 +109,7 @@ fit <- tt_rank_refit(sel)
 summary(fit)
 ```
 
-# Optional: cGCV inside folds
+## Optional: cGCV inside folds
 
 When `lambda = "cGCV"`, each fold selects \(\lambda\) **only on its
 training rows**, then scores the held-out fold. Validation data never
@@ -117,8 +125,8 @@ sel_cgcv <- tt_rank_select(
 
 # In-sample rank sweep (diagnostic)
 
-`tt_rank_profile()` refits on the **full** sample at each rank and reports
-deviance / `npar`. This is **not** cross-validation.
+Back on Ishigami: `tt_rank_profile()` refits on the **full** sample at
+each rank and reports deviance / `npar`. This is **not** cross-validation.
 
 ```{r profile, fig.width = 6, fig.height = 3.5}
 prof <- tt_rank_profile(

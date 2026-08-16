@@ -1,0 +1,21 @@
+=== v1 GATE d=3 strong_aniso ===
+[v1] cGCV anchor...
+[v1] Sobol batch 1: +64 (box lo=-5.0,-5.0,-5.0 hi=5.0,5.0,5.0)
+[v1] Sobol batch 2: +64 (box lo=-5.0,-5.0,-5.0 hi=5.0,5.0,5.0)
+[v1] Sobol batch 3: +128 (box lo=-5.0,-5.0,-5.0 hi=5.0,5.0,5.0)
+[v1] refining elites...
+[v1] edge probe Q_best=0.517175  force_lo=0,1,0  force_hi=0,0,0
+[v1] expansion 1 on margins 2 <U+2192> lo=-5.0,-8.0,-5.0
+[v1] edge probe Q_best=0.517175  force_lo=0,1,0  force_hi=0,0,0
+[v1] expansion 2 on margins 2 <U+2192> lo=-5.0,-11.0,-5.0
+[v1] profiling margins...
+[v1] final re-eval 7 candidates...
+
+==== V1 D3 ANISO GATE: PASS ====
+      finite    valley_ok        id_ok    expand_ok expand_clean   has_region 
+        TRUE         TRUE         TRUE         TRUE         TRUE         TRUE 
+  pass     theta1    theta2    theta3 t2_lo     t2_hi              lambda2_id
+1 TRUE 0.01476149 -5.285714 -1.815289   -11 -3.320312 effectively_unpenalized
+  expanded n_expansions winner_source outer_stable n_region batches elapsed
+1        2            2  region_point         TRUE       20       3 479.877
+Wrote /Users/daejin/Dropbox/IE/research/01_PROJECTS/ttpsplines-pkg/inst/benchmarks/global_gcv/results/global_opt_v1_d3_aniso

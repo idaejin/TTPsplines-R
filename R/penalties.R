@@ -666,16 +666,18 @@ tt_gaussian_Q <- function(y, cores, intercept, basis, lambda,
                           offset = NULL, weights = NULL,
                           penalty_order = 2L, cyclic = NULL,
                           penalty_mode = "global",
-                          linear = NULL, beta = NULL) {
+                          linear = NULL, beta = NULL,
+                          smooth = NULL) {
   offset <- normalize_offset(offset, length(y))
   w <- normalize_weights(weights, length(y))
-  eta <- tt_eta(offset, intercept, cores, basis, linear = linear, beta = beta)
+  eta <- tt_eta(offset, intercept, cores, basis,
+                linear = linear, beta = beta, smooth = smooth)
   rss <- sum(w * (y - eta)^2)
   normalize_penalty_mode(penalty_mode)
   pen <- tt_global_penalty_value(
     cores, lambda, penalty_order = penalty_order,
     cyclic = cyclic %||% attr(basis, "cyclic")
-  )
+  ) + tt_smooth_penalty_value(smooth)
   list(rss = rss, penalty = pen, value = 0.5 * rss + pen, eta = eta)
 }
 

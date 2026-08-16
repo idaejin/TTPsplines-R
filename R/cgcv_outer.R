@@ -185,10 +185,17 @@
 .cgcv_core_workspace <- function(cores, k, lambda, basis, target, ranks,
                                  control, weight = NULL, penalty_order = 2L,
                                  use_spectral = NULL,
-                                 compute_op_norms = FALSE) {
-  L <- left_interfaces(cores, basis)
-  R <- right_interfaces(cores, basis)
-  Xk <- tt_design_core(L[[k]], R[[k]], basis[[k]])
+                                 compute_op_norms = FALSE,
+                                 Left = NULL,
+                                 Right = NULL,
+                                 return_design = FALSE,
+                                 null_proj = NULL) {
+  if (is.null(Left) || is.null(Right)) {
+    L <- left_interfaces(cores, basis)
+    R <- right_interfaces(cores, basis)
+    Left <- L[[k]]
+    Right <- R[[k]]
+  }
   pen_k <- tt_conditional_penalty_full(
     cores, k, lambda,
     penalty_order = penalty_order,
@@ -199,19 +206,71 @@
   } else {
     isTRUE(use_spectral)
   }
-  ws <- make_core_workspace(
-    target, Xk, pen_k$P_own, lambda[k],
-    control$lambda_bounds, control$tol_lambda,
-    weight = weight,
-    use_spectral = use_spec,
-    P0 = pen_k$P_other
-  )
+  # Profiled NSP needs Q0 Z_k; force dense design path.
+  if (!is.null(null_proj)) {
+    Xk <- tt_design_core(Left, Right, basis[[k]])
+    Xk <- null_proj$apply_mat(Xk)
+    target <- null_proj$apply_vec(as.numeric(target))
+    ws <- make_core_workspace(
+      target, Xk, pen_k$P_own, lambda[k],
+      control$lambda_bounds, control$tol_lambda,
+      weight = weight,
+      use_spectral = use_spec,
+      P0 = pen_k$P_other
+    )
+    return(list(
+      workspace = ws,
+      P_own = pen_k$P_own,
+      P_other = pen_k$P_other,
+      P_own_op = if (isTRUE(compute_op_norms)) .matrix_op_norm(pen_k$P_own) else NA_real_,
+      P_other_op = if (isTRUE(compute_op_norms)) .matrix_op_norm(pen_k$P_other) else NA_real_,
+      Xk = Xk,
+      Left = Left,
+      Right = Right,
+      gram_method = "legacy_Q0"
+    ))
+  }
+  gram_method <- control$gram_method %||% "fused_blocked"
+  use_gram <- !identical(gram_method, "legacy") &&
+    exists("tt_gram_rhs_cpp", envir = asNamespace("TTPsplines"), inherits = FALSE)
+  Xk <- NULL
+  if (isTRUE(use_gram)) {
+    gr <- tt_gram_rhs(
+      Left, Right, basis[[k]], target,
+      weight = weight, method = gram_method,
+      n_threads = as.integer(control$gram_threads %||% 1L)
+    )
+    if (isTRUE(return_design)) {
+      Xk <- tt_design_core(Left, Right, basis[[k]])
+    }
+    ws <- make_core_workspace(
+      target, X = Xk, pen_k$P_own, lambda[k],
+      control$lambda_bounds, control$tol_lambda,
+      weight = weight,
+      use_spectral = use_spec,
+      P0 = pen_k$P_other,
+      S = gr$S, b = gr$b
+    )
+  } else {
+    Xk <- tt_design_core(Left, Right, basis[[k]])
+    ws <- make_core_workspace(
+      target, Xk, pen_k$P_own, lambda[k],
+      control$lambda_bounds, control$tol_lambda,
+      weight = weight,
+      use_spectral = use_spec,
+      P0 = pen_k$P_other
+    )
+  }
   list(
     workspace = ws,
     P_own = pen_k$P_own,
     P_other = pen_k$P_other,
     P_own_op = if (isTRUE(compute_op_norms)) .matrix_op_norm(pen_k$P_own) else NA_real_,
-    P_other_op = if (isTRUE(compute_op_norms)) .matrix_op_norm(pen_k$P_other) else NA_real_
+    P_other_op = if (isTRUE(compute_op_norms)) .matrix_op_norm(pen_k$P_other) else NA_real_,
+    Xk = Xk,
+    Left = Left,
+    Right = Right,
+    gram_method = gram_method
   )
 }
 
@@ -244,12 +303,18 @@
   curves <- if (is.null(grid)) NULL else vector("list", d)
   n_eval <- 0L
 
+  # Frozen cores: build L/R once for all margins
+  L_all <- left_interfaces(cores, basis)
+  R_all <- right_interfaces(cores, basis)
+
   for (k in seq_len(d)) {
     built <- .cgcv_core_workspace(
       cores, k, lambda, basis, target, ranks, control,
       weight = weight, penalty_order = penalty_order,
       use_spectral = isTRUE(control$use_spectral_gcv),
-      compute_op_norms = TRUE
+      compute_op_norms = TRUE,
+      Left = L_all[[k]],
+      Right = R_all[[k]]
     )
     ws <- built$workspace
     upd <- update_lambda_cgcv(ws)

@@ -1,0 +1,8 @@
+FAIL
+finite=TRUE | valley_ok=TRUE | id_ok=FALSE | expand_ok=TRUE | expand_clean=FALSE | has_region=TRUE
+   mode     scenario  pass d                     theta     t2_lo     t2_hi
+1 SMOKE strong_aniso FALSE 4 3.966,3.983,-1.343,-2.818 -6.628869 -6.628869
+       lambda2_id expanded n_expansions winner_source outer_stable n_region
+1 well_identified      2,4            1   cgcv_anchor        FALSE        1
+  batches n_explore  elapsed
+1       3       366 2351.439

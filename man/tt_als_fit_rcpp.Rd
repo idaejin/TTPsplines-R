@@ -14,7 +14,8 @@ tt_als_fit_rcpp(
   init_cores = NULL,
   offset = NULL,
   weights = NULL,
-  linear = NULL
+  linear = NULL,
+  smooth = NULL
 )
 }
 \description{

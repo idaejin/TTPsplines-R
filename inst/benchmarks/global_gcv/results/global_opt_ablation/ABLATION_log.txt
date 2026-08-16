@@ -1,0 +1,102 @@
+MODE=ABLATION
+=== ablation=full scenario=smooth_smooth ===
+[global-lambda] cGCV anchor...
+[global-lambda] exploration n_sobol=64 d=2 M=15 cgcv_anchor=TRUE
+[global-lambda] refining 5 starts...
+[global-lambda] final re-eval 5 candidates (M=40, starts=3)...
+[full|smooth_smooth] valley=TRUE aniso=TRUE d=0.662 drel=-0.0189 winner=refined_from_cgcv_anchor PASS=TRUE
+=== ablation=full scenario=strong_aniso ===
+[global-lambda] cGCV anchor...
+[global-lambda] exploration n_sobol=64 d=2 M=15 cgcv_anchor=TRUE
+[global-lambda] refining 5 starts...
+[global-lambda] final re-eval 5 candidates (M=40, starts=3)...
+[full|strong_aniso] valley=TRUE aniso=TRUE d=1.015 drel=0.0000 winner=refined_from_cgcv_anchor PASS=TRUE
+=== ablation=no_cgcv scenario=smooth_smooth ===
+[global-lambda] exploration n_sobol=64 d=2 M=15 cgcv_anchor=FALSE
+[global-lambda] refining 5 starts...
+[global-lambda] final re-eval 5 candidates (M=40, starts=3)...
+[no_cgcv|smooth_smooth] valley=TRUE aniso=TRUE d=0.791 drel=-0.0146 winner=refined_from_sobol PASS=TRUE
+=== ablation=no_cgcv scenario=strong_aniso ===
+[global-lambda] exploration n_sobol=64 d=2 M=15 cgcv_anchor=FALSE
+[global-lambda] refining 5 starts...
+[global-lambda] final re-eval 5 candidates (M=40, starts=3)...
+[no_cgcv|strong_aniso] valley=TRUE aniso=TRUE d=1.574 drel=0.0004 winner=refined_from_sobol PASS=TRUE
+=== ablation=anchors_only scenario=smooth_smooth ===
+[global-lambda] cGCV anchor...
+[global-lambda] exploration n_sobol=0 d=2 M=15 cgcv_anchor=TRUE
+[global-lambda] refining 5 starts...
+[global-lambda] final re-eval 5 candidates (M=40, starts=3)...
+[anchors_only|smooth_smooth] valley=TRUE aniso=TRUE d=0.662 drel=-0.0189 winner=refined_from_cgcv_anchor PASS=TRUE
+=== ablation=anchors_only scenario=strong_aniso ===
+[global-lambda] cGCV anchor...
+[global-lambda] exploration n_sobol=0 d=2 M=15 cgcv_anchor=TRUE
+[global-lambda] refining 5 starts...
+[global-lambda] final re-eval 5 candidates (M=40, starts=3)...
+[anchors_only|strong_aniso] valley=TRUE aniso=TRUE d=1.015 drel=0.0000 winner=refined_from_cgcv_anchor PASS=TRUE
+=== ablation=no_refine scenario=smooth_smooth ===
+[global-lambda] cGCV anchor...
+[global-lambda] exploration n_sobol=64 d=2 M=15 cgcv_anchor=TRUE
+[global-lambda] refining 0 starts...
+[global-lambda] final re-eval 1 candidates (M=40, starts=3)...
+[no_refine|smooth_smooth] valley=TRUE aniso=TRUE d=0.662 drel=-0.0189 winner=cgcv_anchor PASS=TRUE
+=== ablation=no_refine scenario=strong_aniso ===
+[global-lambda] cGCV anchor...
+[global-lambda] exploration n_sobol=64 d=2 M=15 cgcv_anchor=TRUE
+[global-lambda] refining 0 starts...
+[global-lambda] final re-eval 1 candidates (M=40, starts=3)...
+[no_refine|strong_aniso] valley=TRUE aniso=TRUE d=1.015 drel=0.0000 winner=cgcv_anchor PASS=TRUE
+       scenario     mode     ablation seed_opt grid_t1 grid_t2 grid_gcv_Msearch
+1 smooth_smooth ABLATION         full        1      -1      -2        0.1408510
+2  strong_aniso ABLATION         full        1       5      -3        0.4104991
+3 smooth_smooth ABLATION      no_cgcv        1      -1      -2        0.1408510
+4  strong_aniso ABLATION      no_cgcv        1       5      -3        0.4104991
+5 smooth_smooth ABLATION anchors_only        1      -1      -2        0.1408510
+6  strong_aniso ABLATION anchors_only        1       5      -3        0.4104991
+7 smooth_smooth ABLATION    no_refine        1      -1      -2        0.1408510
+8  strong_aniso ABLATION    no_refine        1       5      -3        0.4104991
+  grid_gcv_Mfinal    opt_t1    opt_t2 opt_gcv_reported opt_gcv_Mfinal   d_theta
+1       0.1396216 -1.430846 -1.497545        0.1369847      0.1369847 0.6618833
+2       0.4130378  3.987299 -2.927060        0.4130514      0.4130515 1.0153245
+3       0.1396216 -1.250000 -1.250000        0.1375895      0.1375895 0.7905694
+4       0.4130378  3.437500 -2.812500        0.4131911      0.4131911 1.5737098
+5       0.1396216 -1.430846 -1.497545        0.1369847      0.1369847 0.6618833
+6       0.4130378  3.987299 -2.927060        0.4130514      0.4130515 1.0153245
+7       0.1396216 -1.430846 -1.497545        0.1369847      0.1369847 0.6618833
+8       0.4130378  3.987299 -2.927060        0.4130514      0.4130515 1.0153245
+      delta_rel in_valley_1pct opt_log_ratio grid_log_ratio aniso_ok iso_opt
+1 -1.888574e-02           TRUE    0.06669879              1     TRUE    TRUE
+2  3.307185e-05           TRUE    6.91435866              8     TRUE   FALSE
+3 -1.455451e-02           TRUE    0.00000000              1     TRUE    TRUE
+4  3.711958e-04           TRUE    6.25000000              8     TRUE   FALSE
+5 -1.888574e-02           TRUE    0.06669879              1     TRUE    TRUE
+6  3.307185e-05           TRUE    6.91435866              8     TRUE   FALSE
+7 -1.888574e-02           TRUE    0.06669879              1     TRUE    TRUE
+8  3.307185e-05           TRUE    6.91435866              8     TRUE   FALSE
+  ranking_stable boundary false_boundary fewer_evals n_eval_search n_grid
+1           TRUE    FALSE          FALSE        TRUE            74    121
+2           TRUE    FALSE          FALSE        TRUE            74    121
+3           TRUE    FALSE          FALSE        TRUE            73    121
+4           TRUE    FALSE          FALSE        TRUE            73    121
+5           TRUE    FALSE          FALSE        TRUE            10    121
+6           TRUE    FALSE          FALSE        TRUE            10    121
+7           TRUE    FALSE          FALSE        TRUE            74    121
+8           TRUE    FALSE          FALSE        TRUE            74    121
+             winner_source refine_improved final_ok nlminb_ok scenario_pass
+1 refined_from_cgcv_anchor           FALSE     TRUE      TRUE          TRUE
+2 refined_from_cgcv_anchor           FALSE     TRUE      TRUE          TRUE
+3       refined_from_sobol           FALSE     TRUE      TRUE          TRUE
+4       refined_from_sobol           FALSE     TRUE      TRUE          TRUE
+5 refined_from_cgcv_anchor           FALSE     TRUE      TRUE          TRUE
+6 refined_from_cgcv_anchor           FALSE     TRUE      TRUE          TRUE
+7              cgcv_anchor           FALSE     TRUE      TRUE          TRUE
+8              cgcv_anchor           FALSE     TRUE      TRUE          TRUE
+  elapsed_opt
+1      21.968
+2      23.633
+3      21.397
+4      23.243
+5       6.087
+6      19.291
+7      19.064
+8      18.369
+Wrote /Users/daejin/Dropbox/IE/research/01_PROJECTS/ttpsplines-pkg/inst/benchmarks/global_gcv/results/global_opt_ablation

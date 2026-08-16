@@ -5,6 +5,30 @@ tt_design_core_d_cpp <- function(Left, Right, Bk) {
     .Call(`_TTPsplines_tt_design_core_d_cpp`, Left, Right, Bk)
 }
 
+#' Weighted Gram + RHS from TT design factors without returning X.
+#'
+#' Methods:
+#' - `"blas"`: materialize X then BLAS `X' diag(w) X` / `X' (w*z)` (reference).
+#' - `"fused"`: per-observation outer products (no n×q matrix).
+#' - `"fused_blocked"`: tile rows, small X blocks + BLAS syrk/gemm;
+#'   optional OpenMP reduction over observations via `n_threads`.
+#' - `"kron"`: per-observation Kronecker expansion of (RR')⊗(BB')⊗(LL').
+#'
+#' Vectorization matches [tt_design_core_d_cpp]: a fastest, then j, then b
+#' so \(x_i = R_i \otimes B_i \otimes L_i\).
+#'
+#' @param n_threads Threads for `fused_blocked` observation reduction (`1` = serial).
+#' @keywords internal
+tt_gram_rhs_cpp <- function(Left, Right, Bk, z, weight = NULL, method = "fused_blocked", block_size = 64L, n_threads = 1L) {
+    .Call(`_TTPsplines_tt_gram_rhs_cpp`, Left, Right, Bk, z, weight, method, block_size, n_threads)
+}
+
+#' TRUE if the shared library was built with OpenMP.
+#' @keywords internal
+tt_gram_omp_available <- function() {
+    .Call(`_TTPsplines_tt_gram_omp_available`)
+}
+
 contract_left_step_cpp <- function(left, core, Bk) {
     .Call(`_TTPsplines_contract_left_step_cpp`, left, core, Bk)
 }

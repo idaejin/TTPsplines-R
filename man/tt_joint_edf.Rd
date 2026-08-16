@@ -6,22 +6,6 @@
 \usage{
 tt_joint_edf(cores, basis, penalties, lambda, weight = NULL, max_npar = 2500L)
 }
-\arguments{
-\item{cores}{TT cores at convergence.}
-
-\item{basis}{Marginal B-spline bases.}
-
-\item{penalties}{List of core penalty matrices.}
-
-\item{lambda}{Length-\code{d} smoothing vector.}
-
-\item{weight}{Optional PIRLS weights (sqrt-weights applied to rows of J).}
-
-\item{max_npar}{Skip if packed TT parameter count exceeds this (memory).}
-}
-\value{
-Numeric EDF, or \code{NA_real_} if skipped / failed.
-}
 \description{
 Joint effective degrees of freedom (linearized TT map).
 }

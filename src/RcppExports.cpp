@@ -24,6 +24,34 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// tt_gram_rhs_cpp
+List tt_gram_rhs_cpp(const arma::mat& Left, const arma::mat& Right, const arma::mat& Bk, const arma::vec& z, Rcpp::Nullable<Rcpp::NumericVector> weight, std::string method, int block_size, int n_threads);
+RcppExport SEXP _TTPsplines_tt_gram_rhs_cpp(SEXP LeftSEXP, SEXP RightSEXP, SEXP BkSEXP, SEXP zSEXP, SEXP weightSEXP, SEXP methodSEXP, SEXP block_sizeSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type Left(LeftSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Right(RightSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Bk(BkSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type z(zSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type weight(weightSEXP);
+    Rcpp::traits::input_parameter< std::string >::type method(methodSEXP);
+    Rcpp::traits::input_parameter< int >::type block_size(block_sizeSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(tt_gram_rhs_cpp(Left, Right, Bk, z, weight, method, block_size, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// tt_gram_omp_available
+bool tt_gram_omp_available();
+RcppExport SEXP _TTPsplines_tt_gram_omp_available() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(tt_gram_omp_available());
+    return rcpp_result_gen;
+END_RCPP
+}
 // contract_left_step_cpp
 arma::mat contract_left_step_cpp(const arma::mat& left, const arma::cube& core, const arma::mat& Bk);
 RcppExport SEXP _TTPsplines_contract_left_step_cpp(SEXP leftSEXP, SEXP coreSEXP, SEXP BkSEXP) {
@@ -333,6 +361,8 @@ END_RCPP
 
 static const R_CallMethodDef CallEntries[] = {
     {"_TTPsplines_tt_design_core_d_cpp", (DL_FUNC) &_TTPsplines_tt_design_core_d_cpp, 3},
+    {"_TTPsplines_tt_gram_rhs_cpp", (DL_FUNC) &_TTPsplines_tt_gram_rhs_cpp, 8},
+    {"_TTPsplines_tt_gram_omp_available", (DL_FUNC) &_TTPsplines_tt_gram_omp_available, 0},
     {"_TTPsplines_contract_left_step_cpp", (DL_FUNC) &_TTPsplines_contract_left_step_cpp, 3},
     {"_TTPsplines_contract_right_step_cpp", (DL_FUNC) &_TTPsplines_contract_right_step_cpp, 3},
     {"_TTPsplines_gaussian_core_update_cpp", (DL_FUNC) &_TTPsplines_gaussian_core_update_cpp, 6},

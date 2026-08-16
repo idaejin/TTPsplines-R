@@ -1,0 +1,31 @@
+MODE=GATE d=3
+=== d3 scenario smooth_smooth ===
+[global-lambda] cGCV anchor...
+[global-lambda] exploration n_sobol=128 d=3 M=12 cgcv_anchor=TRUE
+[global-lambda] refining 5 starts...
+[global-lambda] final re-eval 6 candidates (M=30, starts=3)...
+[d3|smooth_smooth] grid=(-3.3,-1.7,-1.7) opt=(-2.50,-2.50,-2.50) d=1.443 drel=-0.0183 valley=TRUE aniso=TRUE edge=FALSE explore=138/343 PASS=TRUE
+=== d3 scenario strong_aniso ===
+[global-lambda] cGCV anchor...
+[global-lambda] exploration n_sobol=128 d=3 M=12 cgcv_anchor=TRUE
+[global-lambda] refining 5 starts...
+[global-lambda] final re-eval 6 candidates (M=30, starts=3)...
+[d3|strong_aniso] grid=(0.0,-5.0,-1.7) opt=(3.20,-3.98,-1.33) d=3.377 drel=0.0236 valley=FALSE aniso=TRUE edge=TRUE explore=138/343 PASS=FALSE
+
+==== D3 GATE VERDICT: CONDITIONAL_PASS ====
+       scenario mode d   grid_t1   grid_t2   grid_t3 grid_gcv_Mfinal
+1 smooth_smooth GATE 3 -3.333333 -1.666667 -1.666667       0.2205686
+2  strong_aniso GATE 3  0.000000 -5.000000 -1.666667       0.5077464
+  grid_on_box_edge    opt_t1    opt_t2    opt_t3 opt_gcv_Mfinal  d_theta
+1            FALSE -2.500000 -2.500000 -2.500000      0.2165327 1.443376
+2             TRUE  3.203125 -3.984375 -1.328125      0.5197408 3.377294
+    delta_rel in_valley_1pct aniso_ok ranking_stable
+1 -0.01829792           TRUE     TRUE           TRUE
+2  0.02362285          FALSE     TRUE           TRUE
+                    winner_source n_explore_points n_grid n_als_opt n_als_grid
+1 refined_from_isotropic_anchor_3              138    343      2189       4459
+2              refined_from_sobol              138    343      2163       4459
+  fewer_explore_points fewer_als_total scenario_pass elapsed_grid elapsed_opt
+1                 TRUE            TRUE          TRUE      324.140      130.08
+2                 TRUE            TRUE         FALSE      313.788      131.72
+Wrote /Users/daejin/Dropbox/IE/research/01_PROJECTS/ttpsplines-pkg/inst/benchmarks/global_gcv/results/global_opt_d3_gate

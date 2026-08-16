@@ -4,9 +4,11 @@
 [![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 <!-- badges: end -->
 
-**Experimental** R package for **Tensor-Train P-splines**: non-additive multidimensional smooth / GLM regression on **scattered** continuous covariates.
+**Experimental** R package for **Tensor-Train P-splines**: non-additive multidimensional **statistical** smooth / GLM regression on **scattered** continuous covariates.
 
-The TT factorization compresses the **coefficient tensor** of a tensor-product P-spline — observations need **not** lie on a grid. The package always imposes the **classical multidimensional P-spline penalty on \(\Theta\)**; TT changes representation and optimization, not the penalty definition.
+The TT factorization compresses the **coefficient tensor** \(\Theta\) of a tensor-product P-spline (no observation grid required) and uses classical **directional discrete-difference (P-spline) penalties**. That coefficient geometry already appears in tensor-network B-splines for system identification; this package does **not** claim priority for “TT of B-spline weights + difference penalties.” Its focus is **smoother practice**: GLM families, TT-aware conditional GCV, predictive rank selection helpers, GLAM / full-tensor baselines when feasible, and an open fitting API (`ttps()`).
+
+Within that geometry the package keeps \(r \neq \lambda \neq \mathrm{EDF}\) conceptually distinct (rank is structural capacity; \(\lambda\) is roughness; EDF is a post-penalty diagnostic).
 
 ## Install
 
@@ -29,6 +31,7 @@ Then open with an explicit package (or `library(TTPsplines)` first):
 
 ```r
 vignette("getting-started", package = "TTPsplines")
+vignette("margin-activity-path", package = "TTPsplines")
 browseVignettes("TTPsplines")
 ```
 
@@ -215,6 +218,33 @@ fit <- tt_rank_refit(sel)   # full-data refit at selected_rank
 Vignette: `vignette("rank-selection", package = "TTPsplines")`.
 Warm-start from a neighbouring rank: `tt_truncate_rank(fit$cores, rank = 2)`.
 
+## Margin Activity Path (which covariates)
+
+When many margins may be null, screen columns before a full-\(d\) cGCV fit:
+
+```r
+path <- tt_margin_activity_path(
+  y, X, rank = 2, k = 5, select = "1se", folds = 5, seed = 1
+)
+path$selected_names
+plot(path)
+fit <- path$fit   # TT + cGCV on selected margins
+```
+
+Vignette: `vignette("margin-activity-path", package = "TTPsplines")`.
+Example (reproducible): `Rscript inst/examples/reprex_margin_activity_path.R`.
+Extended demo: `Rscript inst/examples/example_margin_activity_path.R`.
+This chooses the **margin set**; it does not replace `tt_rank_select()` (\(r\))
+or `lambda = "cGCV"` (smoothness). Prefer the full name *Margin Activity Path*
+(avoid the acronym "MAP").
+
+Complementary leave-one-out / permutation drop diagnostic:
+
+```r
+tst <- tt_margin_drop_test(y, X, rank = 2, k = 5, lambda = 1, method = "nested")
+tst$drop_candidate_names
+```
+
 ## Choosing λ (cGCV)
 
 ```r
@@ -227,6 +257,18 @@ If λ sits on a search bound, diagnose with multi-start (stable vs unstable
 hits) via `ttps_multistart()` — see `vignette("cgcv")`.
 
 Vignette: `vignette("cgcv", package = "TTPsplines")`.
+
+## EDF (joint and per margin)
+
+```r
+fit <- ttps(y, X, rank = 2, k = 8, lambda = "cGCV")  # compute_edf = TRUE by default
+fit$edf          # joint linearized EDF
+fit$edf_margin   # block tr(H_kk); sums to fit$edf
+fit$edf_margin_cond  # ALS/cGCV conditional traces (diagnostic; not additive)
+tt_edf(fit)      # tidy extract / recompute
+```
+
+`sum(fit$edf_margin)` equals `fit$edf` (parameter-block partition). Use `edf_margin_cond` only to diagnose cGCV core flexibility.
 
 ## AIC / BIC (linearized EDF)
 
@@ -268,6 +310,7 @@ Scripts: `inst/examples/example_glam_poisson.R`,
 | Gaussian / Poisson / Bernoulli | SA-CAB, SOP, DMRG |
 | `lambda` fixed / `"cGCV"` | automatic rank inside `ttps()` |
 | `tt_rank_select()` + `tt_rank_refit()` | LRT / bootstrap rank tests |
+| `tt_margin_activity_path()` (margin screening) | group-lasso on TT cores |
 | Experimental: `GD`, `Damped-Newton-ALS`, `LBFGS-ALS` | mixed effects / TMB |
 | GLAM Gaussian + Poisson (fixed λ, d≤3) | higher-d GLAM / REML |
 

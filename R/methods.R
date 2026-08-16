@@ -25,6 +25,28 @@ print.ttpspline <- function(x, ...) {
     cat(sprintf("  EDF: %.2f (%.0f%% of stored parameters)\n",
                 x$edf, 100 * x$edf / max(x$npar_tt, 1)))
   }
+  if (!is.null(x$null_space) && identical(x$null_space, "profiled")) {
+    ns <- x$null_space_info
+    cat(sprintf("  Null-space: profiled (q=%s, null_npar=%s, rank(X0)=%s)\n",
+                ns$q %||% "?", ns$npar %||% "?",
+                ns$design_rank %||% "?"))
+  }
+  if (!is.null(x$edf_margin) && length(x$edf_margin) &&
+      any(is.finite(x$edf_margin))) {
+    cat(sprintf("  EDF by margin (block tr(H_kk)): %s\n",
+                paste(sprintf("%s=%.2f", names(x$edf_margin), x$edf_margin),
+                      collapse = ", ")))
+    if (is.finite(x$edf) && all(is.finite(x$edf_margin))) {
+      sm <- sum(x$edf_margin)
+      tgt <- if (!is.null(x$edf_tt) && is.finite(x$edf_tt) &&
+                 identical(x$null_space, "profiled")) {
+        x$edf_tt
+      } else {
+        x$edf
+      }
+      cat(sprintf("  sum(edf_margin)=%.2f (target %.2f)\n", sm, tgt))
+    }
+  }
   cat(sprintf("  Deviance/RSS: %.6g | time: %.3fs\n",
               x$deviance, x$timing))
   invisible(x)
@@ -65,14 +87,34 @@ print.ttpspline <- function(x, ...) {
   names(est) <- colnames(Z)
 
   eta <- object$linear.predictors
+  if (!is.null(eta) && length(eta) != n) {
+    # ttps_dlnm may store full-length predictors with NA burn-in
+    if (inherits(object, "ttps_dlnm") && !is.null(object$dlnm$ok) &&
+        length(eta) == length(object$dlnm$ok)) {
+      eta <- as.numeric(eta[object$dlnm$ok])
+    } else if (sum(is.finite(eta)) == n) {
+      eta <- as.numeric(eta[is.finite(eta)])
+    }
+  }
   if (is.null(eta) || length(eta) != n) {
-    off <- object$offset %||% rep(0, n)
-    basis <- .tt_fit_basis(object)
-    eta <- as.numeric(
-      tt_eta(off, object$intercept, object$cores, basis,
-             linear = if (has_L) L else NULL,
-             beta = if (has_L) beta else NULL)
-    )
+    if (inherits(object, "ttps_dlnm")) {
+      off <- object$offset %||% rep(0, n)
+      f_tt <- tt_dlnm_contraction(object$cores, object$dlnm$basis_lags)
+      eta <- as.numeric(
+        off + object$intercept +
+          tt_linear_contrib(if (has_L) L else NULL, if (has_L) beta else NULL) +
+          tt_smooth_contrib(object$smooth) + f_tt
+      )
+    } else {
+      off <- object$offset %||% rep(0, n)
+      basis <- .tt_fit_basis(object)
+      eta <- as.numeric(
+        tt_eta(off, object$intercept, object$cores, basis,
+               linear = if (has_L) L else NULL,
+               beta = if (has_L) beta else NULL,
+               smooth = object$smooth)
+      )
+    }
   }
 
   ww <- .tt_inference_weights(object, eta)
@@ -152,7 +194,12 @@ summary.ttpspline <- function(object, ...) {
   out$parametric_rank <- tab$rank
   out$parametric_note <- tab$note
   out$use_t <- tab$use_t
-  class(out) <- c("summary.ttpspline", "ttpspline")
+  out$smooth_table <- .tt_smooth_summary_table(object$smooth)
+  class(out) <- c(
+    "summary.ttpspline",
+    if (inherits(object, "ttps_dlnm")) "ttps_dlnm",
+    "ttpspline"
+  )
   out
 }
 
@@ -160,12 +207,29 @@ summary.ttpspline <- function(object, ...) {
 print.summary.ttpspline <- function(x, digits = max(3L, getOption("digits") - 3L),
                                     signif.stars = getOption("show.signif.stars"),
                                     ...) {
-  cat("Tensor-Train P-spline fit\n\n")
+  is_dlnm <- inherits(x, "ttps_dlnm") || !is.null(x$dlnm)
+  if (is_dlnm) {
+    cat("Tensor-Train DLNM fit\n\n")
+  } else {
+    cat("Tensor-Train P-spline fit\n\n")
+  }
   cat(sprintf("Family:                 %s\n", x$family$family))
   cat(sprintf("Link:                   %s\n", x$family$link))
   cat(sprintf("Observations:           %d\n", x$n))
+  if (is_dlnm && !is.null(x$n_full)) {
+    cat(sprintf("Full series length:     %d (lag burn-in excluded from n)\n",
+                x$n_full))
+  }
   cat(sprintf("Dimensions d:           %d\n", x$d))
-  cat(sprintf("Basis size k:           %d\n", x$k))
+  if (is_dlnm) {
+    cat(sprintf("Exposures:              %s\n",
+                paste(x$dlnm$names, collapse = ", ")))
+    cat(sprintf("Lag window:             0:%d\n", x$dlnm$lag))
+    cat(sprintf("Basis size k (expos):   %d\n", x$k))
+    cat(sprintf("Basis size k_lag:       %d\n", x$k_lag %||% NA_integer_))
+  } else {
+    cat(sprintf("Basis size k:           %d\n", x$k))
+  }
   cat(sprintf("Degree:                 %d\n", x$degree))
   cat(sprintf("Penalty order:          %d\n", x$penalty_order))
   cat(sprintf("Penalty mode:           %s\n",
@@ -236,6 +300,14 @@ print.summary.ttpspline <- function(x, digits = max(3L, getOption("digits") - 3L
     }
   }
 
+  # ---- Additive smooth terms ----
+  if (!is.null(x$smooth_table) && nrow(x$smooth_table) > 0L) {
+    cat("\nSmooth terms:\n")
+    print(x$smooth_table, digits = digits)
+    cat("Smooth lambdas via conditional cGCV, target_edf, or fixed; EDF from tr((B'WB+lambda S)^{-1} B'WB).\n")
+    cat("Conditional on the fitted TT surface (not joint with TT cores).\n")
+  }
+
   cat("\n")
   cat(sprintf("Deviance / RSS:         %.6g\n", x$deviance))
   if (is.finite(x$edf)) {
@@ -250,6 +322,16 @@ print.summary.ttpspline <- function(x, digits = max(3L, getOption("digits") - 3L
   } else {
     note <- x$edf_note %||% "not computed"
     cat(sprintf("EDF:                    NA (%s)\n", note))
+  }
+  if (!is.null(x$edf_margin) && length(x$edf_margin) &&
+      any(is.finite(x$edf_margin))) {
+    cat("EDF by margin (block tr(H_kk); sums to joint TT EDF):\n")
+    print(round(x$edf_margin, 3))
+    if (!is.null(x$edf_margin_cond) && length(x$edf_margin_cond) &&
+        any(is.finite(x$edf_margin_cond))) {
+      cat("EDF by margin conditional (ALS/cGCV diagnostic; not additive):\n")
+      print(round(x$edf_margin_cond, 3))
+    }
   }
   cat("\nInference (TT surface):\n")
   inf <- x$inference
@@ -266,6 +348,10 @@ print.summary.ttpspline <- function(x, digits = max(3L, getOption("digits") - 3L
                 inf$scale_estimator %||% "RSS/(n-edf)"))
     cat(sprintf("  Gauge:                   %s\n",
                 inf$gauge %||% "left-orthogonal"))
+  } else if (is_dlnm) {
+    cat("  TT-DLNM Level-1 SE not wired yet; use predict_dlnm() for point\n")
+    cat("  overall / lag-slice curves. Parametric SEs above treat the DLNM\n")
+    cat("  surface as an offset (conditional on rank and lambda).\n")
   } else {
     cat("  Not prepared (call vcov(fit) or predict(..., se.fit=TRUE)\n")
     cat("  for conditional Bayesian/frequentist SE on the TT surface;\n")
@@ -340,6 +426,7 @@ coef.ttpspline <- function(object, full = FALSE, ...) {
     return(list(
       intercept = object$intercept,
       beta = object$beta %||% numeric(0),
+      smooth = object$smooth,
       Theta = Theta,
       cores = object$cores
     ))
@@ -347,6 +434,10 @@ coef.ttpspline <- function(object, full = FALSE, ...) {
   list(
     intercept = object$intercept,
     beta = object$beta %||% numeric(0),
+    smooth = lapply(object$smooth %||% list(), function(sm) {
+      list(name = sm$name, bs = sm$bs, k = sm$k, m = sm$m,
+           lambda = sm$lambda, edf = sm$edf, gamma = sm$gamma)
+    }),
     cores = object$cores,
     rank = object$rank,
     lambda = object$lambda

@@ -1,0 +1,2 @@
+"scenario","mode","d","grid_t1","grid_t2","grid_t3","grid_gcv_Mfinal","grid_on_box_edge","opt_t1","opt_t2","opt_t3","opt_gcv_Mfinal","d_theta","delta_rel","in_valley_1pct","aniso_ok","ranking_stable","winner_source","n_explore_points","n_grid","n_als_opt","n_als_grid","fewer_explore_points","fewer_als_total","scenario_pass","elapsed_grid","elapsed_opt"
+"smooth_smooth","SMOKE",3,-4,-4,-4,0.434149031873488,TRUE,-2,-2,-2,0.302800707080125,3.46410161513775,-0.302542019330444,TRUE,TRUE,TRUE,"refined_from_isotropic_anchor_3",42,27,261,135,FALSE,FALSE,FALSE,6.1,6.479

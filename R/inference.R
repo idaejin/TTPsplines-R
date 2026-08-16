@@ -211,7 +211,22 @@ tt_prepare_inference <- function(object, force = FALSE) {
   }
 
   off <- object$offset %||% rep(0, n)
-  eta <- as.numeric(off + object$intercept + f1)
+  # Full linear predictor for Fisher / PIRLS weights when available
+  # (includes parametric linear + additive smooths).
+  if (!is.null(object$linear.predictors) &&
+      length(object$linear.predictors) == n) {
+    eta <- as.numeric(object$linear.predictors)
+  } else {
+    eta <- as.numeric(off + object$intercept + f1)
+    if (!is.null(object$linear) && length(object$beta %||% numeric(0)) > 0L) {
+      eta <- eta + as.numeric(object$linear %*% object$beta)
+    }
+    if (!is.null(object$smooth) && length(object$smooth) > 0L) {
+      for (sm in object$smooth) {
+        eta <- eta + as.numeric(sm$B %*% sm$gamma)
+      }
+    }
+  }
   ww <- .tt_inference_weights(object, eta)
   w <- pmax(as.numeric(ww$weight), 0)
   if (!any(w > 0)) {
@@ -410,6 +425,7 @@ predict.ttpspline <- function(object,
                               type = c("link", "response"),
                               offset = NULL,
                               linear = NULL,
+                              smooth = NULL,
                               se.fit = FALSE,
                               interval = c("none", "confidence"),
                               level = 0.95,
@@ -424,6 +440,7 @@ predict.ttpspline <- function(object,
   }
   want_se <- isTRUE(se.fit) || identical(interval, "confidence")
   has_lin <- !is.null(object$linear) && length(object$beta %||% numeric(0)) > 0L
+  has_sm <- !is.null(object$smooth) && length(object$smooth) > 0L
 
   if (is.null(newdata)) {
     eta <- object$linear.predictors
@@ -455,10 +472,22 @@ predict.ttpspline <- function(object,
     } else {
       linear <- NULL
     }
+    sm_contrib <- if (has_sm) {
+      eval_smooth_newdata(object$smooth, smooth)
+    } else {
+      0
+    }
     basis <- eval_marginal_bases(Xnew, object$knots, object$degree,
                                  cyclic = object$cyclic)
+    eta_null <- 0
+    if (identical(object$null_space, "profiled") &&
+        !is.null(object$null_space_info)) {
+      eta_null <- tt_null_space_eta(object$null_space_info, basis)
+    }
     eta <- tt_eta(off, object$intercept, object$cores, basis,
-                  linear = linear, beta = object$beta)
+                  linear = linear, beta = object$beta) + sm_contrib + eta_null
+    # tt_eta already adds smooth if passed; here we used eval contrib separately
+    # to avoid rebuilding B into a full smooth list. OK.
   }
 
   if (!want_se) {
@@ -468,12 +497,12 @@ predict.ttpspline <- function(object,
     return(invlink_eta(object$family, eta))
   }
 
-  if (has_lin) {
-    stop(
-      "se.fit / interval with parametric `linear` terms is not implemented yet; ",
-      "use se.fit = FALSE.",
-      call. = FALSE
-    )
+  # SE is Level-1 TT (+ intercept) only: parametric linear and additive
+  # smooths are treated as a fixed offset (their uncertainty is not included).
+  # For centered contrasts with DOW/time held fixed, that cancelled part is
+  # exactly what we want for exposure RR bands.
+  if (has_lin || has_sm) {
+    # proceed; documented via out$se_note
   }
 
   object <- tt_prepare_inference(object)
@@ -485,6 +514,19 @@ predict.ttpspline <- function(object,
                                      cyclic = object$cyclic)
   }
   J_new <- .tt_predict_jacobian(cores_g, intercept_col = TRUE, basis = basis_new)
+
+  # Optional contrast to a reference row of newdata (for centered log-RR SE).
+  # Passed via ... as contrast_row = i (1-based index into newdata / J_new).
+  dots <- list(...)
+  if (!is.null(dots$contrast_row)) {
+    iref <- as.integer(dots$contrast_row)
+    if (length(iref) != 1L || iref < 1L || iref > nrow(J_new)) {
+      stop("contrast_row must be a valid row index of newdata.", call. = FALSE)
+    }
+    J_new <- sweep(J_new, 2L, J_new[iref, ], `-`)
+    eta <- eta - eta[iref]
+  }
+
   se_eta <- .tt_se_from_jacobian(object$inference, J_new, type = vcov_type)
 
   z <- stats::qnorm(1 - (1 - level) / 2)
@@ -511,7 +553,16 @@ predict.ttpspline <- function(object,
     out$level <- level
     out$interval <- "confidence"
     out$vcov_type <- vcov_type
-    out$scale <- "link"
+    out$scale <- if (!is.null(dots$contrast_row)) "link_contrast" else "link"
+  }
+  if (has_lin || has_sm) {
+    out$se_note <- paste0(
+      "SE conditional on TT rank/lambda and treats linear/smooth as fixed ",
+      "offset (uncertainty in beta/gamma not included)."
+    )
+  }
+  if (!is.null(dots$contrast_row)) {
+    out$contrast_row <- as.integer(dots$contrast_row)
   }
   out
 }

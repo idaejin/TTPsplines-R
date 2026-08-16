@@ -1,0 +1,6 @@
+PASS (region recovery, seed 1)
+CONDITIONAL on strict MC ranking across seeds (see GATE_REPORT.md)
+both_valley=TRUE aniso=TRUE ranking_soft=TRUE strong_aniso_grid_on_edge=TRUE
+als_opt=1576,1576 als_grid=1936,1936
+claim=box_near_opt_region_not_interior_global
+product=KEEP_cGCV
