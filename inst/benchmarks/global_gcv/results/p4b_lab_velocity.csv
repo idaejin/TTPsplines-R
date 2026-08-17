@@ -1,0 +1,5 @@
+"label","adaptive","elapsed_s","n_als_search","n_als_final","n_als_total","sobol_sweeps","refine_sweeps","final_sweeps","gcv","winner_source","ranking_stable"
+"d2_flat",FALSE,1.801,335,20,355,40,40,60,0.0447878313692389,"refined_from_corner_lo",TRUE
+"d2_adaptive",TRUE,1.351,335,20,355,12,25,50,0.0447878305748383,"refined_from_corner_lo",TRUE
+"d3_flat",FALSE,27.048,1760,60,1820,40,40,60,0.0510174680502199,"refined_from_corner_lo",TRUE
+"d3_adaptive",TRUE,22.81,2940,60,3000,12,25,50,0.0509410335995153,"refined_from_sobol",TRUE

@@ -198,16 +198,19 @@
                                          lower, upper,
                                          cache = new.env(parent = emptyenv()),
                                          gdf_warm_start = TRUE,
-                                         fit_backend = c("R", "Rcpp_fixed")) {
+                                         gdf_init = NULL,
+                                         fit_backend = c("R", "Rcpp_fixed"),
+                                         fidelity = NULL) {
   y <- as.numeric(y)
   X <- as.matrix(X)
   d <- ncol(X)
   lower <- rep(as.numeric(lower), length.out = d)
   upper <- rep(as.numeric(upper), length.out = d)
   fit_backend <- .tt_lab_match_fit_backend(fit_backend)
+  gdf_init <- .tt_lab_match_gdf_init(gdf_init = gdf_init, warm_start = gdf_warm_start)
   force(list(y, X, rank, common_init, probes, control, k, degree,
              penalty_order, epsilon_rel, scheme, lower, upper, cache,
-             gdf_warm_start, fit_backend))
+             gdf_warm_start, gdf_init, fit_backend, fidelity))
 
   # Cost counters (shared across closures)
   cost <- new.env(parent = emptyenv())
@@ -221,7 +224,8 @@
                        init_cores = common_init,
                        control_use = control,
                        return_fit = TRUE,
-                       use_cache = TRUE) {
+                       use_cache = TRUE,
+                       fidelity_use = fidelity) {
     theta <- as.numeric(theta)
     cost$n_theta_calls <- cost$n_theta_calls + 1L
     if (length(theta) != d) stop("theta length must equal d.", call. = FALSE)
@@ -233,15 +237,22 @@
         global_gcv = Inf, gdf = NA_real_, gdf_mc_se = NA_real_,
         rss = NA_real_, lambda = 10^theta, theta = theta,
         valid = FALSE, boundary_violation = TRUE, fit = NULL,
-        cache_hit = FALSE, M = as.integer(M)
+        cache_hit = FALSE, M = as.integer(M),
+        fidelity = fidelity_use %||% NA_character_,
+        n_sweeps = NA_integer_, converged = FALSE,
+        gdf_init = gdf_init
       ))
     }
     theta_c <- pmin(pmax(theta, lower), upper)
     lambda <- 10^theta_c
-    # High precision key: %.6f collapses nlminb finite-difference steps
+    sweeps_key <- as.integer(control_use$max_sweeps %||% NA_integer_)
+    tol_key <- format(as.numeric(control_use$tol %||% NA_real_), digits = 8, scientific = TRUE)
+    # Include fidelity/control in key so stage budgets never collide
     key <- paste(
       paste(sprintf("%.12f", theta_c), collapse = ","),
-      as.integer(M), mc_bank_id, sep = "|"
+      as.integer(M), mc_bank_id, sweeps_key, tol_key, gdf_init,
+      fidelity_use %||% "NA",
+      sep = "|"
     )
     if (isTRUE(use_cache) && exists(key, envir = cache, inherits = FALSE)) {
       cost$n_theta_hit <- cost$n_theta_hit + 1L
@@ -271,7 +282,8 @@
         degree = degree,
         penalty_order = penalty_order,
         on_nonconverged = "na",
-        warm_start = gdf_warm_start
+        gdf_init = gdf_init,
+        fidelity = fidelity_use
       )
     })
     out <- list(
@@ -287,6 +299,10 @@
       fit_ok = ev$fit_ok,
       cache_hit = FALSE,
       M = M_use,
+      n_sweeps = as.integer(ev$n_sweeps %||% ev$fit_ok$n_sweeps %||% NA_integer_),
+      converged = isTRUE(ev$converged %||% ev$fit_ok$ok),
+      fidelity = as.character(ev$fidelity %||% fidelity_use %||% NA_character_)[1L],
+      gdf_init = gdf_init,
       invalid_reasons = ev$invalid_reasons %||% character(0)
     )
     # Store without bulky fit in cache to limit memory
@@ -299,7 +315,7 @@
   }
 
   list(eval = eval_one, cache = cache, cost = cost, d = d,
-       lower = lower, upper = upper)
+       lower = lower, upper = upper, gdf_init = gdf_init)
 }
 
 #' Fit cGCV once (anchor); returns theta = log10(lambda).
@@ -350,12 +366,15 @@
                                       k, degree, penalty_order,
                                       epsilon_rel, scheme,
                                       lower, upper,
-                                      fit_backend = c("R", "Rcpp_fixed")) {
+                                      fit_backend = c("R", "Rcpp_fixed"),
+                                      gdf_init = "probe_warm",
+                                      fidelity = "final") {
   d <- ncol(as.matrix(X))
   theta <- pmin(pmax(as.numeric(theta), lower), upper)
   lambda <- 10^theta
   ctrl <- .tt_lab_refit_control(control)
   fit_backend <- .tt_lab_match_fit_backend(fit_backend)
+  gdf_init <- .tt_lab_match_gdf_init(gdf_init = gdf_init, warm_start = TRUE)
   fits <- vector("list", n_starts)
   objs <- rep(Inf, n_starts)
   for (b in seq_len(n_starts)) {
@@ -388,12 +407,14 @@
     return(list(
       ok = FALSE, global_gcv = Inf, theta = theta, lambda = lambda,
       gdf = NA_real_, gdf_mc_se = NA_real_, fit = NULL,
-      basin_index = NA_integer_, penalized_obj = NA_real_
+      basin_index = NA_integer_, penalized_obj = NA_real_,
+      fidelity = fidelity, n_sweeps = NA_integer_, converged = FALSE,
+      M = as.integer(M), gdf_init = gdf_init, winner_source = NA_character_
     ))
   }
   b_star <- which.min(objs)
   fit_star <- fits[[b_star]]
-  # GCV from this basin (warm GDF from its cores)
+  # GCV from this basin (safe probe_warm from its cores; never chain probes)
   gdf_res <- tt_global_gdf_mc(
     fit_base = fit_star,
     y = y,
@@ -401,7 +422,7 @@
     epsilon_rel = epsilon_rel,
     scheme = scheme,
     probes = probes[, seq_len(min(as.integer(M), ncol(probes))), drop = FALSE],
-    warm_start = TRUE,
+    gdf_init = gdf_init,
     on_nonconverged = "na",
     control = ctrl
   )
@@ -417,16 +438,20 @@
   }
   list(
     ok = is.finite(gcv),
-    global_gcv = as.numeric(gcv),
+    global_gcv = gcv,
     theta = theta,
     lambda = lambda,
-    gdf = as.numeric(gdf),
-    gdf_mc_se = as.numeric(gdf_res$gdf_mc_se),
-    rss = as.numeric(rss),
+    gdf = gdf,
+    gdf_mc_se = gdf_res$gdf_mc_se,
     fit = fit_star,
     basin_index = as.integer(b_star),
-    penalized_obj = as.numeric(objs[b_star]),
-    n_starts = as.integer(n_starts)
+    penalized_obj = objs[b_star],
+    fidelity = as.character(fidelity)[1L],
+    n_sweeps = as.integer(fit_star$n_sweeps %||% NA_integer_),
+    converged = isTRUE(fit_star$converged),
+    M = as.integer(M),
+    gdf_init = gdf_init,
+    base_cores_unchanged = isTRUE(gdf_res$base_cores_unchanged)
   )
 }
 
@@ -461,6 +486,11 @@
 #' @param extra_theta Optional matrix of additional θ starts (`n × d`), e.g. a
 #'   prior solution used as an explicit anchor (`prior_solution_*`).
 #' @param epsilon_rel,scheme Forwarded to MC-GDF.
+#' @param fit_backend Lab ALS backend (`"R"` / `"Rcpp_fixed"`).
+#' @param adaptive_fidelity If `TRUE` (default), use stage-wise ALS budgets
+#'   (sobol / refine / final); winner decided only after high-fidelity reeval.
+#' @param fidelity Optional override list from [.tt_lab_default_fidelity()].
+#' @param gdf_init `"probe_warm"` (default) or `"cold"` for GDF perturbations.
 #' @param verbose Print stage progress.
 #' @return Unevaluated diagnostic list (see package lab docs).
 #' @keywords internal
@@ -494,10 +524,14 @@ tt_global_lambda_optimize <- function(y = NULL,
                                       epsilon_rel = 1e-3,
                                       scheme = c("forward", "central"),
                                       fit_backend = c("R", "Rcpp_fixed"),
+                                      adaptive_fidelity = TRUE,
+                                      fidelity = NULL,
+                                      gdf_init = c("probe_warm", "cold"),
                                       verbose = FALSE) {
   t_wall0 <- proc.time()[["elapsed"]]
   scheme <- match.arg(scheme)
   fit_backend <- .tt_lab_match_fit_backend(fit_backend)
+  gdf_init <- .tt_lab_match_gdf_init(gdf_init = gdf_init[[1L]], warm_start = TRUE)
   fam_key <- family_key(normalize_family(family))
   if (!identical(fam_key, "gaussian")) {
     stop("tt_global_lambda_optimize: Gaussian only in v0.", call. = FALSE)
@@ -538,6 +572,18 @@ tt_global_lambda_optimize <- function(y = NULL,
 
   ctrl <- .tt_lab_refit_control(control)
   ctrl$seed <- seed
+  fid <- fidelity %||% .tt_lab_default_fidelity()
+  ctrl_sobol <- .tt_lab_control_for_stage(ctrl, "sobol", fid, adaptive_fidelity)
+  ctrl_refine <- .tt_lab_control_for_stage(ctrl, "refine", fid, adaptive_fidelity)
+  ctrl_final <- .tt_lab_control_for_stage(ctrl, "final", fid, adaptive_fidelity)
+  if (isTRUE(adaptive_fidelity)) {
+    # Final always at least as strict as legacy bump
+    ctrl_final$max_sweeps <- max(as.integer(ctrl_final$max_sweeps %||% 50L), 50L)
+    ctrl_final$tol <- min(as.numeric(ctrl_final$tol %||% 1e-10), 1e-10)
+  } else {
+    ctrl_final$tol <- min(as.numeric(ctrl$tol %||% 1e-8), 1e-10)
+    ctrl_final$max_sweeps <- max(as.integer(ctrl$max_sweeps %||% 40L), 60L)
+  }
 
   # Common cores + MC banks (deterministic SAA)
   common_init <- .tt_with_preserved_seed({
@@ -553,9 +599,10 @@ tt_global_lambda_optimize <- function(y = NULL,
 
   evaluator <- .tt_lab_make_theta_evaluator(
     y = y, X = X, rank = rank, common_init = common_init,
-    probes = probes_search, control = ctrl, k = k, degree = degree,
+    probes = probes_search, control = ctrl_sobol, k = k, degree = degree,
     penalty_order = penalty_order, epsilon_rel = epsilon_rel, scheme = scheme,
-    lower = lower, upper = upper, fit_backend = fit_backend
+    lower = lower, upper = upper, fit_backend = fit_backend,
+    gdf_init = gdf_init, fidelity = "sobol"
   )
 
   # --- Stage 0: cGCV anchor -------------------------------------------------
@@ -616,10 +663,14 @@ tt_global_lambda_optimize <- function(y = NULL,
   sobol_rows <- vector("list", nrow(theta_all))
   for (i in seq_len(nrow(theta_all))) {
     # Search stage: single common init (multistart reserved for final)
-    ev <- evaluator$eval(theta_all[i, ], M = M_search, mc_bank_id = "bank0")
+    ev <- evaluator$eval(
+      theta_all[i, ], M = M_search, mc_bank_id = "bank0",
+      control_use = ctrl_sobol, fidelity_use = "sobol"
+    )
     sobol_rows[[i]] <- data.frame(
       i = i,
       source = source_lab[i],
+      winner_source = source_lab[i],
       matrix(theta_all[i, ], nrow = 1L,
              dimnames = list(NULL, paste0("theta", seq_len(d)))),
       global_gcv = ev$global_gcv,
@@ -627,6 +678,10 @@ tt_global_lambda_optimize <- function(y = NULL,
       rss = ev$rss,
       valid = ev$valid,
       cache_hit = ev$cache_hit,
+      fidelity = ev$fidelity %||% "sobol",
+      n_sweeps = ev$n_sweeps %||% NA_integer_,
+      M = as.integer(ev$M %||% M_search),
+      converged = isTRUE(ev$converged),
       stringsAsFactors = FALSE
     )
   }
@@ -656,8 +711,11 @@ tt_global_lambda_optimize <- function(y = NULL,
     th0 <- as.numeric(th_mat[i0, ])
     obj <- function(th) {
       # use_cache=FALSE so finite-difference steps are not collapsed
-      ev <- evaluator$eval(th, M = M_search, mc_bank_id = "bank0",
-                           return_fit = FALSE, use_cache = FALSE)
+      ev <- evaluator$eval(
+        th, M = M_search, mc_bank_id = "bank0",
+        return_fit = FALSE, use_cache = FALSE,
+        control_use = ctrl_refine, fidelity_use = "refine"
+      )
       q <- ev$global_gcv
       if (!is.finite(q)) 1e30 else q
     }
@@ -673,7 +731,10 @@ tt_global_lambda_optimize <- function(y = NULL,
                                convergence = 99L, message = conditionMessage(e))
     )
     th_ref <- as.numeric(opt$par)
-    ev_ref <- evaluator$eval(th_ref, M = M_search, mc_bank_id = "bank0")
+    ev_ref <- evaluator$eval(
+      th_ref, M = M_search, mc_bank_id = "bank0",
+      control_use = ctrl_refine, fidelity_use = "refine"
+    )
     refined_rows[[j]] <- data.frame(
       start_i = i0,
       start_source = source_lab[i0],
@@ -687,6 +748,10 @@ tt_global_lambda_optimize <- function(y = NULL,
       nlminb_conv = as.integer(opt$convergence %||% NA_integer_),
       improved = is.finite(ev_ref$global_gcv) && is.finite(q_vec[i0]) &&
         ev_ref$global_gcv < q_vec[i0] - 1e-12,
+      fidelity = ev_ref$fidelity %||% "refine",
+      n_sweeps = ev_ref$n_sweeps %||% NA_integer_,
+      M = as.integer(ev_ref$M %||% M_search),
+      converged = isTRUE(ev_ref$converged),
       stringsAsFactors = FALSE
     )
   }
@@ -749,9 +814,7 @@ tt_global_lambda_optimize <- function(y = NULL,
                     length(cand_theta), M_final, core_starts_final))
   }
 
-  ctrl_strict <- ctrl
-  ctrl_strict$tol <- min(as.numeric(ctrl$tol %||% 1e-8), 1e-10)
-  ctrl_strict$max_sweeps <- max(as.integer(ctrl$max_sweeps %||% 40L), 60L)
+  ctrl_strict <- ctrl_final
 
   n_starts_alt <- max(1L, min(3L, core_starts_final))
   # Per candidate: n_starts ALS + (1 base + M) GDF on winner; ×2 banks
@@ -764,7 +827,7 @@ tt_global_lambda_optimize <- function(y = NULL,
   final_fits <- vector("list", length(cand_theta))
   for (j in seq_along(cand_theta)) {
     th <- cand_theta[[j]]
-    # Primary bank
+    # Primary bank — winner decision uses this fidelity only
     re1 <- .tt_lab_reeval_multistart(
       theta = th, y = y, X = X, rank = rank,
       probes = probes_final, M = M_final,
@@ -772,7 +835,7 @@ tt_global_lambda_optimize <- function(y = NULL,
       control = ctrl_strict, k = k, degree = degree,
       penalty_order = penalty_order, epsilon_rel = epsilon_rel,
       scheme = scheme, lower = lower, upper = upper,
-      fit_backend = fit_backend
+      fit_backend = fit_backend, gdf_init = gdf_init, fidelity = "final"
     )
     # Independent bank (ranking stability check)
     re2 <- .tt_lab_reeval_multistart(
@@ -782,12 +845,13 @@ tt_global_lambda_optimize <- function(y = NULL,
       control = ctrl_strict, k = k, degree = degree,
       penalty_order = penalty_order, epsilon_rel = epsilon_rel,
       scheme = scheme, lower = lower, upper = upper,
-      fit_backend = fit_backend
+      fit_backend = fit_backend, gdf_init = gdf_init, fidelity = "final"
     )
     final_fits[[j]] <- re1$fit
     final_rows[[j]] <- data.frame(
       cand = j,
       source = cand_source[j],
+      winner_source = cand_source[j],
       matrix(th, nrow = 1L,
              dimnames = list(NULL, paste0("theta", seq_len(d)))),
       gcv_bank0 = re1$global_gcv,
@@ -797,6 +861,12 @@ tt_global_lambda_optimize <- function(y = NULL,
       penalized_obj = re1$penalized_obj,
       basin_index = re1$basin_index,
       ok = re1$ok,
+      fidelity = re1$fidelity %||% "final",
+      n_sweeps = re1$n_sweeps %||% NA_integer_,
+      M = as.integer(re1$M %||% M_final),
+      converged = isTRUE(re1$converged),
+      gdf_init = gdf_init,
+      base_cores_unchanged = isTRUE(re1$base_cores_unchanged),
       stringsAsFactors = FALSE
     )
   }
@@ -877,10 +947,21 @@ tt_global_lambda_optimize <- function(y = NULL,
       seed = seed,
       include_cgcv_anchor = isTRUE(include_cgcv_anchor),
       winner_source = winner_source,
+      adaptive_fidelity = isTRUE(adaptive_fidelity),
+      fidelity = list(
+        sobol_sweeps = as.integer(ctrl_sobol$max_sweeps),
+        refine_sweeps = as.integer(ctrl_refine$max_sweeps),
+        final_sweeps = as.integer(ctrl_final$max_sweeps),
+        sobol_tol = as.numeric(ctrl_sobol$tol),
+        refine_tol = as.numeric(ctrl_refine$tol),
+        final_tol = as.numeric(ctrl_final$tol)
+      ),
+      gdf_init = gdf_init,
       criterion = "SAA_TT_gGCV",
       note = paste(
         "Experimental joint λ optimizer; not classical GCV;",
-        "not a replacement for operational cGCV."
+        "not a replacement for operational cGCV.",
+        "Winner decided only after final-fidelity reeval (same M banks)."
       )
     ),
     convergence = list(

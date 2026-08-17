@@ -1,0 +1,6 @@
+PASS
+mode=GATE
+stack=P4B (Rcpp_fixed + probe_warm + adaptive_fidelity)
+v0: smooth_smooth_d2=TRUE | strong_aniso_d2=TRUE | smooth_smooth_d3=SOFT_PASS | strong_aniso_d3=TRUE
+v1 strong_aniso: TRUE
+note=d3 smooth_smooth: in 1% valley + aniso OK; alt MC bank ranking flip only (soft rule, locked GATE)

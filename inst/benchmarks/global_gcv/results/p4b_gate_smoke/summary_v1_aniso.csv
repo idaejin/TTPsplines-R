@@ -1,0 +1,2 @@
+"track","d","scenario","mode","ref_t2","ref_t2_hi","opt_t1","opt_t2","opt_t3","t2_lo","t2_hi","d_theta_ref","lambda2_id","expanded","valley_ok","id_ok","expand_ok","expand_clean","outer_stable","winner_source","n_region","batches","gdf_init","fit_backend","elapsed","scenario_pass"
+"v1",3,"strong_aniso","SMOKE",-5.28571428571429,-3.3203125,-3.85934471700295,3.98388468090867,-3.95231618333655,6.8190827539526,6.8190827539526,10.2713702819258,"well_identified","1,2,3",FALSE,FALSE,TRUE,FALSE,TRUE,"cgcv_anchor",1,2,"probe_warm","Rcpp_fixed",124.357,FALSE

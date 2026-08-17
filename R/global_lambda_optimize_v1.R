@@ -340,10 +340,14 @@ tt_global_lambda_optimize_v1 <- function(y = NULL,
                                          stop_on_stable_region = TRUE,
                                          min_batches_before_stop = 2L,
                                          fit_backend = c("R", "Rcpp_fixed"),
+                                         adaptive_fidelity = TRUE,
+                                         fidelity = NULL,
+                                         gdf_init = c("probe_warm", "cold"),
                                          verbose = FALSE) {
   t_wall0 <- proc.time()[["elapsed"]]
   scheme <- match.arg(scheme)
   fit_backend <- .tt_lab_match_fit_backend(fit_backend)
+  gdf_init <- .tt_lab_match_gdf_init(gdf_init = gdf_init[[1L]], warm_start = TRUE)
   fam_key <- family_key(normalize_family(family))
   if (!identical(fam_key, "gaussian")) {
     stop("tt_global_lambda_optimize_v1: Gaussian only.", call. = FALSE)
@@ -377,6 +381,17 @@ tt_global_lambda_optimize_v1 <- function(y = NULL,
 
   ctrl <- .tt_lab_refit_control(control)
   ctrl$seed <- seed
+  fid <- fidelity %||% .tt_lab_default_fidelity()
+  ctrl_sobol <- .tt_lab_control_for_stage(ctrl, "sobol", fid, adaptive_fidelity)
+  ctrl_refine <- .tt_lab_control_for_stage(ctrl, "refine", fid, adaptive_fidelity)
+  ctrl_final <- .tt_lab_control_for_stage(ctrl, "final", fid, adaptive_fidelity)
+  if (isTRUE(adaptive_fidelity)) {
+    ctrl_final$max_sweeps <- max(as.integer(ctrl_final$max_sweeps %||% 50L), 50L)
+    ctrl_final$tol <- min(as.numeric(ctrl_final$tol %||% 1e-10), 1e-10)
+  } else {
+    ctrl_final$tol <- min(as.numeric(ctrl$tol %||% 1e-8), 1e-10)
+    ctrl_final$max_sweeps <- max(as.integer(ctrl$max_sweeps %||% 40L), 60L)
+  }
   common_init <- .tt_with_preserved_seed({
     tt_initialize(d = d, rank = rank, k = k, seed = seed)
   })
@@ -419,12 +434,14 @@ tt_global_lambda_optimize_v1 <- function(y = NULL,
   region_stable_streak <- 0L
   prev_intervals <- NULL
 
-  eval_points <- function(theta_mat, source_lab, lower_use, upper_use) {
+  eval_points <- function(theta_mat, source_lab, lower_use, upper_use,
+                          control_use = ctrl_sobol, fidelity_use = "sobol") {
     evaluator <- .tt_lab_make_theta_evaluator(
       y = y, X = X, rank = rank, common_init = common_init,
-      probes = probes_search, control = ctrl, k = k, degree = degree,
+      probes = probes_search, control = control_use, k = k, degree = degree,
       penalty_order = penalty_order, epsilon_rel = epsilon_rel, scheme = scheme,
-      lower = lower_use, upper = upper_use, fit_backend = fit_backend
+      lower = lower_use, upper = upper_use, fit_backend = fit_backend,
+      gdf_init = gdf_init, fidelity = fidelity_use
     )
     n_pt <- nrow(theta_mat)
     th_out <- matrix(NA_real_, n_pt, d)
@@ -435,8 +452,11 @@ tt_global_lambda_optimize_v1 <- function(y = NULL,
       th <- as.numeric(theta_mat[i, ])
       # project into current box for evaluation
       thc <- pmin(pmax(th, lower_use), upper_use)
-      ev <- evaluator$eval(thc, M = M_search, mc_bank_id = "bank0",
-                           return_fit = FALSE)
+      ev <- evaluator$eval(
+        thc, M = M_search, mc_bank_id = "bank0",
+        return_fit = FALSE, control_use = control_use,
+        fidelity_use = fidelity_use
+      )
       th_out[i, ] <- thc
       q_out[i] <- ev$global_gcv
       se_out[i] <- ev$gdf_mc_se %||% NA_real_
@@ -503,9 +523,10 @@ tt_global_lambda_optimize_v1 <- function(y = NULL,
     starts <- elite[seq_len(min(as.integer(n_refine), length(elite)))]
     evaluator <- .tt_lab_make_theta_evaluator(
       y = y, X = X, rank = rank, common_init = common_init,
-      probes = probes_search, control = ctrl, k = k, degree = degree,
+      probes = probes_search, control = ctrl_refine, k = k, degree = degree,
       penalty_order = penalty_order, epsilon_rel = epsilon_rel, scheme = scheme,
-      lower = lower_use, upper = upper_use, fit_backend = fit_backend
+      lower = lower_use, upper = upper_use, fit_backend = fit_backend,
+      gdf_init = gdf_init, fidelity = "refine"
     )
     out_th <- matrix(NA_real_, length(starts), d)
     out_q <- rep(Inf, length(starts))
@@ -515,8 +536,10 @@ tt_global_lambda_optimize_v1 <- function(y = NULL,
       th0 <- as.numeric(theta_mat[i0, ])
       obj <- function(th) {
         # Bypass cache so nlminb finite differences are not collapsed
-        ev <- evaluator$eval(th, M = M_search, return_fit = FALSE,
-                             use_cache = FALSE)
+        ev <- evaluator$eval(
+          th, M = M_search, return_fit = FALSE, use_cache = FALSE,
+          control_use = ctrl_refine, fidelity_use = "refine"
+        )
         if (!is.finite(ev$global_gcv)) 1e30 else ev$global_gcv
       }
       opt <- tryCatch(
@@ -525,11 +548,13 @@ tt_global_lambda_optimize_v1 <- function(y = NULL,
         error = function(e) list(par = th0)
       )
       th_r <- as.numeric(opt$par)
-      evr <- evaluator$eval(th_r, M = M_search, return_fit = FALSE)
+      evr <- evaluator$eval(
+        th_r, M = M_search, return_fit = FALSE,
+        control_use = ctrl_refine, fidelity_use = "refine"
+      )
       out_th[ii, ] <- th_r
       out_q[ii] <- evr$global_gcv
-      src0 <- if (length(source_vec) >= i0) source_vec[i0] else "unknown"
-      out_src[ii] <- paste0("refined_from_", src0)
+      out_src[ii] <- paste0("refined_from_", source_vec[i0])
     }
     list(theta = out_th, q = out_q, source = out_src)
   }
@@ -551,9 +576,10 @@ tt_global_lambda_optimize_v1 <- function(y = NULL,
     reg <- .tt_lab_near_optimal_region(all_theta, all_q, near_optimal_tol)
     evaluator_edge <- .tt_lab_make_theta_evaluator(
       y = y, X = X, rank = rank, common_init = common_init,
-      probes = probes_search, control = ctrl, k = k, degree = degree,
+      probes = probes_search, control = ctrl_sobol, k = k, degree = degree,
       penalty_order = penalty_order, epsilon_rel = epsilon_rel, scheme = scheme,
-      lower = lower, upper = upper, fit_backend = fit_backend
+      lower = lower, upper = upper, fit_backend = fit_backend,
+      gdf_init = gdf_init, fidelity = "sobol"
     )
     edge <- .tt_lab_edge_probe(
       evaluator_edge, th_best, lower, upper,
@@ -625,9 +651,10 @@ tt_global_lambda_optimize_v1 <- function(y = NULL,
     if (verbose) message("[v1] profiling margins...")
     evaluator_p <- .tt_lab_make_theta_evaluator(
       y = y, X = X, rank = rank, common_init = common_init,
-      probes = probes_search, control = ctrl, k = k, degree = degree,
+      probes = probes_search, control = ctrl_sobol, k = k, degree = degree,
       penalty_order = penalty_order, epsilon_rel = epsilon_rel, scheme = scheme,
-      lower = lower, upper = upper, fit_backend = fit_backend
+      lower = lower, upper = upper, fit_backend = fit_backend,
+      gdf_init = gdf_init, fidelity = "sobol"
     )
     for (j in seq_len(d)) {
       profiles[[j]] <- .tt_lab_profile_margin(
@@ -681,9 +708,7 @@ tt_global_lambda_optimize_v1 <- function(y = NULL,
   if (verbose) {
     message(sprintf("[v1] final re-eval %d candidates...", length(cand_th)))
   }
-  ctrl_strict <- ctrl
-  ctrl_strict$tol <- min(as.numeric(ctrl$tol %||% 1e-8), 1e-10)
-  ctrl_strict$max_sweeps <- max(as.integer(ctrl$max_sweeps %||% 40L), 60L)
+  ctrl_strict <- ctrl_final
 
   final_rows <- vector("list", length(cand_th))
   final_fits <- vector("list", length(cand_th))
@@ -695,7 +720,7 @@ tt_global_lambda_optimize_v1 <- function(y = NULL,
       control = ctrl_strict, k = k, degree = degree,
       penalty_order = penalty_order, epsilon_rel = epsilon_rel,
       scheme = scheme, lower = lower, upper = upper,
-      fit_backend = fit_backend
+      fit_backend = fit_backend, gdf_init = gdf_init, fidelity = "final"
     )
     re2 <- .tt_lab_reeval_multistart(
       theta = cand_th[[j]], y = y, X = X, rank = rank,
@@ -704,12 +729,13 @@ tt_global_lambda_optimize_v1 <- function(y = NULL,
       control = ctrl_strict, k = k, degree = degree,
       penalty_order = penalty_order, epsilon_rel = epsilon_rel,
       scheme = scheme, lower = lower, upper = upper,
-      fit_backend = fit_backend
+      fit_backend = fit_backend, gdf_init = gdf_init, fidelity = "final"
     )
     final_fits[[j]] <- re1$fit
     # Rough SE proxy from GDF MC se via delta method not available; store gdf se
     final_rows[[j]] <- data.frame(
       cand = j, source = cand_src[j],
+      winner_source = cand_src[j],
       matrix(cand_th[[j]], nrow = 1L,
              dimnames = list(NULL, paste0("theta", seq_len(d)))),
       gcv_bank0 = re1$global_gcv,
@@ -717,6 +743,11 @@ tt_global_lambda_optimize_v1 <- function(y = NULL,
       gdf_se = re1$gdf_mc_se,
       basin_index = re1$basin_index,
       ok = re1$ok,
+      fidelity = re1$fidelity %||% "final",
+      n_sweeps = re1$n_sweeps %||% NA_integer_,
+      M = as.integer(re1$M %||% M_final),
+      converged = isTRUE(re1$converged),
+      gdf_init = gdf_init,
       stringsAsFactors = FALSE
     )
   }
@@ -792,6 +823,14 @@ tt_global_lambda_optimize_v1 <- function(y = NULL,
       seed = seed,
       M_search = M_search,
       M_final = M_final,
+      adaptive_fidelity = isTRUE(adaptive_fidelity),
+      fidelity = list(
+        sobol_sweeps = as.integer(ctrl_sobol$max_sweeps),
+        refine_sweeps = as.integer(ctrl_refine$max_sweeps),
+        final_sweeps = as.integer(ctrl_final$max_sweeps)
+      ),
+      gdf_init = gdf_init,
+      fit_backend = fit_backend,
       note = "Experimental adaptive global-λ; not a replacement for cGCV."
     ),
     elapsed = elapsed

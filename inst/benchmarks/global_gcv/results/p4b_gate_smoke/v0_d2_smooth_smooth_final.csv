@@ -1,0 +1,4 @@
+"cand","source","winner_source","theta1","theta2","gcv_bank0","gcv_bank1","gdf_bank0","gdf_se_bank0","penalized_obj","basin_index","ok","fidelity","n_sweeps","M","converged","gdf_init","base_cores_unchanged"
+1,"refined_from_isotropic_anchor_3","refined_from_isotropic_anchor_3",-1.86532913730008,-2.71547206523027,0.176741504197519,0.164574225770132,18.1452166769505,1.1808272385257,5.16952027006211,1,TRUE,"final",3,10,TRUE,"probe_warm",TRUE
+2,"refined_from_cgcv_anchor","refined_from_cgcv_anchor",-1.86540271010314,-2.71540049648079,0.176741512687121,0.164576805425041,18.145359521013,1.1808248593154,5.16946576585703,2,TRUE,"final",3,10,TRUE,"probe_warm",TRUE
+3,"cgcv_anchor","cgcv_anchor",-1.95889216353807,-2.92538156437713,0.176681078264287,0.164384084250277,18.8259138328153,1.17641310101413,4.91194429630998,2,TRUE,"final",3,10,TRUE,"probe_warm",TRUE

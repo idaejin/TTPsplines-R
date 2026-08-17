@@ -1,0 +1,4 @@
+"cand","source","winner_source","theta1","theta2","theta3","gcv_bank0","gcv_bank1","gdf_bank0","gdf_se_bank0","penalized_obj","basin_index","ok","fidelity","n_sweeps","M","converged","gdf_init","base_cores_unchanged"
+1,"refined_from_sobol","refined_from_sobol",3.18575988673312,2.33032657765585,-3.73224642197258,0.546090821213504,0.572111694219299,20.4917158043565,2.63740385430738,22.890999791141,1,TRUE,"final",23,8,TRUE,"probe_warm",TRUE
+2,"refined_from_sobol","refined_from_sobol",1.24999999999935,1.25000000000001,-3.75000000000002,0.546573701426165,0.572428564192703,20.6282971808031,2.64597638024843,22.8581316207969,1,TRUE,"final",3,8,TRUE,"probe_warm",TRUE
+3,"cgcv_anchor","cgcv_anchor",-3.85934471700295,3.98388468090867,-3.95231618333655,0.620809130793562,0.61010561561333,43.2183896598871,3.57000857695546,16.4387317316029,2,TRUE,"final",50,8,TRUE,"probe_warm",TRUE

@@ -1,0 +1,4 @@
+FAIL
+mode=SMOKE
+v0: smooth_smooth=TRUE | strong_aniso=FALSE | smooth_smooth=TRUE | strong_aniso=FALSE
+v1 strong_aniso: FALSE

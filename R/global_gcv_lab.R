@@ -20,6 +20,75 @@
   })
 }
 
+#' Elementwise equality of TT core lists (numeric, dims).
+#' @keywords internal
+#' @noRd
+.tt_lab_cores_equal <- function(a, b, tol = 0) {
+  if (length(a) != length(b)) return(FALSE)
+  for (j in seq_along(a)) {
+    if (!identical(dim(a[[j]]), dim(b[[j]]))) return(FALSE)
+    if (isTRUE(tol > 0)) {
+      if (max(abs(as.numeric(a[[j]]) - as.numeric(b[[j]]))) > tol) return(FALSE)
+    } else if (!isTRUE(all.equal(as.numeric(a[[j]]), as.numeric(b[[j]]),
+                                 tolerance = 0, check.attributes = FALSE))) {
+      return(FALSE)
+    }
+  }
+  TRUE
+}
+
+#' Resolve GDF perturbation init policy (P4B).
+#'
+#' `"probe_warm"`: each MC probe starts from a **clone** of `fit_base$cores`
+#' (never chains probe→probe). `"cold"`: fresh random / NULL init per probe.
+#' θ→θ `"continuation"` is **not** offered here (experimental elsewhere).
+#'
+#' @param gdf_init Preferred name; overrides `warm_start` when set.
+#' @param warm_start Legacy: `TRUE`→`probe_warm`, `FALSE`→`cold`.
+#' @keywords internal
+#' @noRd
+.tt_lab_match_gdf_init <- function(gdf_init = NULL, warm_start = NULL) {
+  if (!is.null(gdf_init) && !identical(gdf_init, "")) {
+    gdf_init <- as.character(gdf_init)[[1L]]
+    return(match.arg(gdf_init, c("probe_warm", "cold")))
+  }
+  if (isFALSE(warm_start)) return("cold")
+  "probe_warm"
+}
+
+#' Default stage-wise ALS / tol budgets for adaptive TT-gGCV fidelity (P4B).
+#'
+#' Sobol: cheap ranking · refine: locate valley · final: decision-quality.
+#' Winner selection must use **final** fidelity only (same M bank + sweeps).
+#'
+#' @keywords internal
+#' @noRd
+.tt_lab_default_fidelity <- function() {
+  list(
+    sobol = list(max_sweeps = 12L, tol = 1e-8),
+    refine = list(max_sweeps = 25L, tol = 1e-8),
+    final = list(max_sweeps = 50L, tol = 1e-10)
+  )
+}
+
+#' Apply stage fidelity overrides onto a lab control list.
+#' @keywords internal
+#' @noRd
+.tt_lab_control_for_stage <- function(base_control,
+                                      stage = c("sobol", "refine", "final"),
+                                      fidelity = NULL,
+                                      adaptive = TRUE) {
+  stage <- match.arg(stage)
+  ctrl <- .tt_lab_refit_control(base_control)
+  if (!isTRUE(adaptive)) return(ctrl)
+  fid <- fidelity %||% .tt_lab_default_fidelity()
+  st <- fid[[stage]]
+  if (is.null(st)) return(ctrl)
+  if (!is.null(st$max_sweeps)) ctrl$max_sweeps <- as.integer(st$max_sweeps)
+  if (!is.null(st$tol)) ctrl$tol <- as.numeric(st$tol)
+  ctrl
+}
+
 #' Save / restore .Random.seed around an expression (package has no withr).
 #' @keywords internal
 #' @noRd
@@ -393,11 +462,18 @@
 }
 
 #' Default Gaussian fixed-λ refit via [.tt_lab_fit_fixed()].
+#'
+#' For `gdf_init = "probe_warm"`, always starts from a **fresh clone** of
+#' `fit_base$cores` (or `init_cores` if supplied). Never reuses a previous
+#' probe's cores.
+#'
 #' @keywords internal
 #' @noRd
 .tt_lab_refit_from_base <- function(y_new,
                                     fit_base,
                                     warm_start = TRUE,
+                                    gdf_init = NULL,
+                                    init_cores = NULL,
                                     control = NULL,
                                     fit_backend = NULL,
                                     backend = NULL,
@@ -429,7 +505,15 @@
     }
   }
   fb <- .tt_lab_match_fit_backend(fb)
-  init <- if (isTRUE(warm_start)) .tt_clone_cores(fit_base$cores) else NULL
+  gi <- .tt_lab_match_gdf_init(gdf_init = gdf_init, warm_start = warm_start)
+  init <- NULL
+  if (identical(gi, "probe_warm")) {
+    src <- init_cores %||% fit_base$cores
+    if (is.null(src)) {
+      stop("probe_warm requires fit_base$cores or init_cores.", call. = FALSE)
+    }
+    init <- .tt_clone_cores(src)
+  }
   .tt_lab_fit_fixed(
     y = y_new,
     X = fit_base$X,
@@ -464,7 +548,9 @@
 #' @param scheme `"forward"` or `"central"`.
 #' @param probe_seed Seed for Rademacher draws (RNG state restored).
 #' @param probes Optional `n x M` probe matrix (overrides `probe_seed` / `M`).
-#' @param warm_start Passed to the default refitter.
+#' @param warm_start Legacy alias (`TRUE`→`probe_warm`, `FALSE`→`cold`).
+#' @param gdf_init `"probe_warm"` (clone `fit_base$cores` per probe) or `"cold"`.
+#'   Probes never chain; `fit_base$cores` must remain unchanged.
 #' @param on_nonconverged `"error"`, `"warn"`, or `"na"` (record NA contribution).
 #' @param control Optional [tt_control()] override for perturbed refits.
 #' @param fit_backend Lab ALS backend for default refits (`"R"` / `"Rcpp_fixed"`).
@@ -480,6 +566,7 @@ tt_global_gdf_mc <- function(fit_base,
                              probe_seed = 1L,
                              probes = NULL,
                              warm_start = TRUE,
+                             gdf_init = NULL,
                              on_nonconverged = c("error", "warn", "na"),
                              control = NULL,
                              fit_backend = NULL,
@@ -487,6 +574,8 @@ tt_global_gdf_mc <- function(fit_base,
   stopifnot(inherits(fit_base, "ttpspline"))
   scheme <- match.arg(scheme)
   on_nonconverged <- match.arg(on_nonconverged)
+  gdf_init <- .tt_lab_match_gdf_init(gdf_init = gdf_init, warm_start = warm_start)
+  warm_start <- identical(gdf_init, "probe_warm")
   y <- as.numeric(y %||% fit_base$y)
   n <- length(y)
   if (n != fit_base$n) stop("`y` length must match fit_base$n.", call. = FALSE)
@@ -513,12 +602,19 @@ tt_global_gdf_mc <- function(fit_base,
   base_fit_ok <- .tt_lab_fit_ok(fit_base, control = control %||% fit_base$control)
   yhat0 <- as.numeric(fitted(fit_base))
   base_rss <- sum((y - yhat0)^2)
+  # Snapshot for isolation: probes must not mutate fit_base$cores
+  base_cores_snap <- if (!is.null(fit_base$cores)) {
+    .tt_clone_cores(fit_base$cores)
+  } else {
+    NULL
+  }
 
   if (is.null(refit_fun)) {
     refit_fun <- function(y_new, fit_base, ...) {
       .tt_lab_refit_from_base(
         y_new, fit_base,
-        warm_start = warm_start,
+        gdf_init = gdf_init,
+        init_cores = base_cores_snap,
         control = control,
         fit_backend = fb,
         ...
@@ -526,6 +622,19 @@ tt_global_gdf_mc <- function(fit_base,
     }
   }
 
+  assert_base_untouched <- function() {
+    if (is.null(base_cores_snap) || is.null(fit_base$cores)) return(invisible(TRUE))
+    if (!.tt_lab_cores_equal(fit_base$cores, base_cores_snap)) {
+      stop(
+        "GDF probe mutated fit_base$cores (probe isolation violated). ",
+        "Use gdf_init='probe_warm' with cloned inits only.",
+        call. = FALSE
+      )
+    }
+    invisible(TRUE)
+  }
+
+  .tt_with_preserved_seed({
   contrib <- rep(NA_real_, M)
   diag_rows <- vector("list", M)
   n_refits <- 0L
@@ -551,6 +660,7 @@ tt_global_gdf_mc <- function(fit_base,
       )
       n_refits <- n_refits + 1L
       elapsed_p <- proc.time()[["elapsed"]] - t0
+      assert_base_untouched()
       if (inherits(fit_p, "error")) {
         handle_bad(j, paste0("refit error: ", conditionMessage(fit_p)))
         diag_rows[[j]] <- data.frame(
@@ -607,12 +717,14 @@ tt_global_gdf_mc <- function(fit_base,
         refit_fun(y_p, fit_base, ...),
         error = function(e) e
       )
+      assert_base_untouched()
       fit_m <- tryCatch(
         refit_fun(y_m, fit_base, ...),
         error = function(e) e
       )
       n_refits <- n_refits + 2L
       elapsed_p <- proc.time()[["elapsed"]] - t0
+      assert_base_untouched()
       if (inherits(fit_p, "error") || inherits(fit_m, "error")) {
         msg <- if (inherits(fit_p, "error")) conditionMessage(fit_p) else conditionMessage(fit_m)
         handle_bad(j, paste0("refit error: ", msg))
@@ -694,6 +806,11 @@ tt_global_gdf_mc <- function(fit_base,
     base_fitted = yhat0,
     base_fit_ok = base_fit_ok,
     warm_start = isTRUE(warm_start),
+    gdf_init = gdf_init,
+    base_cores_unchanged = isTRUE(
+      is.null(base_cores_snap) ||
+        .tt_lab_cores_equal(fit_base$cores, base_cores_snap)
+    ),
     n_refits = as.integer(n_refits),
     lambda = as.numeric(fit_base$lambda),
     rank = as.integer(fit_base$rank),
@@ -703,6 +820,7 @@ tt_global_gdf_mc <- function(fit_base,
     perturbation_diagnostics = pert_diag,
     on_nonconverged = on_nonconverged
   )
+  }) # .tt_with_preserved_seed
 }
 
 #' Evaluate experimental global TT-gGCV at a fixed numeric lambda.
@@ -721,6 +839,10 @@ tt_global_gdf_mc <- function(fit_base,
 #' @param backend Deprecated alias; ignored when `fit_backend` is set.
 #' @param k,degree,penalty_order Basis / penalty settings.
 #' @param on_nonconverged Forwarded to GDF estimator.
+#' @param warm_start Legacy GDF init alias.
+#' @param gdf_init `"probe_warm"` or `"cold"` for MC perturbations.
+#' @param fidelity Optional stage label recorded in the result (`"sobol"`,
+#'   `"refine"`, `"final"`, or custom).
 #' @param ... Extra args to `fit_fun` / GDF.
 #' @return Rich diagnostic list (criterion + GDF + validity flags).
 #' @keywords internal
@@ -743,9 +865,13 @@ tt_global_gcv <- function(lambda,
                           penalty_order = 2L,
                           on_nonconverged = c("error", "warn", "na"),
                           warm_start = TRUE,
+                          gdf_init = NULL,
+                          fidelity = NULL,
                           ...) {
   scheme <- match.arg(scheme)
   on_nonconverged <- match.arg(on_nonconverged)
+  gdf_init <- .tt_lab_match_gdf_init(gdf_init = gdf_init, warm_start = warm_start)
+  warm_start <- identical(gdf_init, "probe_warm")
   if (!is.null(backend) && missing(fit_backend)) {
     fit_backend <- if (identical(backend, "Rcpp") || identical(backend, "Rcpp_fixed")) {
       "Rcpp_fixed"
@@ -826,7 +952,7 @@ tt_global_gcv <- function(lambda,
     epsilon_rel = epsilon_rel,
     scheme = scheme,
     probes = probes_use,
-    warm_start = warm_start,
+    gdf_init = gdf_init,
     on_nonconverged = on_nonconverged,
     control = ctrl,
     fit_backend = fit_backend,
@@ -874,6 +1000,11 @@ tt_global_gcv <- function(lambda,
     scheme = scheme,
     epsilon = gdf_res$epsilon,
     M = M,
+    n_sweeps = as.integer(fit_ok$n_sweeps %||% fit$n_sweeps %||% NA_integer_),
+    converged = isTRUE(fit_ok$ok),
+    fidelity = if (is.null(fidelity)) NA_character_ else as.character(fidelity)[[1L]],
+    gdf_init = gdf_init,
+    warm_start = warm_start,
     fit_backend = fit_backend,
     criterion_name = "global_TT_gGCV",
     note = "Experimental; not classical exact GCV; GDF_TT != sum ed_k"
@@ -1312,8 +1443,12 @@ tt_global_gcv <- function(lambda,
                               scheme = "forward",
                               control = NULL,
                               gdf_warm_start = TRUE,
+                              gdf_init = NULL,
+                              fit_backend = c("R", "Rcpp_fixed"),
                               on_nonconverged = "na") {
   init_policy <- match.arg(init_policy)
+  fit_backend <- .tt_lab_match_fit_backend(fit_backend)
+  gdf_init <- .tt_lab_match_gdf_init(gdf_init = gdf_init, warm_start = gdf_warm_start)
   theta <- log10(as.numeric(lambda))
   key <- .tt_lab_cache_key(
     design$dataset_id, rank, theta, init_policy, mc_bank_id, M = M
@@ -1340,12 +1475,12 @@ tt_global_gcv <- function(lambda,
       scheme = scheme,
       control = ctrl,
       init = init_use,
-      backend = "R",
+      fit_backend = fit_backend,
       k = design$k,
       degree = design$degree,
       penalty_order = design$penalty_order,
       on_nonconverged = on_nonconverged,
-      warm_start = gdf_warm_start
+      gdf_init = gdf_init
     )
   })
 

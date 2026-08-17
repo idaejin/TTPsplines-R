@@ -148,14 +148,66 @@ Threaded through:
 
 ### Next
 
-- End-to-end velocity script comparing `fit_backend` on Sobol/GDF workloads
-- **P4B** adaptive fidelity + controlled GDF warm starts
-- Then fused_blocked + interface cache inside P3
+- End-to-end velocity: done (P4A + P4B reports)
+- **P4B** adaptive fidelity + controlled GDF warm starts — **SMOKE PASS** (2026-08-17); see section below
+- Then fused_blocked + interface cache inside P3 (**only after P4B re-profile**)
+
+## P4B — Safe `probe_warm` + adaptive fidelity — **GATE PASS** (2026-08-17)
+
+**DECISION:** P4A = PASS. P4B is the next measurable phase (not fused_blocked yet).
+
+### 1. Safe GDF warm start (`gdf_init`)
+
+| Mode | Behaviour |
+|------|-----------|
+| `probe_warm` (default) | Fit base once; each MC probe starts from a **clone** of `fit_base$cores`; probes never chain; RNG restored; assert `base_cores_unchanged` |
+| `cold` | Fresh init per probe |
+| θ→θ `continuation` | **Not** enabled in the gate; experimental later + mandatory `cold_common` refit |
+
+API: `gdf_init = c("probe_warm","cold")` on `tt_global_gdf_mc` / `tt_global_gcv` /
+optimizers. Legacy `warm_start=TRUE/FALSE` still maps to these.
+
+### 2. Adaptive stage fidelity
+
+| Stage | ALS sweeps (default) | M | Purpose |
+|-------|---------------------:|--:|---------|
+| Sobol | 12 (range 8–15) | `M_search` | Rank regions |
+| Refine | 25 (20–30) | `M_search` | Locate valley |
+| Final | ≥50 + multistart | `M_final` | Decision |
+
+`adaptive_fidelity = TRUE` (default) on `tt_global_lambda_optimize` / `_v1`.
+Candidates store `fidelity`, `n_sweeps`, `M`, `converged`, `winner_source`.
+**Winner is chosen only after final-fidelity reeval** (same high M banks).
+
+### Gate status
+
+| Check | Smoke |
+|-------|-------|
+| Isolation / no shared mutated cores | PASS |
+| Final fidelity tagging | PASS |
+| Alt-bank ranking stability | PASS (smoke) |
+| Wall-clock / cheaper stage budgets | PASS (~1.2–1.3× vs flat) |
+| Full `smooth_smooth` / `strong_aniso` GATE budgets | **PASS** (2026-08-17) — see `VELOCITY_P4B.md` § GATE |
+
+### Scripts / tests / report
+
+- Tests: `tests/testthat/test-global-gcv-p4b.R`
+- Smoke: `run_p4b_gate_smoke.R`
+- Full GATE: `run_p4b_gate_full.R` (`TT_GGCV_P4B_GATE=GATE`)
+- Velocity: `run_p4b_probe_warm_velocity.R`, `run_p4b_lab_velocity.R`
+- Report: `VELOCITY_P4B.md` · artifacts: `results/p4b_gate_gate/`
+
+### After P4B
+
+Re-profile. Only if remaining time is inside the fitter → `fused_blocked` +
+interface cache. The `r=5` P4A case already suggests that need, but **not before**
+capturing multiplicative pipeline savings.
 
 ## Benchmark note
 
 Script: `run_fixed_lambda_velocity.R` · report: `VELOCITY_FIXED_LAMBDA.md` (2026-08-17).
 
 Measured end-to-end fixed-λ fit speedup **~1.1–1.9×** (Darwin arm64) vs R
-reference; single-core micro ~1× (kernels already shared). Profile before
-claiming larger gains from further C++ work.
+reference; single-core micro ~1× (kernels already shared). P4A lab end-to-end
+TT-gGCV ~**1.6–2.4×** with `fit_backend=Rcpp_fixed`. P4B adds ~**1.2–1.4×**
+from `probe_warm` / adaptive fidelity (see `VELOCITY_P4B.md`).
