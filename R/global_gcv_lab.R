@@ -108,12 +108,17 @@
   hit_max <- is.finite(max_sw) && is.finite(n_sweeps) && n_sweeps >= max_sw
   last_rel <- NA_real_
   hist <- fit$history
-  if (is.list(hist) && length(hist) >= 2L) {
-    rss <- vapply(hist, function(h) as.numeric(h$rss %||% NA_real_), numeric(1))
-    if (length(rss) >= 2L && all(is.finite(rss[(length(rss) - 1L):length(rss)]))) {
-      last <- rss[length(rss)]
-      prev <- rss[length(rss) - 1L]
-      last_rel <- abs(prev - last) / max(1, abs(prev))
+  rss_hist <- NULL
+  if (is.data.frame(hist) && nrow(hist) >= 2L && "rss" %in% names(hist)) {
+    rss_hist <- as.numeric(hist$rss)
+  } else if (is.list(hist) && length(hist) >= 2L) {
+    rss_hist <- vapply(hist, function(h) as.numeric(h$rss %||% NA_real_), numeric(1))
+  }
+  if (!is.null(rss_hist) && length(rss_hist) >= 2L) {
+    i1 <- length(rss_hist)
+    i0 <- i1 - 1L
+    if (all(is.finite(rss_hist[c(i0, i1)]))) {
+      last_rel <- abs(rss_hist[i0] - rss_hist[i1]) / max(1, abs(rss_hist[i0]))
     }
   }
 
@@ -164,13 +169,237 @@
   ctrl
 }
 
-#' Default Gaussian fixed-λ refit using public `ttps()` + warm `init`.
+#' Resolve lab fixed-λ fit backend.
+#'
+#' @param fit_backend `"R"` (public [ttps()] ALS) or `"Rcpp_fixed"` (P3
+#'   [tt_als_fit_fixed_global()] C++ path).
+#' @keywords internal
+#' @noRd
+.tt_lab_match_fit_backend <- function(fit_backend = c("R", "Rcpp_fixed")) {
+  fit_backend <- as.character(fit_backend)[[1L]]
+  match.arg(fit_backend, c("R", "Rcpp_fixed"))
+}
+
+#' Convert P3 history data.frame to list-of-lists (ttps ALS style).
+#' @keywords internal
+#' @noRd
+.tt_lab_history_list <- function(hist) {
+  if (is.null(hist)) return(list())
+  if (is.list(hist) && !is.data.frame(hist)) return(hist)
+  if (!is.data.frame(hist) || nrow(hist) < 1L) return(list())
+  lapply(seq_len(nrow(hist)), function(i) {
+    list(
+      sweep = as.integer(hist$sweep[i]),
+      rss = as.numeric(hist$rss[i]),
+      objective = as.numeric(hist$objective[i]),
+      penalty = as.numeric(hist$penalty[i]),
+      d_eta = as.numeric(hist$d_eta[i] %||% NA_real_),
+      lambda = NULL
+    )
+  })
+}
+
+#' Wrap P3 fixed-λ ALS output as a minimal `"ttpspline"` for the GCV lab.
+#' @keywords internal
+#' @noRd
+.tt_lab_wrap_fixed_fit <- function(raw, y, X, basis, knots, cyclic, ranks,
+                                   lambda, control, k, degree, penalty_order,
+                                   offset, weights, fit_backend,
+                                   init_used = NULL) {
+  y <- as.numeric(y)
+  X <- as.matrix(X)
+  n <- length(y)
+  d <- ncol(X)
+  eta <- as.numeric(raw$eta)
+  rss <- as.numeric(raw$rss)
+  hist <- .tt_lab_history_list(raw$history)
+  penalties <- tryCatch(
+    tt_core_penalties_from_basis(ranks, basis, penalty_order),
+    error = function(e) NULL
+  )
+  structure(
+    list(
+      call = match.call(),
+      family = stats::gaussian(),
+      family_key = "gaussian",
+      y = y,
+      X = X,
+      d = d,
+      n = n,
+      k = as.integer(ncol(basis[[1L]])),
+      degree = as.integer(degree),
+      knots = knots,
+      cyclic = cyclic,
+      penalty_order = as.integer(penalty_order),
+      penalty_mode = "global",
+      cores = raw$cores,
+      penalties = penalties,
+      rank = ranks,
+      rank_internal = ranks[-c(1L, length(ranks))],
+      rank_max = max(ranks),
+      lambda = as.numeric(lambda),
+      lambda_method = "fixed",
+      lambda_bounds = control$lambda_bounds %||% c(1e-4, 1e4),
+      lambda_boundary = rep("interior", d),
+      lambda_at_boundary = FALSE,
+      intercept = as.numeric(raw$intercept)[1L],
+      beta = numeric(0),
+      linear = NULL,
+      smooth = NULL,
+      offset = normalize_offset(offset, n),
+      null_space = "joint",
+      null_space_info = NULL,
+      weights = normalize_weights(weights, n),
+      fitted.values = eta,
+      linear.predictors = eta,
+      residuals = y - eta,
+      deviance = rss,
+      edf = NA_real_,
+      edf_tt = NA_real_,
+      edf_margin = NULL,
+      edf_margin_cond = NULL,
+      edf_note = "lab fixed-λ fit (EDF not computed)",
+      npar_tt = NA_integer_,
+      npar_tt_intrinsic = NA_integer_,
+      npar_dense = NA_integer_,
+      compression_ratio = NA_real_,
+      inference = NULL,
+      ._inf = new.env(parent = emptyenv()),
+      converged = isTRUE(raw$converged) || identical(raw$convergence_reason, "tol_rss") ||
+        (is.finite(raw$n_sweeps) && raw$n_sweeps >= 1L),
+      convergence = list(
+        overall = isTRUE(raw$converged),
+        pirls = NA,
+        als = isTRUE(raw$converged),
+        reason = as.character(raw$convergence_reason %||% NA_character_)
+      ),
+      optimizer = "ALS",
+      optimizer_requested = "ALS",
+      optimizer_used = "ALS",
+      optimizer_reason = "lab fixed-λ dispatcher",
+      n_sweeps = as.integer(raw$n_sweeps),
+      n_pirls = NA_integer_,
+      n_opt_iter = NA_integer_,
+      n_outer = NA_integer_,
+      n_criterion_evals = 0L,
+      history = hist,
+      q_descent = list(checked = FALSE),
+      cgcv = NULL,
+      backend = if (identical(fit_backend, "Rcpp_fixed")) "Rcpp_fixed" else "R",
+      fit_backend = fit_backend,
+      sparse_backend = control$sparse %||% "auto",
+      timing = NA_real_,
+      control = control,
+      x_names = colnames(X),
+      x_range = apply(X, 2L, range)
+    ),
+    class = "ttpspline"
+  )
+}
+
+#' Single dispatcher for lab Gaussian fixed-λ ALS fits (P4A).
+#'
+#' All Sobol / GDF / refine / final fixed-λ evaluations should call this.
+#' Does **not** change outer GCV algorithm — only the ALS backend.
+#'
+#' @param fit_backend `"R"` → [ttps()] ALS; `"Rcpp_fixed"` → P3 C++ fitter.
+#' @keywords internal
+#' @noRd
+.tt_lab_fit_fixed <- function(y,
+                              X,
+                              lambda,
+                              rank,
+                              control,
+                              fit_backend = c("R", "Rcpp_fixed"),
+                              init = NULL,
+                              k = 8L,
+                              degree = 3L,
+                              penalty_order = 2L,
+                              knots = NULL,
+                              cyclic = NULL,
+                              period = NULL,
+                              offset = NULL,
+                              weights = NULL,
+                              ...) {
+  fit_backend <- .tt_lab_match_fit_backend(fit_backend)
+  y <- as.numeric(y)
+  X <- as.matrix(X)
+  d <- ncol(X)
+  lambda <- as.numeric(lambda)
+  if (length(lambda) == 1L) lambda <- rep(lambda, d)
+  if (length(lambda) != d) stop("`lambda` length must be 1 or d.", call. = FALSE)
+  ctrl <- .tt_lab_refit_control(control)
+
+  if (identical(fit_backend, "R")) {
+    fit <- ttps(
+      y = y,
+      X = X,
+      family = stats::gaussian(),
+      rank = rank,
+      k = k,
+      degree = degree,
+      penalty_order = penalty_order,
+      lambda = lambda,
+      optimizer = "ALS",
+      backend = "R",
+      init = init,
+      control = ctrl,
+      knots = knots,
+      cyclic = cyclic,
+      period = period,
+      offset = offset,
+      weights = weights,
+      ...
+    )
+    fit$fit_backend <- "R"
+    return(fit)
+  }
+
+  # Rcpp_fixed: P3 multi-sweep fitter (global P_k^full), wrap as ttpspline
+  if (!exists("tt_als_fit_fixed_global_cpp", mode = "function")) {
+    stop("fit_backend='Rcpp_fixed' requires compiled P3 fitter.", call. = FALSE)
+  }
+  bs <- build_marginal_bases(
+    X, k = k, degree = degree, knots = knots,
+    cyclic = cyclic, period = period
+  )
+  basis <- bs$basis
+  ranks <- tt_rank(rank, d = d)
+  if (is.null(init)) {
+    init <- initialize_tt_cores(
+      ncol(basis[[1L]]), ranks,
+      seed = ctrl$seed %||% 1L,
+      sd = ctrl$init_sd %||% 0.1
+    )
+  }
+  raw <- tt_als_fit_fixed_global(
+    y = y,
+    cores = init,
+    basis = basis,
+    lambda = lambda,
+    offset = offset,
+    weights = weights,
+    penalty_order = penalty_order,
+    max_sweeps = as.integer(ctrl$max_sweeps %||% 50L),
+    tol = as.numeric(ctrl$tol %||% 1e-8),
+    backend = "Rcpp"
+  )
+  .tt_lab_wrap_fixed_fit(
+    raw = raw, y = y, X = X, basis = basis, knots = bs$knots,
+    cyclic = bs$cyclic, ranks = ranks, lambda = lambda, control = ctrl,
+    k = k, degree = degree, penalty_order = penalty_order,
+    offset = offset, weights = weights, fit_backend = "Rcpp_fixed"
+  )
+}
+
+#' Default Gaussian fixed-λ refit via [.tt_lab_fit_fixed()].
 #' @keywords internal
 #' @noRd
 .tt_lab_refit_from_base <- function(y_new,
                                     fit_base,
                                     warm_start = TRUE,
                                     control = NULL,
+                                    fit_backend = NULL,
                                     backend = NULL,
                                     ...) {
   stopifnot(inherits(fit_base, "ttpspline"))
@@ -190,24 +419,28 @@
     stop("Perturbed y length must match fit_base$n.", call. = FALSE)
   }
   ctrl <- .tt_lab_refit_control(control %||% fit_base$control)
-  be <- backend %||% fit_base$backend %||% "R"
-  if (identical(be, "auto")) be <- "R"
+  fb <- fit_backend %||% fit_base$fit_backend %||% "R"
+  # Legacy alias: backend="Rcpp" from older call sites → Rcpp_fixed
+  if (is.null(fit_backend) && !is.null(backend)) {
+    if (identical(backend, "Rcpp") || identical(backend, "Rcpp_fixed")) {
+      fb <- "Rcpp_fixed"
+    } else if (identical(backend, "R")) {
+      fb <- "R"
+    }
+  }
+  fb <- .tt_lab_match_fit_backend(fb)
   init <- if (isTRUE(warm_start)) .tt_clone_cores(fit_base$cores) else NULL
-  # rank: full chain is accepted by tt_rank()
-  rank_arg <- fit_base$rank
-  ttps(
+  .tt_lab_fit_fixed(
     y = y_new,
     X = fit_base$X,
-    family = stats::gaussian(),
-    rank = rank_arg,
+    lambda = as.numeric(fit_base$lambda),
+    rank = fit_base$rank,
+    control = ctrl,
+    fit_backend = fb,
+    init = init,
     k = fit_base$k,
     degree = fit_base$degree %||% 3L,
     penalty_order = fit_base$penalty_order %||% 2L,
-    lambda = as.numeric(fit_base$lambda),
-    optimizer = "ALS",
-    backend = be,
-    init = init,
-    control = ctrl,
     knots = fit_base$knots,
     cyclic = fit_base$cyclic,
     offset = fit_base$offset,
@@ -234,6 +467,7 @@
 #' @param warm_start Passed to the default refitter.
 #' @param on_nonconverged `"error"`, `"warn"`, or `"na"` (record NA contribution).
 #' @param control Optional [tt_control()] override for perturbed refits.
+#' @param fit_backend Lab ALS backend for default refits (`"R"` / `"Rcpp_fixed"`).
 #' @param ... Passed to `refit_fun`.
 #' @return Diagnostic list with `gdf`, contributions, SE, probes, etc.
 #' @keywords internal
@@ -248,6 +482,7 @@ tt_global_gdf_mc <- function(fit_base,
                              warm_start = TRUE,
                              on_nonconverged = c("error", "warn", "na"),
                              control = NULL,
+                             fit_backend = NULL,
                              ...) {
   stopifnot(inherits(fit_base, "ttpspline"))
   scheme <- match.arg(scheme)
@@ -259,6 +494,8 @@ tt_global_gdf_mc <- function(fit_base,
   if (!identical(fit_base$lambda_method, "fixed")) {
     stop("fit_base must use fixed numeric lambda (not cGCV).", call. = FALSE)
   }
+  fb <- fit_backend %||% fit_base$fit_backend %||% "R"
+  fb <- .tt_lab_match_fit_backend(fb)
 
   if (is.null(probes)) {
     probes <- .tt_lab_rademacher_probes(n, M = as.integer(M), probe_seed = probe_seed)
@@ -283,6 +520,7 @@ tt_global_gdf_mc <- function(fit_base,
         y_new, fit_base,
         warm_start = warm_start,
         control = control,
+        fit_backend = fb,
         ...
       )
     }
@@ -477,7 +715,10 @@ tt_global_gdf_mc <- function(fit_base,
 #' @param M,epsilon_rel,scheme Passed to [tt_global_gdf_mc()].
 #' @param control [tt_control()] for the base fit / refits.
 #' @param init Optional warm-start cores for the base fit.
-#' @param backend Backend for ALS (`"R"` recommended for lab reproducibility).
+#' @param fit_backend Lab ALS backend: `"R"` ([ttps()]) or `"Rcpp_fixed"`
+#'   (P3 C++ fixed-λ fitter). All fixed-λ fits in this call (base + GDF
+#'   perturbations) use [.tt_lab_fit_fixed()].
+#' @param backend Deprecated alias; ignored when `fit_backend` is set.
 #' @param k,degree,penalty_order Basis / penalty settings.
 #' @param on_nonconverged Forwarded to GDF estimator.
 #' @param ... Extra args to `fit_fun` / GDF.
@@ -495,7 +736,8 @@ tt_global_gcv <- function(lambda,
                           control = tt_control(max_sweeps = 40, tol = 1e-10,
                                                compute_edf = FALSE, seed = 1L),
                           init = NULL,
-                          backend = "R",
+                          fit_backend = c("R", "Rcpp_fixed"),
+                          backend = NULL,
                           k = 8L,
                           degree = 3L,
                           penalty_order = 2L,
@@ -504,6 +746,14 @@ tt_global_gcv <- function(lambda,
                           ...) {
   scheme <- match.arg(scheme)
   on_nonconverged <- match.arg(on_nonconverged)
+  if (!is.null(backend) && missing(fit_backend)) {
+    fit_backend <- if (identical(backend, "Rcpp") || identical(backend, "Rcpp_fixed")) {
+      "Rcpp_fixed"
+    } else {
+      "R"
+    }
+  }
+  fit_backend <- .tt_lab_match_fit_backend(fit_backend)
   y <- as.numeric(y)
   X <- as.matrix(X)
   n <- length(y)
@@ -527,19 +777,10 @@ tt_global_gcv <- function(lambda,
 
   if (is.null(fit_fun)) {
     fit_fun <- function(y, X, lambda, ...) {
-      ttps(
-        y, X,
-        family = stats::gaussian(),
-        rank = rank,
-        k = k,
-        degree = degree,
-        penalty_order = penalty_order,
-        lambda = lambda,
-        optimizer = "ALS",
-        backend = backend,
-        init = init,
-        control = ctrl,
-        ...
+      .tt_lab_fit_fixed(
+        y = y, X = X, lambda = lambda, rank = rank, control = ctrl,
+        fit_backend = fit_backend, init = init, k = k, degree = degree,
+        penalty_order = penalty_order, ...
       )
     }
   }
@@ -568,6 +809,7 @@ tt_global_gcv <- function(lambda,
       scheme = scheme,
       epsilon = NA_real_,
       M = M,
+      fit_backend = fit_backend,
       criterion_name = "global_TT_gGCV",
       note = "Experimental; base fit failed"
     ))
@@ -587,6 +829,7 @@ tt_global_gcv <- function(lambda,
     warm_start = warm_start,
     on_nonconverged = on_nonconverged,
     control = ctrl,
+    fit_backend = fit_backend,
     ...
   )
   gdf <- gdf_res$gdf
@@ -631,6 +874,7 @@ tt_global_gcv <- function(lambda,
     scheme = scheme,
     epsilon = gdf_res$epsilon,
     M = M,
+    fit_backend = fit_backend,
     criterion_name = "global_TT_gGCV",
     note = "Experimental; not classical exact GCV; GDF_TT != sum ed_k"
   )

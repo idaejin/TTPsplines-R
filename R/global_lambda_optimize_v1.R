@@ -339,9 +339,11 @@ tt_global_lambda_optimize_v1 <- function(y = NULL,
                                          expand_step = 3,
                                          stop_on_stable_region = TRUE,
                                          min_batches_before_stop = 2L,
+                                         fit_backend = c("R", "Rcpp_fixed"),
                                          verbose = FALSE) {
   t_wall0 <- proc.time()[["elapsed"]]
   scheme <- match.arg(scheme)
+  fit_backend <- .tt_lab_match_fit_backend(fit_backend)
   fam_key <- family_key(normalize_family(family))
   if (!identical(fam_key, "gaussian")) {
     stop("tt_global_lambda_optimize_v1: Gaussian only.", call. = FALSE)
@@ -422,7 +424,7 @@ tt_global_lambda_optimize_v1 <- function(y = NULL,
       y = y, X = X, rank = rank, common_init = common_init,
       probes = probes_search, control = ctrl, k = k, degree = degree,
       penalty_order = penalty_order, epsilon_rel = epsilon_rel, scheme = scheme,
-      lower = lower_use, upper = upper_use
+      lower = lower_use, upper = upper_use, fit_backend = fit_backend
     )
     n_pt <- nrow(theta_mat)
     th_out <- matrix(NA_real_, n_pt, d)
@@ -503,7 +505,7 @@ tt_global_lambda_optimize_v1 <- function(y = NULL,
       y = y, X = X, rank = rank, common_init = common_init,
       probes = probes_search, control = ctrl, k = k, degree = degree,
       penalty_order = penalty_order, epsilon_rel = epsilon_rel, scheme = scheme,
-      lower = lower_use, upper = upper_use
+      lower = lower_use, upper = upper_use, fit_backend = fit_backend
     )
     out_th <- matrix(NA_real_, length(starts), d)
     out_q <- rep(Inf, length(starts))
@@ -551,7 +553,7 @@ tt_global_lambda_optimize_v1 <- function(y = NULL,
       y = y, X = X, rank = rank, common_init = common_init,
       probes = probes_search, control = ctrl, k = k, degree = degree,
       penalty_order = penalty_order, epsilon_rel = epsilon_rel, scheme = scheme,
-      lower = lower, upper = upper
+      lower = lower, upper = upper, fit_backend = fit_backend
     )
     edge <- .tt_lab_edge_probe(
       evaluator_edge, th_best, lower, upper,
@@ -625,7 +627,7 @@ tt_global_lambda_optimize_v1 <- function(y = NULL,
       y = y, X = X, rank = rank, common_init = common_init,
       probes = probes_search, control = ctrl, k = k, degree = degree,
       penalty_order = penalty_order, epsilon_rel = epsilon_rel, scheme = scheme,
-      lower = lower, upper = upper
+      lower = lower, upper = upper, fit_backend = fit_backend
     )
     for (j in seq_len(d)) {
       profiles[[j]] <- .tt_lab_profile_margin(
@@ -692,7 +694,8 @@ tt_global_lambda_optimize_v1 <- function(y = NULL,
       n_starts = core_starts_final, seed = seed,
       control = ctrl_strict, k = k, degree = degree,
       penalty_order = penalty_order, epsilon_rel = epsilon_rel,
-      scheme = scheme, lower = lower, upper = upper
+      scheme = scheme, lower = lower, upper = upper,
+      fit_backend = fit_backend
     )
     re2 <- .tt_lab_reeval_multistart(
       theta = cand_th[[j]], y = y, X = X, rank = rank,
@@ -700,7 +703,8 @@ tt_global_lambda_optimize_v1 <- function(y = NULL,
       n_starts = max(1L, min(3L, core_starts_final)), seed = seed + 17L,
       control = ctrl_strict, k = k, degree = degree,
       penalty_order = penalty_order, epsilon_rel = epsilon_rel,
-      scheme = scheme, lower = lower, upper = upper
+      scheme = scheme, lower = lower, upper = upper,
+      fit_backend = fit_backend
     )
     final_fits[[j]] <- re1$fit
     # Rough SE proxy from GDF MC se via delta method not available; store gdf se

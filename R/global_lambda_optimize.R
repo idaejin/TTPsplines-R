@@ -197,15 +197,17 @@
                                          scheme = "forward",
                                          lower, upper,
                                          cache = new.env(parent = emptyenv()),
-                                         gdf_warm_start = TRUE) {
+                                         gdf_warm_start = TRUE,
+                                         fit_backend = c("R", "Rcpp_fixed")) {
   y <- as.numeric(y)
   X <- as.matrix(X)
   d <- ncol(X)
   lower <- rep(as.numeric(lower), length.out = d)
   upper <- rep(as.numeric(upper), length.out = d)
+  fit_backend <- .tt_lab_match_fit_backend(fit_backend)
   force(list(y, X, rank, common_init, probes, control, k, degree,
              penalty_order, epsilon_rel, scheme, lower, upper, cache,
-             gdf_warm_start))
+             gdf_warm_start, fit_backend))
 
   # Cost counters (shared across closures)
   cost <- new.env(parent = emptyenv())
@@ -264,7 +266,7 @@
         scheme = scheme,
         control = control_use,
         init = .tt_clone_cores(init_cores),
-        backend = "R",
+        fit_backend = fit_backend,
         k = k,
         degree = degree,
         penalty_order = penalty_order,
@@ -347,11 +349,13 @@
                                       n_starts, seed, control,
                                       k, degree, penalty_order,
                                       epsilon_rel, scheme,
-                                      lower, upper) {
+                                      lower, upper,
+                                      fit_backend = c("R", "Rcpp_fixed")) {
   d <- ncol(as.matrix(X))
   theta <- pmin(pmax(as.numeric(theta), lower), upper)
   lambda <- 10^theta
   ctrl <- .tt_lab_refit_control(control)
+  fit_backend <- .tt_lab_match_fit_backend(fit_backend)
   fits <- vector("list", n_starts)
   objs <- rep(Inf, n_starts)
   for (b in seq_len(n_starts)) {
@@ -360,18 +364,17 @@
     })
     fit_b <- tryCatch(
       .tt_with_preserved_seed({
-        ttps(
-          y, X,
-          family = stats::gaussian(),
+        .tt_lab_fit_fixed(
+          y = y,
+          X = X,
+          lambda = lambda,
           rank = rank,
+          control = ctrl,
+          fit_backend = fit_backend,
+          init = init_b,
           k = k,
           degree = degree,
-          penalty_order = penalty_order,
-          lambda = lambda,
-          optimizer = "ALS",
-          backend = "R",
-          init = init_b,
-          control = ctrl
+          penalty_order = penalty_order
         )
       }),
       error = function(e) NULL
@@ -490,9 +493,11 @@ tt_global_lambda_optimize <- function(y = NULL,
                                       extra_theta = NULL,
                                       epsilon_rel = 1e-3,
                                       scheme = c("forward", "central"),
+                                      fit_backend = c("R", "Rcpp_fixed"),
                                       verbose = FALSE) {
   t_wall0 <- proc.time()[["elapsed"]]
   scheme <- match.arg(scheme)
+  fit_backend <- .tt_lab_match_fit_backend(fit_backend)
   fam_key <- family_key(normalize_family(family))
   if (!identical(fam_key, "gaussian")) {
     stop("tt_global_lambda_optimize: Gaussian only in v0.", call. = FALSE)
@@ -550,7 +555,7 @@ tt_global_lambda_optimize <- function(y = NULL,
     y = y, X = X, rank = rank, common_init = common_init,
     probes = probes_search, control = ctrl, k = k, degree = degree,
     penalty_order = penalty_order, epsilon_rel = epsilon_rel, scheme = scheme,
-    lower = lower, upper = upper
+    lower = lower, upper = upper, fit_backend = fit_backend
   )
 
   # --- Stage 0: cGCV anchor -------------------------------------------------
@@ -766,7 +771,8 @@ tt_global_lambda_optimize <- function(y = NULL,
       n_starts = core_starts_final, seed = seed,
       control = ctrl_strict, k = k, degree = degree,
       penalty_order = penalty_order, epsilon_rel = epsilon_rel,
-      scheme = scheme, lower = lower, upper = upper
+      scheme = scheme, lower = lower, upper = upper,
+      fit_backend = fit_backend
     )
     # Independent bank (ranking stability check)
     re2 <- .tt_lab_reeval_multistart(
@@ -775,7 +781,8 @@ tt_global_lambda_optimize <- function(y = NULL,
       n_starts = n_starts_alt, seed = seed + 17L,
       control = ctrl_strict, k = k, degree = degree,
       penalty_order = penalty_order, epsilon_rel = epsilon_rel,
-      scheme = scheme, lower = lower, upper = upper
+      scheme = scheme, lower = lower, upper = upper,
+      fit_backend = fit_backend
     )
     final_fits[[j]] <- re1$fit
     final_rows[[j]] <- data.frame(

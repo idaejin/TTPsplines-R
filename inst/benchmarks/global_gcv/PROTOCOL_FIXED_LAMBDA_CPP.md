@@ -124,7 +124,38 @@ This is the piece global-GCV should call for each numeric \(\boldsymbol\lambda\)
 - Wire `backend = "Rcpp"` for ALS only after production parity + speedup evidence
 - Microbenchmark Gram vs sweep overhead before claiming speedups
 
+## P4A — Wire global-GCV lab to P3 — **PASS** (2026-08-17)
+
+Gate: `tests/testthat/test-global-gcv-p4a-backend.R`.
+
+### API (lab / internal)
+
+```r
+fit_backend = c("R", "Rcpp_fixed")
+```
+
+Threaded through:
+
+- `.tt_lab_fit_fixed()` — **single dispatcher** for all fixed-λ ALS
+- `tt_global_gcv()`, `tt_global_gdf_mc()`, `.tt_lab_refit_from_base()`
+- `.tt_lab_make_theta_evaluator()`, `.tt_lab_reeval_multistart()`
+- `tt_global_lambda_optimize()`, `tt_global_lambda_optimize_v1()`
+
+`R` = public [ttps()] ALS (unchanged algorithm).  
+`Rcpp_fixed` = P3 `tt_als_fit_fixed_global(..., backend = "Rcpp")` wrapped as `"ttpspline"`.
+
+**Not** in P4A: warm starts between λ, adaptive sweep budgets, fused_blocked, interface cache.
+
+### Next
+
+- End-to-end velocity script comparing `fit_backend` on Sobol/GDF workloads
+- **P4B** adaptive fidelity + controlled GDF warm starts
+- Then fused_blocked + interface cache inside P3
+
 ## Benchmark note
 
-Before investing in P2–P3, profile interfaces / Gram / \(P^{\mathrm{full}}\) / solve /
-R↔C++ overhead on \(d\in\{3,5,10\}\), \(n\in\{500,5000,50000\}\), \(r\in\{2,5,10\}\).
+Script: `run_fixed_lambda_velocity.R` · report: `VELOCITY_FIXED_LAMBDA.md` (2026-08-17).
+
+Measured end-to-end fixed-λ fit speedup **~1.1–1.9×** (Darwin arm64) vs R
+reference; single-core micro ~1× (kernels already shared). Profile before
+claiming larger gains from further C++ work.
