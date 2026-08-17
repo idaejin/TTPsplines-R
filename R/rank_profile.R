@@ -4,7 +4,7 @@
 #' complexity. This is **not** cross-validated predictive selection; for
 #' that use [tt_rank_select()].
 #'
-#' @inheritParams ttpspline
+#' @inheritParams ttps
 #' @param ranks Numeric vector of scalar ranks to try.
 #' @param ... Passed to [ttps()] (overrides `rank`).
 #' @return Object of class `"tt_rank_profile"`.

@@ -4,9 +4,6 @@
 #' array is represented in Tensor-Train (TT) format. Observations may be
 #' arbitrarily scattered in \eqn{[a,b]^d}; no data grid is required.
 #'
-#' The preferred name is [ttps()]. [ttpspline()] is an identical alias kept
-#' for backward compatibility.
-#'
 #' Three orthogonal choices:
 #' \itemize{
 #'   \item \code{optimizer}: estimation philosophy —
@@ -15,7 +12,8 @@
 #'     \code{auto} is a simple family-aware default (Gaussian \(\to\) ALS,
 #'     Poisson \(\to\) PIRLS-ALS, binomial \(\to\) LBFGS); always overridable.
 #'   \item \code{lambda}: fixed isotropic/anisotropic or automatic `"cGCV"`
-#'   \item \code{backend}: computational engine (`auto` / `R` / `Rcpp` / `keras`)
+#'   \item \code{backend}: `"R"` for ALS/PIRLS sweeps; `"Rcpp"` = kernel helpers
+#'     only (not a full C++ ALS fitter); `"keras"` reserved for Adam
 #' }
 #'
 #' @param y Numeric response (`0/1` for binomial; counts for Poisson).
@@ -46,7 +44,9 @@
 #'   }
 #' @param backend `"auto"`, `"R"`, `"Rcpp"`, or `"keras"`. Overridden by
 #'   `control$backend` only when this argument is `"auto"` and control is not;
-#'   prefer setting backend here or in [tt_control()].
+#'   prefer setting backend here or in [tt_control()]. ALS / PIRLS always use
+#'   the R sweep under the global penalty; `"Rcpp"` accelerates kernels only
+#'   (not a full C++ ALS path). See [tt_control()].
 #' @param init Optional TT cores from [tt_initialize()] for fair optimizer
 #'   comparisons; `NULL` draws from `control$seed`.
 #' @param control A [tt_control()] list.
@@ -476,7 +476,7 @@ ttps <- function(y,
   )
 }
 
-#' @rdname ttps
+#' @noRd
 #' @export
 ttpspline <- ttps
 

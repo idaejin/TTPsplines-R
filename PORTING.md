@@ -14,7 +14,7 @@
 ## Done in v0 prototype
 
 - Public API `ttps()` / controls / rank / complexity / S3  
-- Gaussian ALS + cGCV (R + Rcpp)  
+- Gaussian ALS + cGCV (R sweeps; Rcpp Gram / \(P_k^{\mathrm{full}}\) helpers)  
 - Poisson / Bernoulli PIRLS (+ family-aware `optimizer="auto"`)  
 - Conditional experimental solvers (Damped-Newton-ALS, LBFGS-ALS, GD)  
 - Example surfaces: Ishigami / Sobol-g / Friedman (`simulate_*`, `data(...)`)  

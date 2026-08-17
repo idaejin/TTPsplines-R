@@ -997,11 +997,15 @@ List weighted_core_update_cgcv_cpp(const arma::vec& zc,
       _["n_eval"] = n_eval);
 }
 
-//' Gaussian TT-ALS with per-core conditional GCV (Rcpp).
+//' Legacy own-margin Gaussian TT-ALS + per-core cGCV (Rcpp).
 //'
+//' **Not used by [ttps()].** Uses own-margin \(P_k\) only (not classical
+//' global \(P_k^{\mathrm{full}}\)). Kept for historical / diagnostic calls.
+//' Production ALS is `tt_als_fit()` in R with Rcpp Gram / penalty helpers.
 //' Optional observation `weights` / `offset` (empty means ones / zeros).
 //'
 //' @noRd
+//' @keywords internal
 // [[Rcpp::export]]
 List tt_cgcv_fit_cpp(const arma::vec& y,
                      const List& basis_list,
@@ -1118,12 +1122,15 @@ List tt_cgcv_fit_cpp(const arma::vec& y,
   return out;
 }
 
-//' GLM PIRLS + weighted TT-ALS with per-core conditional GCV (Rcpp).
+//' Legacy own-margin GLM PIRLS + weighted TT-ALS + per-core cGCV (Rcpp).
 //'
-//' Family is `"bernoulli"` or `"poisson"` (gaussian: use `tt_cgcv_fit_cpp`).
+//' **Not used by [ttps()]** after `resolve_backend()` forces ALS/PIRLS to R.
+//' Own-margin penalties only — not classical global \(P_k^{\mathrm{full}}\).
+//' Family is `"bernoulli"` or `"poisson"` (gaussian legacy: `tt_cgcv_fit_cpp`).
 //' Optional observation `weights` / `offset` (empty means ones / zeros).
 //'
 //' @noRd
+//' @keywords internal
 // [[Rcpp::export]]
 List tt_glm_pirls_cgcv_cpp(const arma::vec& y,
                            const List& basis_list,

@@ -478,8 +478,9 @@ tt_als_fit_cgcv_outer <- function(y, basis, ranks, lambda_spec, control,
 
 #' Rcpp entry for Gaussian ALS — redirects to the global-penalty R path.
 #'
-#' Legacy full-sweep Rcpp ALS used the own-margin surrogate and is no longer
-#' a production fitter. Penalty helpers remain available via Rcpp.
+#' There is **no** production full-sweep C++ ALS yet. Legacy
+#' `tt_cgcv_fit_cpp()` used the own-margin surrogate and is not called here.
+#' Rcpp still accelerates Gram/RHS and \(P_k^{\mathrm{full}}\) helpers from R.
 #' @keywords internal
 #' @noRd
 tt_als_fit_rcpp <- function(y, basis, ranks, lambda_spec, control, penalty_order = 2,

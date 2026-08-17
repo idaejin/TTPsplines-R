@@ -87,7 +87,12 @@ tt_control(
 
 \item{lambda_update}{Reserved (\code{"auto"}); future releases may extend.}
 
-\item{backend}{\code{"auto"}, \code{"R"}, \code{"Rcpp"}, or \code{"keras"} (Adam only).}
+\item{backend}{\code{"auto"}, \code{"R"}, \code{"Rcpp"}, or \code{"keras"} (Adam only).
+For ALS / PIRLS, sweeps stay in \strong{R} (global \(P_k^{\mathrm{full}}\));
+\code{"Rcpp"} / \code{"auto"} still accelerate Gram/RHS and penalty helpers via
+compiled kernels when available — there is \strong{no} full C++ ALS fitter yet.
+Legacy own-margin fitters (\code{tt_cgcv_fit_cpp}, \code{tt_glm_pirls_cgcv_cpp}) are
+not used by \code{\link[=ttps]{ttps()}}.}
 
 \item{sparse}{\code{"auto"}, \code{TRUE}, or \code{FALSE} (v0: dense bases; hybrid reserved).}
 

@@ -2,7 +2,7 @@
 
 **Package:** `TTPsplines` (`01_PROJECTS/ttpsplines-pkg/`, GitHub `idaejin/TTPsplines-R`)  
 **Research lab (validation reference):** `01_PROJECTS/TTPsplines/`  
-**Last updated:** 2026-08-09
+**Last updated:** 2026-08-17
 
 ## Complexity layers (terminology)
 
@@ -67,7 +67,7 @@ tt_has_keras(); tt_keras_status()
 
 | Family | Status | Notes |
 |--------|--------|-------|
-| Gaussian | **Working** | ALS (R/Rcpp), LBFGS, fixed + cGCV |
+| Gaussian | **Working** | ALS (R sweeps + Rcpp kernels), LBFGS, fixed + cGCV |
 | Poisson | **Working (ALS/PIRLS)** | Fixed + cGCV; LBFGS NLL path available |
 | Bernoulli | **Working with caveats** | PIRLS damping; high-rank `|η|` can blow up |
 
@@ -91,7 +91,10 @@ tt_has_keras(); tt_keras_status()
 
 | Item | Status |
 |------|--------|
-| Rcpp ALS / cGCV / GLM PIRLS | Present via `src/tt_pspline_nd.cpp` when compiled |
+| ALS / PIRLS sweeps | **R** under classical global \(P_k^{\mathrm{full}}\) (canonical) |
+| Rcpp kernels | Gram/RHS (`tt_gram_rhs_cpp`), \(P_k^{\mathrm{full}}\) helpers — called from R |
+| Legacy own-margin fitters | `tt_cgcv_fit_cpp`, `tt_glm_pirls_cgcv_cpp` — **not** used by `ttps()`; parity/historical only |
+| Full C++ fixed-λ ALS | **Not yet** (planned for global-GCV speedups; see review P1–P3) |
 | Sparse `Matrix` hybrid | Hook (`sparse=` in control); dense default in v0 |
 | Matrix-free \(X_k\) | Experimental / not default |
 

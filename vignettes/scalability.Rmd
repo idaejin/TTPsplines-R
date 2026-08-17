@@ -162,16 +162,20 @@ cols <- c("method", "rank", "npar", "fit_time", "rank_selection_time",
 print(cmp[, intersect(cols, names(cmp))], row.names = FALSE)
 ```
 
-# Backend: R vs Rcpp
+# Backend: R sweeps vs Rcpp kernels
 
-Hot paths (ALS / PIRLS / cGCV updates) have an Rcpp backend. Prefer
-`backend = "auto"` (uses Rcpp when available). Vignette chunks often force
-`backend = "R"` for portability.
+ALS / PIRLS **sweeps** always run in R under the classical global penalty
+\(P_k^{\mathrm{full}}\). Compiled Rcpp code accelerates **kernels** (Gram/RHS,
+penalty assembly) when available. Requesting `backend = "Rcpp"` for ALS does
+**not** enable a full C++ ALS fitter: `resolve_backend()` warns and keeps the
+R sweep (helpers still used). Legacy own-margin fitters in
+`src/tt_pspline_nd.cpp` (`tt_cgcv_fit_cpp`, …) are unused by `ttps()`.
 
-Micro-timings on tiny problems are **API demos only** — wall times of a few
-milliseconds are dominated by system noise and must not be cited as speedup
-evidence. Serious benchmarks should take at least tenths of a second per fit,
-repeat 5–10 runs, and report medians over a grid such as
+Vignette chunks often force `backend = "R"` for clarity. Micro-timings on tiny
+problems are **API demos only** — wall times of a few milliseconds are
+dominated by system noise and must not be cited as speedup evidence. Serious
+benchmarks should take at least tenths of a second per fit, repeat 5–10 runs,
+and report medians over a grid such as
 \(d\in\{3,5,7,9\}\), \(n\in\{500,2000,10000\}\), \(k\in\{8,10,15\}\).
 
 Numerical parity (not speed) is the package validation target: same data,
@@ -190,26 +194,25 @@ ctrl_r <- tt_control(max_sweeps = 8, backend = "R", compute_edf = FALSE,
 fit_r <- ttps(y, X, rank = 2, k = 8, lambda = 1, init = init,
               control = ctrl_r)
 
-fit_cpp <- tryCatch(
-  ttps(
-    y, X, rank = 2, k = 8, lambda = 1, init = init,
-    control = tt_control(max_sweeps = 8, backend = "Rcpp",
-                         compute_edf = FALSE, seed = 123)
-  ),
-  error = function(e) NULL
-)
+# backend="Rcpp" warns and still uses the R global-penalty ALS path
+fit_cpp <- suppressWarnings(ttps(
+  y, X, rank = 2, k = 8, lambda = 1, init = init,
+  control = tt_control(max_sweeps = 8, backend = "Rcpp",
+                       compute_edf = FALSE, seed = 123)
+))
 
 eta_r <- as.numeric(predict(fit_r, type = "link"))
-eta_c <- if (is.null(fit_cpp)) NA_real_ else as.numeric(predict(fit_cpp, type = "link"))
+eta_c <- as.numeric(predict(fit_cpp, type = "link"))
 data.frame(
-  backend = c("R", "Rcpp"),
-  deviance = c(fit_r$deviance, if (is.null(fit_cpp)) NA else fit_cpp$deviance),
-  max_abs_eta_diff = c(0, if (is.null(fit_cpp)) NA else max(abs(eta_r - eta_c)))
+  backend_requested = c("R", "Rcpp"),
+  backend_used = c(fit_r$backend, fit_cpp$backend),
+  deviance = c(fit_r$deviance, fit_cpp$deviance),
+  max_abs_eta_diff = c(0, max(abs(eta_r - eta_c)))
 )
 ```
 
-Numbers are machine-dependent; this chunk is an API demonstration of shared
-initialization, not a runtime study.
+Numbers are machine-dependent; this chunk shows that requesting `"Rcpp"` for
+ALS still reports `backend = "R"` (canonical sweep) with matching \(\eta\).
 
 # Practical checklist
 
@@ -219,9 +222,9 @@ initialization, not a runtime study.
 3. If GLAM is skipped, say so (`status` / `reason`) — array algorithms delay
    but do not remove \(k^d\) coefficient growth.
 4. Split **selection time** from **final fit time**.
-5. Use `backend = "auto"` / `"Rcpp"` for serious timings; keep vignette demos
-   small; validate backends by \(\eta\)/\(\mu\)/deviance parity under shared
-   `init`.
+5. Time the **R** ALS path for serious benchmarks until a parity-checked
+   fixed-\(\lambda\) C++ fitter exists; validate kernels via
+   `tests/testthat/test-backend-parity.R`.
 
 # See also
 

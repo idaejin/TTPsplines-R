@@ -590,9 +590,12 @@ tt_pirls_fit_cgcv_outer <- function(y, basis, family, ranks, lambda_spec,
   )
 }
 
-#' GLM PIRLS via Rcpp when available.
+#' GLM PIRLS — legacy Rcpp entry (own-margin); production uses R.
 #'
-#' Bernoulli with true-objective step-halving uses the R path (FIX 1–2).
+#' `ttps()` routes ALS/PIRLS through `resolve_backend()` → R. This wrapper may
+#' still call `tt_glm_pirls_cgcv_cpp` if invoked directly; that C++ path is
+#' **legacy own-margin**, not global \(P_k^{\mathrm{full}}\). Bernoulli
+#' step-halving always uses the R path (FIX 1–2).
 #'
 #' @keywords internal
 #' @noRd

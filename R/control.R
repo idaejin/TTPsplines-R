@@ -13,6 +13,11 @@
 #' @param lambda_tol Alias of `tol_lambda`.
 #' @param lambda_update Reserved (`"auto"`); future releases may extend.
 #' @param backend `"auto"`, `"R"`, `"Rcpp"`, or `"keras"` (Adam only).
+#'   For ALS / PIRLS, sweeps stay in **R** (global \(P_k^{\mathrm{full}}\));
+#'   `"Rcpp"` / `"auto"` still accelerate Gram/RHS and penalty helpers via
+#'   compiled kernels when available — there is **no** full C++ ALS fitter yet.
+#'   Legacy own-margin fitters (`tt_cgcv_fit_cpp`, `tt_glm_pirls_cgcv_cpp`) are
+#'   not used by [ttps()].
 #' @param sparse `"auto"`, `TRUE`, or `FALSE` (v0: dense bases; hybrid reserved).
 #' @param use_spectral_gcv Use spectral cache inside Brent cGCV when feasible.
 #' @param outer_maxit Outer alternation iters (LBFGS/Adam + cGCV).
@@ -287,7 +292,8 @@ resolve_backend <- function(control, optimizer = "ALS") {
     if (identical(be, "Rcpp")) {
       warning(
         "ALS/PIRLS sweeps use the classical global penalty on Theta and run in R; ",
-        "Rcpp accelerates P_k^full / global-penalty helpers when available.",
+        "there is no full C++ ALS fitter yet. ",
+        "Rcpp accelerates P_k^full / Gram helpers when available.",
         call. = FALSE
       )
     }

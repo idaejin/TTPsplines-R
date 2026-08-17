@@ -2,36 +2,9 @@
 % Please edit documentation in R/ttpspline.R
 \name{ttps}
 \alias{ttps}
-\alias{ttpspline}
 \title{Tensor-Train P-spline for multidimensional smooth / GLM regression.}
 \usage{
 ttps(
-  y,
-  X,
-  family = stats::gaussian(),
-  rank = 3,
-  k = 10,
-  degree = 3,
-  penalty_order = 2,
-  lambda = "cGCV",
-  optimizer = c("auto", "ALS", "PIRLS-ALS", "Damped-Newton-ALS", "LBFGS-ALS", "GD",
-    "LBFGS", "hybrid", "Adam"),
-  backend = c("auto", "R", "Rcpp", "keras"),
-  init = NULL,
-  control = tt_control(),
-  monitor = FALSE,
-  knots = NULL,
-  offset = NULL,
-  linear = NULL,
-  smooth = NULL,
-  lambda_smooth = "cGCV",
-  weights = NULL,
-  cyclic = NULL,
-  period = NULL,
-  null_space = c("joint", "profiled")
-)
-
-ttpspline(
   y,
   X,
   family = stats::gaussian(),
@@ -95,7 +68,9 @@ binomial \(\to\) \code{"LBFGS"} (see \code{optimizer_requested} /
 
 \item{backend}{\code{"auto"}, \code{"R"}, \code{"Rcpp"}, or \code{"keras"}. Overridden by
 \code{control$backend} only when this argument is \code{"auto"} and control is not;
-prefer setting backend here or in \code{\link[=tt_control]{tt_control()}}.}
+prefer setting backend here or in \code{\link[=tt_control]{tt_control()}}. ALS / PIRLS always use
+the R sweep under the global penalty; \code{"Rcpp"} accelerates kernels only
+(not a full C++ ALS path). See \code{\link[=tt_control]{tt_control()}}.}
 
 \item{init}{Optional TT cores from \code{\link[=tt_initialize]{tt_initialize()}} for fair optimizer
 comparisons; \code{NULL} draws from \code{control$seed}.}
@@ -158,9 +133,6 @@ array is represented in Tensor-Train (TT) format. Observations may be
 arbitrarily scattered in \eqn{[a,b]^d}; no data grid is required.
 }
 \details{
-The preferred name is \code{\link[=ttps]{ttps()}}. \code{\link[=ttpspline]{ttpspline()}} is an identical alias kept
-for backward compatibility.
-
 Three orthogonal choices:
 \itemize{
 \item \code{optimizer}: estimation philosophy —
@@ -169,7 +141,8 @@ likelihood \code{GD} / \code{LBFGS} / \code{Adam}.
 \code{auto} is a simple family-aware default (Gaussian \(\to\) ALS,
 Poisson \(\to\) PIRLS-ALS, binomial \(\to\) LBFGS); always overridable.
 \item \code{lambda}: fixed isotropic/anisotropic or automatic \code{"cGCV"}
-\item \code{backend}: computational engine (\code{auto} / \code{R} / \code{Rcpp} / \code{keras})
+\item \code{backend}: \code{"R"} for ALS/PIRLS sweeps; \code{"Rcpp"} = kernel helpers
+only (not a full C++ ALS fitter); \code{"keras"} reserved for Adam
 }
 }
 \examples{

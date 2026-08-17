@@ -167,7 +167,12 @@ fit <- ttps(y, X, family = gaussian(), rank = 2, k = 8, lambda = 1,
 # equivalent: tt_control(trace = TRUE)
 ```
 
-With `monitor = TRUE` and `backend = "auto"`, the package uses the **R** path so ALS/PIRLS sweep lines are printed. Pass `backend = "Rcpp"` explicitly if you prefer the fast path without per-sweep logs.
+ALS / PIRLS sweeps always run in **R** under the classical global penalty
+\(P_k^{\mathrm{full}}\). Compiled **Rcpp kernels** (Gram/RHS, \(P_k^{\mathrm{full}}\)
+assembly, etc.) are used from that R loop when available. Requesting
+`backend = "Rcpp"` for ALS/PIRLS does **not** switch to a full C++ fitter; it
+emits a warning and still uses the R sweep (with Rcpp helpers). Prefer
+`monitor = TRUE` (or `tt_control(trace = TRUE)`) to print per-sweep progress.
 
 ### cGCV λ near search bounds
 

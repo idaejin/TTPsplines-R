@@ -66,18 +66,18 @@ Lab scripts/docs/outputs **not moved or deleted**. As of 2026-08-10 the lab **in
 
 | Feature | Status |
 |---|---|
-| Gaussian ALS fixed λ | **working** (R + Rcpp) |
-| Gaussian cGCV | **working** (R + Rcpp) |
-| Poisson PIRLS | **working** (R; Rcpp path available) |
+| Gaussian ALS fixed λ | **working** (R sweeps; Rcpp Gram / \(P^{\mathrm{full}}\) helpers) |
+| Gaussian cGCV | **working** (R outer / sequential; same helpers) |
+| Poisson PIRLS | **working** (R; own-margin C++ fitter is **legacy**, unused by `ttps`) |
 | Bernoulli (default) | **LBFGS via `auto`** (`optimizer_reason`: binomial family default); ALS/PIRLS overridable |
 | Bernoulli ALS/PIRLS | **working with caveats** (FIX1+FIX2; predictive gap vs LBFGS remains) |
-| cGCV for GLM | **working** via modular λ / Rcpp |
+| cGCV for GLM | **working** via modular λ on R path |
 | Joint EDF | **working** (linearized; size-guarded) |
 | cGCV vignette | **`vignettes/cgcv.Rmd`** (fixed vs cGCV; bounds) |
 | Scalability vignette | **`vignettes/scalability.Rmd`** (storage, GLAM skip, timings, backends) |
 | AIC / BIC helpers | **vignette only** (`vignettes/aic-bic.Rmd`; no `AIC()` method yet) |
 | Complexity layers | **working** (`tt_complexity`; covered in `rank-selection`) |
-| Rcpp backend | **working** (`backend = "auto"/"Rcpp"`) |
+| Rcpp backend | **kernels only** for ALS/PIRLS (`backend = "Rcpp"` warns and keeps R sweeps); no full C++ ALS yet |
 | Sparse Matrix path | **hook only** (`sparse` in control; dense v0) |
 | Benchmarks | **runnable** — `inst/benchmarks/` |
 | Tests | **testthat** |

@@ -96,21 +96,28 @@ weighted_core_update_cgcv_cpp <- function(zc, Left, Right, Bk, weight, penalty, 
     .Call(`_TTPsplines_weighted_core_update_cgcv_cpp`, zc, Left, Right, Bk, weight, penalty, lambda, criterion, lambda_min, lambda_max, tol)
 }
 
-#' Gaussian TT-ALS with per-core conditional GCV (Rcpp).
+#' Legacy own-margin Gaussian TT-ALS + per-core cGCV (Rcpp).
 #'
+#' **Not used by [ttps()].** Uses own-margin \(P_k\) only (not classical
+#' global \(P_k^{\mathrm{full}}\)). Kept for historical / diagnostic calls.
+#' Production ALS is `tt_als_fit()` in R with Rcpp Gram / penalty helpers.
 #' Optional observation `weights` / `offset` (empty means ones / zeros).
 #'
 #' @noRd
+#' @keywords internal
 tt_cgcv_fit_cpp <- function(y, basis_list, init_cores, penalties_list, lambda_init, sweeps = 12L, lambda_min = 1e-2, lambda_max = 1e2, tol = 1e-3, tol_lambda = 1e-3, return_jacobian = FALSE, weights = NULL, offset = NULL) {
     .Call(`_TTPsplines_tt_cgcv_fit_cpp`, y, basis_list, init_cores, penalties_list, lambda_init, sweeps, lambda_min, lambda_max, tol, tol_lambda, return_jacobian, weights, offset)
 }
 
-#' GLM PIRLS + weighted TT-ALS with per-core conditional GCV (Rcpp).
+#' Legacy own-margin GLM PIRLS + weighted TT-ALS + per-core cGCV (Rcpp).
 #'
-#' Family is `"bernoulli"` or `"poisson"` (gaussian: use `tt_cgcv_fit_cpp`).
+#' **Not used by [ttps()]** after `resolve_backend()` forces ALS/PIRLS to R.
+#' Own-margin penalties only — not classical global \(P_k^{\mathrm{full}}\).
+#' Family is `"bernoulli"` or `"poisson"` (gaussian legacy: `tt_cgcv_fit_cpp`).
 #' Optional observation `weights` / `offset` (empty means ones / zeros).
 #'
 #' @noRd
+#' @keywords internal
 tt_glm_pirls_cgcv_cpp <- function(y, basis_list, init_cores, penalties_list, family, lambda_init, pirls_iter = 12L, als_sweeps = 4L, lambda_min = 1e-2, lambda_max = 1e2, tol = 1e-3, tol_dev = 1e-6, select_lambda = TRUE, weights = NULL, offset = NULL) {
     .Call(`_TTPsplines_tt_glm_pirls_cgcv_cpp`, y, basis_list, init_cores, penalties_list, family, lambda_init, pirls_iter, als_sweeps, lambda_min, lambda_max, tol, tol_dev, select_lambda, weights, offset)
 }
