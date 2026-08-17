@@ -1964,3 +1964,166 @@ List tt_als_sweep_global_cpp(
       _["n_core_updates"] = d,
       _["method"] = "global_fixed_sweep_cpp");
 }
+
+//' Multi-sweep fixed-λ Gaussian ALS under global P_k^full.
+//'
+//' P3 fitter: repeats P2 sweeps with intercept refresh after each sweep
+//' (no linear=/smooth=). Stopping rule matches R fixed-λ ALS:
+//' relative RSS change < tol after sweep > 2. Does not mutate input cores.
+//'
+//' @noRd
+//' @keywords internal
+// [[Rcpp::export]]
+List tt_als_fit_fixed_global_cpp(
+    const arma::vec& y,
+    const List& cores_list,
+    const List& basis_list,
+    const arma::vec& lambda,
+    const List& DtD_list,
+    Rcpp::Nullable<Rcpp::NumericVector> weight = R_NilValue,
+    Rcpp::Nullable<Rcpp::NumericVector> offset = R_NilValue,
+    int max_sweeps = 50,
+    double tol = 1e-8,
+    Rcpp::Nullable<Rcpp::IntegerVector> margin_order = R_NilValue) {
+  std::vector<arma::cube> cores = list_to_cubes(cores_list);
+  std::vector<arma::mat> basis = list_to_mats(basis_list);
+  const int d = static_cast<int>(cores.size());
+  if (d < 1) stop("tt_als_fit_fixed_global_cpp: empty cores");
+  if (static_cast<int>(basis.size()) != d) {
+    stop("tt_als_fit_fixed_global_cpp: basis length mismatch");
+  }
+  if (static_cast<int>(DtD_list.size()) != d) {
+    stop("tt_als_fit_fixed_global_cpp: DtD_list length mismatch");
+  }
+  if (max_sweeps < 1) stop("tt_als_fit_fixed_global_cpp: max_sweeps < 1");
+  const int n = y.n_elem;
+  if (static_cast<int>(basis[0].n_rows) != n) {
+    stop("tt_als_fit_fixed_global_cpp: y / basis nrow mismatch");
+  }
+
+  arma::vec lam = normalize_lambda_arma(lambda, d);
+  arma::vec w_obs = resolve_weights_n(weight, n);
+  arma::vec off = offset.isNotNull() ? Rcpp::as<arma::vec>(offset)
+                                     : arma::zeros(n);
+  if (static_cast<int>(off.n_elem) == 1) {
+    off = arma::vec(n).fill(off(0));
+  }
+  if (static_cast<int>(off.n_elem) != n) {
+    stop("tt_als_fit_fixed_global_cpp: offset length mismatch");
+  }
+
+  std::vector<int> order(d);
+  IntegerVector visited(d);
+  if (margin_order.isNotNull()) {
+    IntegerVector ord = margin_order.get();
+    if (ord.size() != d) stop("tt_als_fit_fixed_global_cpp: margin_order length");
+    std::vector<int> seen(d, 0);
+    for (int i = 0; i < d; ++i) {
+      const int k = ord[i];
+      if (k < 1 || k > d) stop("tt_als_fit_fixed_global_cpp: margin_order range");
+      if (seen[k - 1]++) stop("tt_als_fit_fixed_global_cpp: not a permutation");
+      order[i] = k - 1;
+      visited[i] = k;
+    }
+  } else {
+    for (int i = 0; i < d; ++i) {
+      order[i] = i;
+      visited[i] = i + 1;
+    }
+  }
+
+  const double wsum = std::max(arma::accu(w_obs), 1e-12);
+  // Initial intercept with f = 0 (matches tt_update_intercept_beta)
+  double intercept = arma::dot(w_obs, y - off) / wsum;
+
+  NumericVector hist_sweep(max_sweeps);
+  NumericVector hist_rss(max_sweeps);
+  NumericVector hist_obj(max_sweeps);
+  NumericVector hist_pen(max_sweeps);
+  NumericVector hist_d_eta(max_sweeps);
+
+  double prev_rss = R_PosInf;
+  arma::vec prev_eta(n, arma::fill::zeros);
+  bool have_prev_eta = false;
+  int n_sweeps = 0;
+  bool converged = false;
+  std::string reason = "max_sweeps";
+
+  arma::vec f;
+  arma::vec eta;
+  double rss = NA_REAL;
+  double pen = NA_REAL;
+  double obj = NA_REAL;
+
+  try {
+    for (int sw = 1; sw <= max_sweeps; ++sw) {
+      arma::vec yc = y - off - intercept;
+      for (int i = 0; i < d; ++i) {
+        update_one_core_global(cores, basis, order[i], lam, DtD_list, yc, w_obs,
+                               /*apply=*/true);
+      }
+      List cores_tmp = cubes_to_list(cores);
+      f = tt_contraction_d_cpp(cores_tmp, basis_list);
+      intercept = arma::dot(w_obs, y - off - f) / wsum;
+      eta = off + intercept + f;
+      rss = arma::dot(w_obs, arma::square(y - eta));
+      pen = tt_global_penalty_value_cpp(cores_tmp, lam, DtD_list);
+      obj = 0.5 * rss + pen;
+      const double d_eta =
+          have_prev_eta ? std::sqrt(arma::mean(arma::square(eta - prev_eta)))
+                        : NA_REAL;
+
+      hist_sweep[sw - 1] = sw;
+      hist_rss[sw - 1] = rss;
+      hist_obj[sw - 1] = obj;
+      hist_pen[sw - 1] = pen;
+      hist_d_eta[sw - 1] = d_eta;
+      n_sweeps = sw;
+      prev_eta = eta;
+      have_prev_eta = true;
+
+      // Match R: relative RSS change after sweep > 2
+      if (sw > 2) {
+        const double denom = std::max(1.0, std::abs(prev_rss));
+        if (std::abs(prev_rss - rss) / denom < tol) {
+          converged = true;
+          reason = "tol_rss";
+          break;
+        }
+      }
+      prev_rss = rss;
+    }
+  } catch (std::exception& e) {
+    stop(std::string("tt_als_fit_fixed_global_cpp failed: ") + e.what());
+  }
+
+  hist_sweep = hist_sweep[Rcpp::Range(0, n_sweeps - 1)];
+  hist_rss = hist_rss[Rcpp::Range(0, n_sweeps - 1)];
+  hist_obj = hist_obj[Rcpp::Range(0, n_sweeps - 1)];
+  hist_pen = hist_pen[Rcpp::Range(0, n_sweeps - 1)];
+  hist_d_eta = hist_d_eta[Rcpp::Range(0, n_sweeps - 1)];
+
+  List history = List::create(
+      _["sweep"] = hist_sweep,
+      _["rss"] = hist_rss,
+      _["objective"] = hist_obj,
+      _["penalty"] = hist_pen,
+      _["d_eta"] = hist_d_eta);
+
+  return List::create(
+      _["cores"] = cubes_to_list(cores),
+      _["intercept"] = intercept,
+      _["f"] = f,
+      _["eta"] = eta,
+      _["mu"] = eta,
+      _["rss"] = rss,
+      _["penalty"] = pen,
+      _["objective"] = obj,
+      _["lambda"] = lam,
+      _["n_sweeps"] = n_sweeps,
+      _["converged"] = converged,
+      _["convergence_reason"] = reason,
+      _["margin_order"] = visited,
+      _["history"] = history,
+      _["method"] = "global_fixed_fit_cpp");
+}

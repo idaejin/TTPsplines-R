@@ -209,3 +209,15 @@ tt_als_sweep_global_cpp <- function(yc, cores_list, basis_list, lambda, DtD_list
     .Call(`_TTPsplines_tt_als_sweep_global_cpp`, yc, cores_list, basis_list, lambda, DtD_list, weight, margin_order)
 }
 
+#' Multi-sweep fixed-λ Gaussian ALS under global P_k^full.
+#'
+#' P3 fitter: repeats P2 sweeps with intercept refresh after each sweep
+#' (no linear=/smooth=). Stopping rule matches R fixed-λ ALS:
+#' relative RSS change < tol after sweep > 2. Does not mutate input cores.
+#'
+#' @noRd
+#' @keywords internal
+tt_als_fit_fixed_global_cpp <- function(y, cores_list, basis_list, lambda, DtD_list, weight = NULL, offset = NULL, max_sweeps = 50L, tol = 1e-8, margin_order = NULL) {
+    .Call(`_TTPsplines_tt_als_fit_fixed_global_cpp`, y, cores_list, basis_list, lambda, DtD_list, weight, offset, max_sweeps, tol, margin_order)
+}
+

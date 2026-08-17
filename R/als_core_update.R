@@ -236,3 +236,147 @@ tt_als_sweep_global <- function(y, cores, intercept, basis, lambda,
     backend = backend
   )
 }
+
+#' Fixed-λ Gaussian ALS fitter under global \(P_k^{\mathrm{full}}\) (P3).
+#'
+#' Multi-sweep Gauss–Seidel with intercept refresh after each sweep.
+#' No cGCV, no `linear=` / `smooth=`, `null_space = "joint"` only.
+#' Stopping: relative RSS change `< tol` after sweep `> 2` (same as R ALS).
+#'
+#' @param max_sweeps Maximum sweeps.
+#' @param tol Relative RSS tolerance (default `1e-8`).
+#' @inheritParams tt_als_sweep_global
+#' @return List with `cores`, `intercept`, `f`/`eta`, `rss`/`penalty`/`objective`,
+#'   `n_sweeps`, `converged`, `history`, `backend`.
+#' @keywords internal
+#' @noRd
+tt_als_fit_fixed_global <- function(y, cores, basis, lambda,
+                                    offset = NULL, weights = NULL,
+                                    penalty_order = 2L,
+                                    margin_order = NULL,
+                                    max_sweeps = 50L,
+                                    tol = 1e-8,
+                                    backend = c("R", "Rcpp")) {
+  backend <- match.arg(backend)
+  d <- length(cores)
+  y <- as.numeric(y)
+  n <- length(y)
+  offset <- normalize_offset(offset, n)
+  w <- normalize_weights(weights, n)
+  lambda <- as.numeric(lambda)
+  if (length(lambda) == 1L) lambda <- rep(lambda, d)
+  if (length(lambda) != d) stop("`lambda` length must be 1 or d.", call. = FALSE)
+  margin_order <- .cgcv_margin_order(margin_order, d)
+  max_sweeps <- as.integer(max_sweeps)[1L]
+  tol <- as.numeric(tol)[1L]
+  if (max_sweeps < 1L) stop("`max_sweeps` must be >= 1.", call. = FALSE)
+
+  cores0 <- lapply(cores, function(C) array(as.numeric(C), dim = dim(C)))
+
+  if (identical(backend, "Rcpp")) {
+    if (!exists("tt_als_fit_fixed_global_cpp", mode = "function")) {
+      stop("tt_als_fit_fixed_global_cpp not available.", call. = FALSE)
+    }
+    DtD_list <- tt_DtD_list(cores0, penalty_order, cyclic = attr(basis, "cyclic"))
+    raw <- tt_als_fit_fixed_global_cpp(
+      y = y,
+      cores_list = cores0,
+      basis_list = basis,
+      lambda = lambda,
+      DtD_list = DtD_list,
+      weight = w,
+      offset = offset,
+      max_sweeps = max_sweeps,
+      tol = tol,
+      margin_order = as.integer(margin_order)
+    )
+    cores_new <- lapply(seq_len(d), function(j) {
+      array(as.numeric(raw$cores[[j]]), dim = dim(cores0[[j]]))
+    })
+    hist <- as.data.frame(raw$history)
+    return(list(
+      cores = cores_new,
+      intercept = as.numeric(raw$intercept)[1L],
+      f = as.numeric(raw$f),
+      eta = as.numeric(raw$eta),
+      mu = as.numeric(raw$mu),
+      rss = as.numeric(raw$rss),
+      penalty = as.numeric(raw$penalty),
+      objective = as.numeric(raw$objective),
+      lambda = as.numeric(raw$lambda),
+      n_sweeps = as.integer(raw$n_sweeps),
+      converged = isTRUE(raw$converged),
+      convergence_reason = as.character(raw$convergence_reason),
+      margin_order = as.integer(raw$margin_order),
+      history = hist,
+      backend = "Rcpp",
+      method = "global_fixed_fit"
+    ))
+  }
+
+  # R reference: same outer loop as C++ (P2 sweeps + intercept refresh)
+  intercept <- tt_update_intercept_beta(y, offset, f = 0, weights = w)$intercept
+  history <- vector("list", max_sweeps)
+  prev_rss <- Inf
+  prev_eta <- NULL
+  n_sweeps <- 0L
+  converged <- FALSE
+  reason <- "max_sweeps"
+  cores_cur <- cores0
+  f <- eta <- NULL
+  rss <- pen <- obj <- NA_real_
+
+  for (sw in seq_len(max_sweeps)) {
+    swp <- tt_als_sweep_global(
+      y, cores_cur, intercept, basis, lambda,
+      offset = offset, weights = w, penalty_order = penalty_order,
+      margin_order = margin_order, backend = "R"
+    )
+    cores_cur <- swp$cores
+    f <- swp$f
+    intercept <- tt_update_intercept_beta(
+      y, offset, f = f, weights = w
+    )$intercept
+    eta <- offset + intercept + f
+    rss <- sum(w * (y - eta)^2)
+    pen <- tt_global_penalty_value(
+      cores_cur, lambda, penalty_order = penalty_order,
+      cyclic = attr(basis, "cyclic")
+    )
+    obj <- 0.5 * rss + pen
+    d_eta <- if (is.null(prev_eta)) NA_real_ else sqrt(mean((eta - prev_eta)^2))
+    history[[sw]] <- data.frame(
+      sweep = sw, rss = rss, objective = obj, penalty = pen, d_eta = d_eta,
+      stringsAsFactors = FALSE
+    )
+    n_sweeps <- sw
+    prev_eta <- eta
+    if (sw > 2L) {
+      if (abs(prev_rss - rss) / max(1, abs(prev_rss)) < tol) {
+        converged <- TRUE
+        reason <- "tol_rss"
+        break
+      }
+    }
+    prev_rss <- rss
+  }
+
+  list(
+    cores = cores_cur,
+    intercept = intercept,
+    f = as.numeric(f),
+    eta = as.numeric(eta),
+    mu = as.numeric(eta),
+    rss = rss,
+    penalty = pen,
+    objective = obj,
+    lambda = lambda,
+    n_sweeps = n_sweeps,
+    converged = converged,
+    convergence_reason = reason,
+    margin_order = as.integer(margin_order),
+    history = do.call(rbind, history[seq_len(n_sweeps)]),
+    backend = "R",
+    method = "global_fixed_fit"
+  )
+}

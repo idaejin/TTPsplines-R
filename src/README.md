@@ -14,6 +14,7 @@ Requesting `backend = "Rcpp"` for ALS/PIRLS warns and keeps the R sweep
 ```
 tt_als_core_update_global_cpp   P1: one-core fixed-λ update under P_k^full
 tt_als_sweep_global_cpp         P2: one Gauss–Seidel fixed-λ sweep
+tt_als_fit_fixed_global_cpp     P3: multi-sweep fixed-λ fitter (+ intercept)
 tt_gram_rhs_cpp                 fused / blocked / kron / blas Gram+RHS (P2b)
                                OpenMP opt-in via n_threads (fused_blocked)
 tt_gram_omp_available
@@ -44,6 +45,6 @@ unavailable. Spectral cGCV workspace remains in R (`R/lambda.R`).
 | `tt_cgcv_fit_cpp` | Own-margin \(P_k\) only — not global \(P_k^{\mathrm{full}}\) |
 | `tt_glm_pirls_cgcv_cpp` | Same; unused by `ttps()` after backend resolution |
 
-Planned next step for global-GCV: **P3** multi-sweep fixed-λ fitter in C++
-(parity vs R). Outer λ selection stays in R. See
-`inst/benchmarks/global_gcv/PROTOCOL_FIXED_LAMBDA_CPP.md`.
+P0–P3 complete for global-penalty fixed-λ ALS in C++. Outer λ selection
+(global-GCV / cGCV) stays in R and should call `tt_als_fit_fixed_global_cpp`.
+See `inst/benchmarks/global_gcv/PROTOCOL_FIXED_LAMBDA_CPP.md`.

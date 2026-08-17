@@ -95,8 +95,34 @@ Interfaces are rebuilt each core (≡ R `design_interface_cache = FALSE`). Gate 
 
 ### Next
 
-- **P3** multi-sweep fitter (`max_sweeps`, `tol`, warm start, no input mutation, convergence flags)
+- **P3** multi-sweep fitter (`max_sweeps`, `tol`, warm start, no input mutation, convergence flags) — see below
 - **P4** outer cGCV calling C++ fixed-λ (optional)
+
+## P3 — Multi-sweep fixed-λ fitter — **PASS** (2026-08-17)
+
+Gate: `tests/testthat/test-als-fit-fixed-global.R` — **84 PASS**.
+
+### Scope
+
+| In | Out |
+|----|-----|
+| `max_sweeps`, RSS `tol` (stop after sweep `> 2`) | cGCV / λ search |
+| Intercept refresh each sweep | `linear=` / `smooth=` |
+| Warm start via `init` cores | Profiled null-space |
+| History / converged / reason | Public `ttps(backend="Rcpp")` switch |
+
+### API (internal)
+
+- C++: `tt_als_fit_fixed_global_cpp(...)`
+- R: `tt_als_fit_fixed_global(..., backend = "R"|"Rcpp")`
+
+This is the piece global-GCV should call for each numeric \(\boldsymbol\lambda\).
+
+### Next
+
+- **P4** (optional): outer cGCV / Sobol / GDF MC calling this fitter
+- Wire `backend = "Rcpp"` for ALS only after production parity + speedup evidence
+- Microbenchmark Gram vs sweep overhead before claiming speedups
 
 ## Benchmark note
 
