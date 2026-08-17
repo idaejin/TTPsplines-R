@@ -375,6 +375,23 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// tt_als_sweep_global_cpp
+List tt_als_sweep_global_cpp(const arma::vec& yc, const List& cores_list, const List& basis_list, const arma::vec& lambda, const List& DtD_list, Rcpp::Nullable<Rcpp::NumericVector> weight, Rcpp::Nullable<Rcpp::IntegerVector> margin_order);
+RcppExport SEXP _TTPsplines_tt_als_sweep_global_cpp(SEXP ycSEXP, SEXP cores_listSEXP, SEXP basis_listSEXP, SEXP lambdaSEXP, SEXP DtD_listSEXP, SEXP weightSEXP, SEXP margin_orderSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::vec& >::type yc(ycSEXP);
+    Rcpp::traits::input_parameter< const List& >::type cores_list(cores_listSEXP);
+    Rcpp::traits::input_parameter< const List& >::type basis_list(basis_listSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type lambda(lambdaSEXP);
+    Rcpp::traits::input_parameter< const List& >::type DtD_list(DtD_listSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type weight(weightSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::IntegerVector> >::type margin_order(margin_orderSEXP);
+    rcpp_result_gen = Rcpp::wrap(tt_als_sweep_global_cpp(yc, cores_list, basis_list, lambda, DtD_list, weight, margin_order));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_TTPsplines_tt_design_core_d_cpp", (DL_FUNC) &_TTPsplines_tt_design_core_d_cpp, 3},
@@ -400,6 +417,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_TTPsplines_tt_penalty_from_envs_cpp", (DL_FUNC) &_TTPsplines_tt_penalty_from_envs_cpp, 7},
     {"_TTPsplines_tt_conditional_penalty_full_env_cpp", (DL_FUNC) &_TTPsplines_tt_conditional_penalty_full_env_cpp, 4},
     {"_TTPsplines_tt_als_core_update_global_cpp", (DL_FUNC) &_TTPsplines_tt_als_core_update_global_cpp, 7},
+    {"_TTPsplines_tt_als_sweep_global_cpp", (DL_FUNC) &_TTPsplines_tt_als_sweep_global_cpp, 7},
     {NULL, NULL, 0}
 };
 

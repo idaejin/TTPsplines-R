@@ -186,15 +186,26 @@ tt_conditional_penalty_full_env_cpp <- function(cores_list, k, lambda, DtD_list)
 #' Single-core Gaussian ALS update under global P_k^full (fixed λ).
 #'
 #' P1 building block: one margin `k` (1-based), numeric λ, no cGCV, no sweeps.
-#' Builds TT interfaces, Gram S = Z'WZ / RHS b, P_own / P_other / P_full,
-#' and solves (S + P_full) g = b with the same SPD/ridge policy as R
-#' `update_lambda_fixed()` when P_other is present.
-#'
 #' Does **not** mutate input cores. Caller applies `g` if desired.
 #'
 #' @noRd
 #' @keywords internal
 tt_als_core_update_global_cpp <- function(yc, cores_list, basis_list, k, lambda, DtD_list, weight = NULL) {
     .Call(`_TTPsplines_tt_als_core_update_global_cpp`, yc, cores_list, basis_list, k, lambda, DtD_list, weight)
+}
+
+#' One Gauss–Seidel ALS sweep under global P_k^full (fixed λ).
+#'
+#' P2 building block: visits every margin in `margin_order` (1-based
+#' permutation of 1:d; default left-to-right). Rebuilds TT interfaces each
+#' core (equivalent to R `design_interface_cache = FALSE`). No cGCV, no
+#' intercept refresh, no multi-sweep loop.
+#'
+#' Returns updated cores (input is not mutated) and TT fit `f`.
+#'
+#' @noRd
+#' @keywords internal
+tt_als_sweep_global_cpp <- function(yc, cores_list, basis_list, lambda, DtD_list, weight = NULL, margin_order = NULL) {
+    .Call(`_TTPsplines_tt_als_sweep_global_cpp`, yc, cores_list, basis_list, lambda, DtD_list, weight, margin_order)
 }
 

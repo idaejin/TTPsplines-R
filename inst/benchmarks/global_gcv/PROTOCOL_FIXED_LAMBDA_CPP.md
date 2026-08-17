@@ -69,8 +69,33 @@ Relative objective gate on well-conditioned problems:
 
 ### Next (not P1)
 
-- **P2** one full fixed-λ sweep (same core order as R)
+- **P2** one full fixed-λ sweep (same core order as R) — see below
 - **P3** multi-sweep fitter + warm start / convergence
+- **P4** outer cGCV calling C++ fixed-λ (optional)
+
+## P2 — One fixed-λ sweep — **PASS** (2026-08-17)
+
+Gate: `tests/testthat/test-als-sweep-global.R` — **135 PASS**.
+
+### Scope
+
+| In | Out |
+|----|-----|
+| One Gauss–Seidel sweep over all margins | Multi-sweep / tol / history |
+| Fixed numeric \(\boldsymbol\lambda\) | cGCV / λ updates |
+| LTR / RTL / arbitrary `margin_order` | Intercept refresh mid-sweep |
+| Global \(P_k^{\mathrm{full}}\) | Own-margin |
+
+### API (internal)
+
+- C++: `tt_als_sweep_global_cpp(...)`
+- R: `tt_als_sweep_global(..., backend = "R"|"Rcpp")`
+
+Interfaces are rebuilt each core (≡ R `design_interface_cache = FALSE`). Gate compares \(\widehat f\), \(\eta\), RSS, \(J_\lambda\), \(L_{\mathrm{pen}}\), and cores (same init ⇒ unique conditional solves).
+
+### Next
+
+- **P3** multi-sweep fitter (`max_sweeps`, `tol`, warm start, no input mutation, convergence flags)
 - **P4** outer cGCV calling C++ fixed-λ (optional)
 
 ## Benchmark note

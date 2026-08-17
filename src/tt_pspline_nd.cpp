@@ -1725,11 +1725,22 @@ List tt_conditional_penalty_full_env_cpp(const List& cores_list,
 }
 
 // ---------------------------------------------------------------------------
-// P1: single-core fixed-λ ALS update under classical global P_k^full
-// Matches R update_lambda_fixed() when P0 = P_other is present:
-//   prefer exact SPD solve on M = S + P_full; ridge fallback otherwise.
-// No cGCV, no sweep loop — one margin only.
+// P1/P2: fixed-λ ALS under classical global P_k^full
+// P1 = one core; P2 = one full sweep (Gauss–Seidel), same SPD/ridge policy as R
+// update_lambda_fixed() when P_other is present. No cGCV.
 // ---------------------------------------------------------------------------
+
+struct GlobalCoreUpdate {
+  arma::mat S;
+  arma::vec b;
+  arma::mat P_own;
+  arma::mat P_other;
+  arma::mat P_full;
+  arma::vec g;
+  double rss_cond;
+  double penalty_cond;
+  double q_cond;
+};
 
 static arma::vec solve_spd_arma(const arma::mat& A, const arma::vec& b) {
   arma::mat U;
@@ -1764,7 +1775,6 @@ static arma::vec solve_spd_ridge_arma(const arma::mat& A, const arma::vec& b) {
 }
 
 static arma::vec solve_global_core_arma(const arma::mat& M, const arma::vec& b) {
-  // Match R update_lambda_fixed with P0 present: try exact, else ridge.
   arma::vec g;
   bool ok = false;
   try {
@@ -1778,13 +1788,66 @@ static arma::vec solve_global_core_arma(const arma::mat& M, const arma::vec& b) 
   return g;
 }
 
+// kk is 0-based. If apply=true, writes g into cores[kk].
+static GlobalCoreUpdate update_one_core_global(
+    std::vector<arma::cube>& cores,
+    const std::vector<arma::mat>& basis,
+    int kk,
+    const arma::vec& lam,
+    const List& DtD_list,
+    const arma::vec& yc,
+    const arma::vec& w_obs,
+    bool apply) {
+  const int d = static_cast<int>(cores.size());
+  const int k1 = kk + 1;
+  std::vector<arma::mat> L = build_left_interfaces(cores, basis);
+  std::vector<arma::mat> R = build_right_interfaces(cores, basis);
+  arma::mat X = tt_design_core_d_cpp(L[kk], R[kk], basis[kk]);
+  arma::vec sw = arma::sqrt(w_obs);
+  arma::mat Xw = X;
+  Xw.each_col() %= sw;
+  arma::vec yw = sw % yc;
+  GlobalCoreUpdate out;
+  out.S = Xw.t() * Xw;
+  out.b = Xw.t() * yw;
+
+  List cores_list = cubes_to_list(cores);
+  List pen = tt_conditional_penalty_full_env_cpp(cores_list, k1, lam, DtD_list);
+  out.P_own = as<arma::mat>(pen["P_own"]);
+  out.P_other = as<arma::mat>(pen["P_other"]);
+  out.P_full = as<arma::mat>(pen["P_full"]);
+
+  arma::mat M = out.S + out.P_full;
+  out.g = solve_global_core_arma(M, out.b);
+  out.rss_cond = std::max(
+      0.0, arma::as_scalar(arma::dot(yw, yw) - 2.0 * arma::dot(out.b, out.g) +
+                           arma::as_scalar(out.g.t() * out.S * out.g)));
+  out.penalty_cond = 0.5 * arma::as_scalar(out.g.t() * out.P_full * out.g);
+  out.q_cond = 0.5 * out.rss_cond + out.penalty_cond;
+
+  if (apply) {
+    fill_cube_from_vec(cores[kk], out.g);
+  }
+  (void)d;
+  return out;
+}
+
+static arma::vec resolve_weights_n(Rcpp::Nullable<Rcpp::NumericVector> weight,
+                                   int n) {
+  arma::vec w_obs = weight.isNotNull() ? Rcpp::as<arma::vec>(weight)
+                                       : arma::ones(n);
+  if (static_cast<int>(w_obs.n_elem) != n) {
+    stop("weight length mismatch");
+  }
+  for (arma::uword i = 0; i < w_obs.n_elem; ++i) {
+    if (!std::isfinite(w_obs(i)) || w_obs(i) < 0.0) w_obs(i) = 0.0;
+  }
+  return w_obs;
+}
+
 //' Single-core Gaussian ALS update under global P_k^full (fixed λ).
 //'
 //' P1 building block: one margin `k` (1-based), numeric λ, no cGCV, no sweeps.
-//' Builds TT interfaces, Gram S = Z'WZ / RHS b, P_own / P_other / P_full,
-//' and solves (S + P_full) g = b with the same SPD/ridge policy as R
-//' `update_lambda_fixed()` when P_other is present.
-//'
 //' Does **not** mutate input cores. Caller applies `g` if desired.
 //'
 //' @noRd
@@ -1813,56 +1876,91 @@ List tt_als_core_update_global_cpp(const arma::vec& yc,
     stop("tt_als_core_update_global_cpp: yc / basis nrow mismatch");
   }
   arma::vec lam = normalize_lambda_arma(lambda, d);
-  const int kk = k - 1;
-
-  std::vector<arma::mat> L = build_left_interfaces(cores, basis);
-  std::vector<arma::mat> R = build_right_interfaces(cores, basis);
-  const arma::mat& Left = L[kk];
-  const arma::mat& Right = R[kk];
-  const arma::mat& Bk = basis[kk];
-
-  arma::mat X = tt_design_core_d_cpp(Left, Right, Bk);
-  arma::vec w_obs = weight.isNotNull() ? Rcpp::as<arma::vec>(weight)
-                                       : arma::ones(n);
-  if (static_cast<int>(w_obs.n_elem) != n) {
-    stop("tt_als_core_update_global_cpp: weight length mismatch");
-  }
-  for (arma::uword i = 0; i < w_obs.n_elem; ++i) {
-    if (!std::isfinite(w_obs(i)) || w_obs(i) < 0.0) w_obs(i) = 0.0;
-  }
-  arma::vec sw = arma::sqrt(w_obs);
-  arma::mat Xw = X;
-  Xw.each_col() %= sw;
-  arma::vec yw = sw % yc;
-  arma::mat S = Xw.t() * Xw;
-  arma::vec b = Xw.t() * yw;
-
-  List pen = tt_conditional_penalty_full_env_cpp(cores_list, k, lam, DtD_list);
-  arma::mat P_own = as<arma::mat>(pen["P_own"]);
-  arma::mat P_other = as<arma::mat>(pen["P_other"]);
-  arma::mat P_full = as<arma::mat>(pen["P_full"]);
-
-  arma::mat M = S + P_full;
-  arma::vec g = solve_global_core_arma(M, b);
-
-  // Conditional residual and quadratic penalty on this core
-  const double rss_cond =
-      std::max(0.0, arma::as_scalar(arma::dot(yw, yw) - 2.0 * arma::dot(b, g) +
-                                    arma::as_scalar(g.t() * S * g)));
-  const double pen_cond = 0.5 * arma::as_scalar(g.t() * P_full * g);
-  const double q_cond = 0.5 * rss_cond + pen_cond;
+  arma::vec w_obs = resolve_weights_n(weight, n);
+  GlobalCoreUpdate u = update_one_core_global(
+      cores, basis, k - 1, lam, DtD_list, yc, w_obs, /*apply=*/false);
 
   return List::create(
-      _["S"] = S,
-      _["b"] = b,
-      _["P_own"] = P_own,
-      _["P_other"] = P_other,
-      _["P_full"] = P_full,
-      _["g"] = g,
-      _["rss_cond"] = rss_cond,
-      _["penalty_cond"] = pen_cond,
-      _["q_cond"] = q_cond,
+      _["S"] = u.S,
+      _["b"] = u.b,
+      _["P_own"] = u.P_own,
+      _["P_other"] = u.P_other,
+      _["P_full"] = u.P_full,
+      _["g"] = u.g,
+      _["rss_cond"] = u.rss_cond,
+      _["penalty_cond"] = u.penalty_cond,
+      _["q_cond"] = u.q_cond,
       _["k"] = k,
       _["lambda"] = lam,
       _["method"] = "global_fixed_core_cpp");
+}
+
+//' One Gauss–Seidel ALS sweep under global P_k^full (fixed λ).
+//'
+//' P2 building block: visits every margin in `margin_order` (1-based
+//' permutation of 1:d; default left-to-right). Rebuilds TT interfaces each
+//' core (equivalent to R `design_interface_cache = FALSE`). No cGCV, no
+//' intercept refresh, no multi-sweep loop.
+//'
+//' Returns updated cores (input is not mutated) and TT fit `f`.
+//'
+//' @noRd
+//' @keywords internal
+// [[Rcpp::export]]
+List tt_als_sweep_global_cpp(
+    const arma::vec& yc,
+    const List& cores_list,
+    const List& basis_list,
+    const arma::vec& lambda,
+    const List& DtD_list,
+    Rcpp::Nullable<Rcpp::NumericVector> weight = R_NilValue,
+    Rcpp::Nullable<Rcpp::IntegerVector> margin_order = R_NilValue) {
+  std::vector<arma::cube> cores = list_to_cubes(cores_list);
+  std::vector<arma::mat> basis = list_to_mats(basis_list);
+  const int d = static_cast<int>(cores.size());
+  if (static_cast<int>(basis.size()) != d) {
+    stop("tt_als_sweep_global_cpp: basis length mismatch");
+  }
+  if (static_cast<int>(DtD_list.size()) != d) {
+    stop("tt_als_sweep_global_cpp: DtD_list length mismatch");
+  }
+  const int n = yc.n_elem;
+  if (static_cast<int>(basis[0].n_rows) != n) {
+    stop("tt_als_sweep_global_cpp: yc / basis nrow mismatch");
+  }
+  arma::vec lam = normalize_lambda_arma(lambda, d);
+  arma::vec w_obs = resolve_weights_n(weight, n);
+
+  std::vector<int> order(d);
+  if (margin_order.isNotNull()) {
+    IntegerVector ord = margin_order.get();
+    if (ord.size() != d) stop("tt_als_sweep_global_cpp: margin_order length");
+    std::vector<int> seen(d, 0);
+    for (int i = 0; i < d; ++i) {
+      const int k = ord[i];
+      if (k < 1 || k > d) stop("tt_als_sweep_global_cpp: margin_order out of range");
+      if (seen[k - 1]++) stop("tt_als_sweep_global_cpp: margin_order not a permutation");
+      order[i] = k - 1;
+    }
+  } else {
+    for (int i = 0; i < d; ++i) order[i] = i;
+  }
+
+  IntegerVector visited(d);
+  for (int i = 0; i < d; ++i) {
+    const int kk = order[i];
+    update_one_core_global(cores, basis, kk, lam, DtD_list, yc, w_obs,
+                           /*apply=*/true);
+    visited[i] = kk + 1;
+  }
+
+  List out_cores = cubes_to_list(cores);
+  arma::vec f = tt_contraction_d_cpp(out_cores, basis_list);
+  return List::create(
+      _["cores"] = out_cores,
+      _["f"] = f,
+      _["lambda"] = lam,
+      _["margin_order"] = visited,
+      _["n_core_updates"] = d,
+      _["method"] = "global_fixed_sweep_cpp");
 }

@@ -142,3 +142,97 @@ tt_als_core_update_global <- function(y, cores, intercept, basis, k, lambda,
     backend = backend
   )
 }
+
+#' One Gauss–Seidel ALS sweep under global \(P_k^{\mathrm{full}}\) (fixed λ).
+#'
+#' **P2 building block.** Visits every margin in `margin_order` (default `1:d`).
+#' No cGCV, no multi-sweep loop, no intercept refresh inside the sweep
+#' (matches one pass of fixed-λ ALS with frozen `yc`). Gaussian /
+#' `null_space = "joint"` only.
+#'
+#' @param margin_order Integer permutation of `1:d` (LTR default; use `d:1`
+#'   for RTL). Arbitrary permutations rebuild interfaces each core.
+#' @inheritParams tt_als_core_update_global
+#' @return List with updated `cores`, `f` (TT fit), global `rss` / `penalty` /
+#'   `objective`, and `margin_order`.
+#' @keywords internal
+#' @noRd
+tt_als_sweep_global <- function(y, cores, intercept, basis, lambda,
+                                offset = NULL, weights = NULL,
+                                penalty_order = 2L,
+                                margin_order = NULL,
+                                backend = c("R", "Rcpp"),
+                                y_centered = NULL) {
+  backend <- match.arg(backend)
+  d <- length(cores)
+  y <- as.numeric(y)
+  n <- length(y)
+  offset <- normalize_offset(offset, n)
+  w <- normalize_weights(weights, n)
+  intercept <- as.numeric(intercept)[1L]
+  lambda <- as.numeric(lambda)
+  if (length(lambda) == 1L) lambda <- rep(lambda, d)
+  if (length(lambda) != d) stop("`lambda` length must be 1 or d.", call. = FALSE)
+  margin_order <- .cgcv_margin_order(margin_order, d)
+
+  yc <- if (is.null(y_centered)) {
+    as.numeric(y - offset - intercept)
+  } else {
+    as.numeric(y_centered)
+  }
+  if (length(yc) != n) stop("`y_centered` length mismatch.", call. = FALSE)
+
+  cores0 <- lapply(cores, function(C) array(as.numeric(C), dim = dim(C)))
+
+  if (identical(backend, "Rcpp")) {
+    if (!exists("tt_als_sweep_global_cpp", mode = "function")) {
+      stop("tt_als_sweep_global_cpp not available.", call. = FALSE)
+    }
+    DtD_list <- tt_DtD_list(cores0, penalty_order, cyclic = attr(basis, "cyclic"))
+    raw <- tt_als_sweep_global_cpp(
+      yc = yc,
+      cores_list = cores0,
+      basis_list = basis,
+      lambda = lambda,
+      DtD_list = DtD_list,
+      weight = w,
+      margin_order = as.integer(margin_order)
+    )
+    cores_new <- lapply(seq_len(d), function(j) {
+      array(as.numeric(raw$cores[[j]]), dim = dim(cores0[[j]]))
+    })
+    f <- as.numeric(raw$f)
+    order_out <- as.integer(raw$margin_order)
+  } else {
+    cores_new <- cores0
+    for (k in margin_order) {
+      step <- tt_als_core_update_global(
+        y, cores_new, intercept, basis, k, lambda,
+        offset = offset, weights = w, penalty_order = penalty_order,
+        backend = "R", y_centered = yc
+      )
+      cores_new <- step$cores
+    }
+    f <- as.numeric(tt_contraction(cores_new, basis))
+    order_out <- as.integer(margin_order)
+  }
+
+  q <- tt_gaussian_Q(
+    y, cores_new, intercept, basis, lambda,
+    offset = offset, weights = w,
+    penalty_order = penalty_order,
+    cyclic = attr(basis, "cyclic")
+  )
+
+  list(
+    cores = cores_new,
+    f = f,
+    rss = q$rss,
+    penalty = q$penalty,
+    objective = q$value,
+    eta = offset + intercept + f,
+    lambda = lambda,
+    margin_order = order_out,
+    backend = backend
+  )
+}
