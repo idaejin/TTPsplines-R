@@ -46,7 +46,7 @@ tt_null_space_design <- function(basis, U) {
   Z
 }
 
-#' Build X0 = [1 | null tensor design] and check size / cyclic.
+#' Build X0 = cbind(1, null tensor design) and check size / cyclic.
 #' @keywords internal
 #' @noRd
 tt_null_space_X0 <- function(basis, penalty_order, max_npar = 4096L,

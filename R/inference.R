@@ -409,16 +409,32 @@ vcov.ttpspline <- function(object,
   inf$scale * (Hp_inv %*% mid)
 }
 
-#' @rdname predict.ttpspline
+#' Predict from a TT P-spline fit.
+#'
+#' Point predictions on the link or response scale. With `se.fit = TRUE`,
+#' returns conditional (rank-and-lambda fixed) pointwise standard errors on
+#' the **link** scale; see vignette `uncertainty`.
+#'
+#' @param object A `"ttpspline"` fit.
+#' @param newdata Optional covariate matrix (same columns / order as training).
+#'   Default uses the training design.
+#' @param type `"link"` or `"response"`.
+#' @param offset Optional offset for `newdata` (default: training offset, or 0).
+#' @param linear,smooth Optional overrides for parametric / additive smooth
+#'   terms when present on `object`.
 #' @param se.fit If `TRUE`, return list with `fit` and `se.fit`.
 #'   `se.fit` is always on the **link** scale.
 #' @param interval `"none"` or `"confidence"` (pointwise, conditional on
-#'   rank and \(\lambda\); not simultaneous bands). For GLMs, intervals are
+#'   rank and lambda; not simultaneous bands). For GLMs, intervals are
 #'   formed on the link scale then mapped with the inverse link when
 #'   `type = "response"`.
 #' @param level Confidence level for intervals.
 #' @param vcov_type `"bayesian"` (default for `se.fit`) or `"frequentist"`.
-#' @param full_cov Reserved; must be `FALSE` (no m×m prediction covariance).
+#' @param full_cov Reserved; must be `FALSE` (no m-by-m prediction covariance).
+#' @param ... Unused.
+#' @return A numeric vector of predictions, or a list when `se.fit` / intervals
+#'   are requested.
+#' @seealso [vcov.ttpspline()], [ttps()], vignette("uncertainty")
 #' @export
 predict.ttpspline <- function(object,
                               newdata = NULL,

@@ -66,10 +66,10 @@ block_penalty <- function(penalties, lambda) {
   out
 }
 
-#' Penalty value and per-core gradients: 0.5 sum_k λ_k g'P g.
+#' Penalty value and per-core gradients: 0.5 * sum_k lambda_k * g' P g.
 #'
 #' This is the *separable* ALS surrogate (own-margin only). For the exact
-#' global discrete P-spline penalty use [tt_global_penalty_value()].
+#' global discrete P-spline penalty use `tt_global_penalty_value()`.
 #'
 #' @keywords internal
 #' @noRd
@@ -359,10 +359,10 @@ tt_penalty_prepare_right_envs <- function(cores, lambda, DtD_list) {
   list(R0 = R0, RP = RP)
 }
 
-#' Assemble P_own / P_other / P_full from left/right environments at core k.
+#' Assemble P_own / P_other / P_full from left/right environments at a core.
 #'
-#' `P_own` is returned **without** λ_k (same contract as
-#' [core_penalty_own_exact()]); callers form `λ_k P_own + P_other`.
+#' `P_own` is returned **without** lambda_k (same contract as
+#' `core_penalty_own_exact()`); callers form `lambda_k * P_own + P_other`.
 #' @keywords internal
 #' @noRd
 tt_penalty_from_envs <- function(L0, LP, R0, RP, DtD_k, lambda_k, p) {
@@ -383,10 +383,10 @@ tt_penalty_from_envs <- function(L0, LP, R0, RP, DtD_k, lambda_k, p) {
   )
 }
 
-#' Exact conditional P_k^full via left/right cumulative penalty environments.
+#' Exact conditional full penalty via left/right cumulative environments.
 #'
-#' Algebraically equivalent to [tt_conditional_penalty_full_tt()] / the dense
-#' reference, but avoids the O(m_k^2) unit-core loop.
+#' Algebraically equivalent to `tt_conditional_penalty_full_tt()` / the dense
+#' reference, but avoids the O(m^2) unit-core loop.
 #'
 #' @keywords internal
 #' @noRd

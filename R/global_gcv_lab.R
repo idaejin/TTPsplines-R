@@ -227,7 +227,7 @@
 #' @param refit_fun Function `(y_new, fit_base, ...)` returning a `"ttpspline"`
 #'   (default: warm-started [ttps()] ALS at the same rank / lambda).
 #' @param M Number of Monte Carlo probes.
-#' @param epsilon_rel Relative FD step (see [.tt_lab_epsilon()]).
+#' @param epsilon_rel Relative FD step (see `.tt_lab_epsilon()`).
 #' @param scheme `"forward"` or `"central"`.
 #' @param probe_seed Seed for Rademacher draws (RNG state restored).
 #' @param probes Optional `n x M` probe matrix (overrides `probe_seed` / `M`).

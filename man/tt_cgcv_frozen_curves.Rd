@@ -2,7 +2,7 @@
 % Please edit documentation in R/cgcv_outer.R
 \name{tt_cgcv_frozen_curves}
 \alias{tt_cgcv_frozen_curves}
-\title{Frozen-fit conditional cGCV curves (diagnostic; no λ updates).}
+\title{Frozen-fit conditional cGCV curves (diagnostic; no lambda updates).}
 \usage{
 tt_cgcv_frozen_curves(
   fit,
@@ -17,12 +17,12 @@ tt_cgcv_frozen_curves(
 )
 }
 \arguments{
-\item{fit}{A \code{"ttpspline"} fit (preferably fixed-λ) or the list returned by
+\item{fit}{A \code{"ttpspline"} fit (preferably fixed-lambda) or the list returned by
 an internal ALS/PIRLS fitter with \code{cores}, \code{lambda}, \code{intercept}.}
 
 \item{y, X, basis}{Optional; taken from \code{fit} when available.}
 
-\item{grid}{Numeric λ grid (default log-spaced over \code{fit$lambda_bounds}).}
+\item{grid}{Numeric lambda grid (default log-spaced over \code{fit$lambda_bounds}).}
 
 \item{weight}{Optional PIRLS/Gaussian weights for the working response.}
 
@@ -32,7 +32,7 @@ an internal ALS/PIRLS fitter with \code{cores}, \code{lambda}, \code{intercept}.
 List with \code{proposals}, \code{curves}, \code{lambda_frozen}, \code{penalty_mode}.
 }
 \description{
-Fit (or reuse) a TT model at fixed \(\boldsymbol\lambda\), freeze cores,
+Fit (or reuse) a TT model at fixed lambda, freeze cores,
 then evaluate each margin's conditional GCV on a log-grid using the same
-frozen \(P_{k,-k}\) / design.
+frozen P_{k,-k} / design.
 }

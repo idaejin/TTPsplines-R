@@ -170,13 +170,13 @@ glam_grid_bases <- function(axes, k = 10, degree = 3L) {
   list(B = B, knots = knots, axes = axes, p = k, degree = degree)
 }
 
-#' Fixed-λ Gaussian GLAM on a d-way grid (Currie–Durbán–Eilers).
+#' Fixed-lambda Gaussian GLAM on a d-way grid (Currie-Durban-Eilers).
 #'
 #' Exposed for compression benchmarks; scattered-data users should
 #' prefer [ttps()].
 #'
 #' @param Y d-way array.
-#' @param B_list Marginal bases (`n_k × p_k`).
+#' @param B_list Marginal bases (`n_k` by `p_k`).
 #' @param lambda Fixed smoothing (scalar or length-`d`).
 #' @param penalty_order Difference penalty order.
 #' @export
@@ -201,7 +201,7 @@ glam_fit_gaussian <- function(Y, B_list, lambda = 1, penalty_order = 2L) {
   )
 }
 
-#' Fixed-λ Poisson GLAM on a grid (Currie–Durbán–Eilers PIRLS).
+#' Fixed-lambda Poisson GLAM on a grid (Currie-Durban-Eilers PIRLS).
 #'
 #' Fits a Poisson log-linear P-spline on a regular multiway array using
 #' GLAM / rotated-H algebra (no explicit Kronecker design). Supports an
@@ -209,7 +209,7 @@ glam_fit_gaussian <- function(Y, B_list, lambda = 1, penalty_order = 2L) {
 #' Method of Currie, Durbán and Eilers (2006).
 #'
 #' @param Y d-way count array.
-#' @param B_list Marginal bases (`n_k × p_k`), e.g. from [glam_grid_bases()].
+#' @param B_list Marginal bases (`n_k` by `p_k`), e.g. from [glam_grid_bases()].
 #' @param lambda Fixed smoothing (scalar or length-`d`).
 #' @param offset Optional d-way array added on the linear predictor
 #'   (typically `log(exposure)`). Default `0`.
@@ -310,7 +310,7 @@ glam_fit_poisson <- function(Y, B_list, lambda = 1, offset = NULL,
   )
 }
 
-#' Simulate a Currie–Durbán–Eilers-style Poisson age × year array.
+#' Simulate a Currie-Durban-Eilers-style Poisson age x year array.
 #'
 #' Builds a smooth log-rate surface on an age–period grid, applies exposures,
 #' and draws Poisson counts — the classical GLAM mortality-style demo setting.

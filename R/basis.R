@@ -1,7 +1,7 @@
 #' Default spline domain for a margin (open or cyclic).
 #'
-#' If all finite values lie in \([0,1]\) (within a tiny tolerance), use the
-#' unit interval so prediction on a nice \([0,1]\) grid does not fall outside
+#' If all finite values lie in the unit interval 0-1 (within a tiny tolerance), use the
+#' unit interval so prediction on a nice 0-1 grid does not fall outside
 #' the knot span (which would zero the B-spline basis under `outer.ok`).
 #' Otherwise use the empirical range.
 #' @keywords internal
@@ -31,7 +31,7 @@ make_knots <- function(x, k, degree = 3, xl = NULL, xr = NULL) {
   c(rep(xl, degree + 1), inner, rep(xr, degree + 1))
 }
 
-#' Cyclic B-spline basis on [xl, xr] with `k` periodic functions (Eilers-style).
+#' Cyclic B-spline basis on period (xl, xr) with `k` periodic functions (Eilers-style).
 #'
 #' Equally spaced extended knots; wrap the last `degree` columns into the first
 #' so the basis is periodic with period `xr - xl`.
@@ -82,7 +82,7 @@ bspline_basis <- function(x, knots, degree = 3) {
   splines::splineDesign(knots, x, ord = degree + 1, outer.ok = TRUE)
 }
 
-#' Equally spaced knot metadata for a cyclic margin (period [xl, xr]).
+#' Equally spaced knot metadata for a cyclic margin (period xl to xr).
 #' @keywords internal
 #' @noRd
 make_cyclic_knots <- function(xl, xr, k, degree = 3) {
@@ -120,7 +120,7 @@ normalize_cyclic <- function(cyclic, d) {
   cyclic
 }
 
-#' Period [xl, xr] for a cyclic margin.
+#' Period (xl, xr) for a cyclic margin.
 #' @keywords internal
 #' @noRd
 cyclic_period_range <- function(x, period = NULL) {
@@ -145,11 +145,11 @@ cyclic_period_range <- function(x, period = NULL) {
 #'
 #' @param cyclic Logical scalar or length-`d` flags: use a **circular**
 #'   B-spline basis (and, at penalty construction, a circular difference
-#'   penalty) on that margin. For hour-of-day, map to \([0,1]\) (fraction of
-#'   day) and set the corresponding flag to `TRUE` (period defaults to
-#'   \([0,1]\)).
+#'   penalty) on that margin. For hour-of-day, map to the unit interval 0-1
+#'   (fraction of day) and set the corresponding flag to `TRUE` (period
+#'   defaults to 0-1).
 #' @param period Optional length-`d` list of `c(xl,xr)` periods for cyclic
-#'   margins (`NULL` entries use [cyclic_period_range()]).
+#'   margins (`NULL` entries use `cyclic_period_range()`).
 #' @keywords internal
 build_marginal_bases <- function(X, k = 10, degree = 3, knots = NULL,
                                  cyclic = NULL, period = NULL) {

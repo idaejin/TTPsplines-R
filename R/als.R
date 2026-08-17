@@ -481,6 +481,7 @@ tt_als_fit_cgcv_outer <- function(y, basis, ranks, lambda_spec, control,
 #' Legacy full-sweep Rcpp ALS used the own-margin surrogate and is no longer
 #' a production fitter. Penalty helpers remain available via Rcpp.
 #' @keywords internal
+#' @noRd
 tt_als_fit_rcpp <- function(y, basis, ranks, lambda_spec, control, penalty_order = 2,
                             init_cores = NULL, offset = NULL, weights = NULL,
                             linear = NULL, smooth = NULL) {

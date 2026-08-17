@@ -29,7 +29,7 @@ tt_global_gdf_mc(
 
 \item{M}{Number of Monte Carlo probes.}
 
-\item{epsilon_rel}{Relative FD step (see \code{\link[=.tt_lab_epsilon]{.tt_lab_epsilon()}}).}
+\item{epsilon_rel}{Relative FD step (see \code{.tt_lab_epsilon()}).}
 
 \item{scheme}{\code{"forward"} or \code{"central"}.}
 

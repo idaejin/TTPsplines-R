@@ -9,22 +9,22 @@ tt_design_core_d_cpp <- function(Left, Right, Bk) {
 #'
 #' Methods:
 #' - `"blas"`: materialize X then BLAS `X' diag(w) X` / `X' (w*z)` (reference).
-#' - `"fused"`: per-observation outer products (no n×q matrix).
+#' - `"fused"`: per-observation outer products (no n-by-q matrix).
 #' - `"fused_blocked"`: tile rows, small X blocks + BLAS syrk/gemm;
 #'   optional OpenMP reduction over observations via `n_threads`.
-#' - `"kron"`: per-observation Kronecker expansion of (RR')⊗(BB')⊗(LL').
+#' - `"kron"`: per-observation Kronecker expansion of (RR') otimes (BB') otimes (LL').
 #'
-#' Vectorization matches [tt_design_core_d_cpp]: a fastest, then j, then b
-#' so \(x_i = R_i \otimes B_i \otimes L_i\).
+#' Vectorization matches `tt_design_core_d_cpp`: a fastest, then j, then b
+#' so `x_i = R_i otimes B_i otimes L_i`.
 #'
 #' @param n_threads Threads for `fused_blocked` observation reduction (`1` = serial).
-#' @keywords internal
+#' @noRd
 tt_gram_rhs_cpp <- function(Left, Right, Bk, z, weight = NULL, method = "fused_blocked", block_size = 64L, n_threads = 1L) {
     .Call(`_TTPsplines_tt_gram_rhs_cpp`, Left, Right, Bk, z, weight, method, block_size, n_threads)
 }
 
 #' TRUE if the shared library was built with OpenMP.
-#' @keywords internal
+#' @noRd
 tt_gram_omp_available <- function() {
     .Call(`_TTPsplines_tt_gram_omp_available`)
 }
@@ -45,87 +45,133 @@ tt_contraction_d_cpp <- function(cores_list, basis_list) {
     .Call(`_TTPsplines_tt_contraction_d_cpp`, cores_list, basis_list)
 }
 
-#' Full TT-ALS fit (Gaussian, fixed anisotropic λ).
-#' Optional observation `weights` / `offset` (empty ⇒ ones / zeros).
-#' Returns cores, mu (=eta), optional jacobian, block sizes.
+#' Full TT-ALS fit (Gaussian, fixed anisotropic lambda).
+#'
+#' Optional observation `weights` / `offset` (empty means ones / zeros).
+#' Returns cores, mu (= eta), optional jacobian, block sizes.
+#'
+#' @noRd
 tt_fit_d_cpp <- function(y, basis_list, init_cores, lambda, penalties_list, sweeps, return_jacobian = TRUE, weights = NULL, offset = NULL) {
     .Call(`_TTPsplines_tt_fit_d_cpp`, y, basis_list, init_cores, lambda, penalties_list, sweeps, return_jacobian, weights, offset)
 }
 
-#' Effective DF: tr[(J'J + P)^{-1} J'J]
+#' Effective DF as trace of the influence matrix.
+#'
+#' Computes tr((J'J + P)^{-1} J'J).
+#'
+#' @noRd
 effective_df_cpp <- function(jacobian, penalty) {
     .Call(`_TTPsplines_effective_df_cpp`, jacobian, penalty)
 }
 
-#' Build weighted Gram S=X'WX and RHS b=X'W zc (materializes X).
+#' Build weighted Gram S = X'WX and RHS b = X'W zc (materializes X).
+#'
+#' @noRd
 weighted_core_system_cpp <- function(zc, Left, Right, Bk, weight) {
     .Call(`_TTPsplines_weighted_core_system_cpp`, zc, Left, Right, Bk, weight)
 }
 
-#' Conditional GCV value / coef for fixed λ (weighted or unweighted via Xw,yw).
+#' Conditional GCV value and coef for fixed lambda.
+#'
+#' Weighted or unweighted via Xw, yw.
+#'
+#' @noRd
 conditional_gcv_cpp <- function(yw, Xw, S, P, b, lambda) {
     .Call(`_TTPsplines_conditional_gcv_cpp`, yw, Xw, S, P, b, lambda)
 }
 
-#' Brent/golden optimize λ on conditional GCV (log scale).
+#' Brent/golden optimize lambda on conditional GCV (log scale).
+#'
+#' @noRd
 optimize_lambda_gcv_cpp <- function(yw, Xw, S, P, b, lambda_min = 1e-2, lambda_max = 1e2, tol = 1e-3) {
     .Call(`_TTPsplines_optimize_lambda_gcv_cpp`, yw, Xw, S, P, b, lambda_min, lambda_max, tol)
 }
 
-#' Weighted core update with optional cGCV λ (criterion: "fixed" | "gcv").
+#' Weighted core update with optional cGCV lambda.
+#'
+#' Criterion is `"fixed"` or `"gcv"`.
+#'
+#' @noRd
 weighted_core_update_cgcv_cpp <- function(zc, Left, Right, Bk, weight, penalty, lambda, criterion = "gcv", lambda_min = 1e-2, lambda_max = 1e2, tol = 1e-3) {
     .Call(`_TTPsplines_weighted_core_update_cgcv_cpp`, zc, Left, Right, Bk, weight, penalty, lambda, criterion, lambda_min, lambda_max, tol)
 }
 
 #' Gaussian TT-ALS with per-core conditional GCV (Rcpp).
-#' Optional observation `weights` / `offset` (empty ⇒ ones / zeros).
+#'
+#' Optional observation `weights` / `offset` (empty means ones / zeros).
+#'
+#' @noRd
 tt_cgcv_fit_cpp <- function(y, basis_list, init_cores, penalties_list, lambda_init, sweeps = 12L, lambda_min = 1e-2, lambda_max = 1e2, tol = 1e-3, tol_lambda = 1e-3, return_jacobian = FALSE, weights = NULL, offset = NULL) {
     .Call(`_TTPsplines_tt_cgcv_fit_cpp`, y, basis_list, init_cores, penalties_list, lambda_init, sweeps, lambda_min, lambda_max, tol, tol_lambda, return_jacobian, weights, offset)
 }
 
 #' GLM PIRLS + weighted TT-ALS with per-core conditional GCV (Rcpp).
-#' family: "bernoulli" | "poisson" (gaussian → use tt_cgcv_fit_cpp).
-#' Optional observation `weights` / `offset` (empty ⇒ ones / zeros).
+#'
+#' Family is `"bernoulli"` or `"poisson"` (gaussian: use `tt_cgcv_fit_cpp`).
+#' Optional observation `weights` / `offset` (empty means ones / zeros).
+#'
+#' @noRd
 tt_glm_pirls_cgcv_cpp <- function(y, basis_list, init_cores, penalties_list, family, lambda_init, pirls_iter = 12L, als_sweeps = 4L, lambda_min = 1e-2, lambda_max = 1e2, tol = 1e-3, tol_dev = 1e-6, select_lambda = TRUE, weights = NULL, offset = NULL) {
     .Call(`_TTPsplines_tt_glm_pirls_cgcv_cpp`, y, basis_list, init_cores, penalties_list, family, lambda_init, pirls_iter, als_sweeps, lambda_min, lambda_max, tol, tol_dev, select_lambda, weights, offset)
 }
 
-#' Exact conditional P_k^full = A^T S_λ A via TT contractions.
-#' Returns list(P_own, P_other, P_full). k is 1-based (R).
-#' DtD_list: length-d list of p_m x p_m matrices.
+#' Exact conditional full penalty via TT contractions.
+#'
+#' Computes P_k^full = A^T S_lambda A. Returns list(P_own, P_other, P_full).
+#' Margin index is 1-based (R). `DtD_list` is length-d list of p_m x p_m matrices.
+#'
+#' @noRd
 tt_conditional_penalty_full_cpp <- function(cores_list, k, lambda, DtD_list) {
     .Call(`_TTPsplines_tt_conditional_penalty_full_cpp`, cores_list, k, lambda, DtD_list)
 }
 
-#' Global discrete P-spline penalty value 0.5 * sum_m λ_m <Θ, T_m Θ>.
+#' Global discrete P-spline penalty value.
+#'
+#' Returns 0.5 * sum_m lambda_m <Theta, T_m Theta>.
+#'
+#' @noRd
 tt_global_penalty_value_cpp <- function(cores_list, lambda, DtD_list) {
     .Call(`_TTPsplines_tt_global_penalty_value_cpp`, cores_list, lambda, DtD_list)
 }
 
-#' Gaussian core update with optional fixed penalty offset P0 (for P_k^full).
-#' Solves (X'X + P0 + λ P) g = X'y with ridge on the system.
+#' Gaussian core update with optional fixed penalty offset P0.
+#'
+#' Solves (X'X + P0 + lambda P) g = X'y with ridge on the system.
+#' Used for P_k^full updates.
+#'
+#' @noRd
 gaussian_core_update_p0_cpp <- function(yc, Left, Right, Bk, penalty, lambda, P0) {
     .Call(`_TTPsplines_gaussian_core_update_p0_cpp`, yc, Left, Right, Bk, penalty, lambda, P0)
 }
 
 #' Precompute right ordinary / cumulative-penalty bond environments.
-#' Returns list(R0, RP); each length-d, R0[[k]] / RP[[k]] are r_k x r_k.
+#'
+#' Returns list(R0, RP); each length-d. Bond matrices are r_t by r_t.
+#'
+#' @noRd
 tt_penalty_prepare_right_envs_cpp <- function(cores_list, lambda, DtD_list) {
     .Call(`_TTPsplines_tt_penalty_prepare_right_envs_cpp`, cores_list, lambda, DtD_list)
 }
 
 #' Absorb one core into left environments.
+#'
+#' @noRd
 tt_penalty_left_env_absorb_cpp <- function(L0, LP, Ct, DtD, lambda_t) {
     .Call(`_TTPsplines_tt_penalty_left_env_absorb_cpp`, L0, LP, Ct, DtD, lambda_t)
 }
 
 #' Assemble P_own (unscaled), P_other, P_full from environments.
+#'
+#' @noRd
 tt_penalty_from_envs_cpp <- function(L0, LP, R0, RP, DtD_k, lambda_k, p) {
     .Call(`_TTPsplines_tt_penalty_from_envs_cpp`, L0, LP, R0, RP, DtD_k, lambda_k, p)
 }
 
-#' Exact conditional P_k^full via left/right cumulative penalty environments.
-#' k is 1-based. Prefer this over the legacy unit-core path.
+#' Exact conditional full penalty via left/right environments.
+#'
+#' Margin index is 1-based. Prefer this over the legacy unit-core path.
+#'
+#' @noRd
 tt_conditional_penalty_full_env_cpp <- function(cores_list, k, lambda, DtD_list) {
     .Call(`_TTPsplines_tt_conditional_penalty_full_env_cpp`, cores_list, k, lambda, DtD_list)
 }

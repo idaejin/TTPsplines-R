@@ -359,16 +359,16 @@
   )
 }
 
-#' Frozen-fit conditional cGCV curves (diagnostic; no λ updates).
+#' Frozen-fit conditional cGCV curves (diagnostic; no lambda updates).
 #'
-#' Fit (or reuse) a TT model at fixed \(\boldsymbol\lambda\), freeze cores,
+#' Fit (or reuse) a TT model at fixed lambda, freeze cores,
 #' then evaluate each margin's conditional GCV on a log-grid using the same
-#' frozen \(P_{k,-k}\) / design.
+#' frozen P_{k,-k} / design.
 #'
-#' @param fit A `"ttpspline"` fit (preferably fixed-λ) or the list returned by
+#' @param fit A `"ttpspline"` fit (preferably fixed-lambda) or the list returned by
 #'   an internal ALS/PIRLS fitter with `cores`, `lambda`, `intercept`.
 #' @param y,X,basis Optional; taken from `fit` when available.
-#' @param grid Numeric λ grid (default log-spaced over `fit$lambda_bounds`).
+#' @param grid Numeric lambda grid (default log-spaced over `fit$lambda_bounds`).
 #' @param weight Optional PIRLS/Gaussian weights for the working response.
 #' @param z Optional working response (GLM); default uses `y` / Gaussian.
 #' @return List with `proposals`, `curves`, `lambda_frozen`, `penalty_mode`.

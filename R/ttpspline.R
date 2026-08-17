@@ -85,7 +85,7 @@
 #'   the likelihood (useful for masking empty array cells).
 #' @param cyclic Logical scalar or length-`d` flags for **circular** P-spline
 #'   margins (periodic B-spline basis + circular difference penalty). For
-#'   hour-of-day, map to \([0,1]\) and set that margin to `TRUE`.
+#'   hour-of-day, map to the unit interval 0-1 and set that margin to `TRUE`.
 #' @param period Optional length-`d` list of `c(xl,xr)` for cyclic margins.
 #'
 #' @return An object of class `"ttpspline"`.

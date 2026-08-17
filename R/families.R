@@ -249,7 +249,7 @@ normalize_weights <- function(weights, n) {
   weights
 }
 
-#' True GLM + TT penalty objective at (cores, intercept[, beta]).
+#' True GLM + TT penalty objective at cores, intercept, and optional beta.
 #' @keywords internal
 tt_glm_penalized_objective <- function(y, cores, intercept, basis, penalties,
                                        lambda, family, offset = NULL,

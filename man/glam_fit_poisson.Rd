@@ -2,7 +2,7 @@
 % Please edit documentation in R/glam.R
 \name{glam_fit_poisson}
 \alias{glam_fit_poisson}
-\title{Fixed-λ Poisson GLAM on a grid (Currie–Durbán–Eilers PIRLS).}
+\title{Fixed-lambda Poisson GLAM on a grid (Currie-Durban-Eilers PIRLS).}
 \usage{
 glam_fit_poisson(
   Y,
@@ -18,7 +18,7 @@ glam_fit_poisson(
 \arguments{
 \item{Y}{d-way count array.}
 
-\item{B_list}{Marginal bases (\verb{n_k × p_k}), e.g. from \code{\link[=glam_grid_bases]{glam_grid_bases()}}.}
+\item{B_list}{Marginal bases (\code{n_k} by \code{p_k}), e.g. from \code{\link[=glam_grid_bases]{glam_grid_bases()}}.}
 
 \item{lambda}{Fixed smoothing (scalar or length-\code{d}).}
 

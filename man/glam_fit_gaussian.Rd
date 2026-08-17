@@ -2,14 +2,14 @@
 % Please edit documentation in R/glam.R
 \name{glam_fit_gaussian}
 \alias{glam_fit_gaussian}
-\title{Fixed-λ Gaussian GLAM on a d-way grid (Currie–Durbán–Eilers).}
+\title{Fixed-lambda Gaussian GLAM on a d-way grid (Currie-Durban-Eilers).}
 \usage{
 glam_fit_gaussian(Y, B_list, lambda = 1, penalty_order = 2L)
 }
 \arguments{
 \item{Y}{d-way array.}
 
-\item{B_list}{Marginal bases (\verb{n_k × p_k}).}
+\item{B_list}{Marginal bases (\code{n_k} by \code{p_k}).}
 
 \item{lambda}{Fixed smoothing (scalar or length-\code{d}).}
 

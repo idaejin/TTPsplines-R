@@ -2,7 +2,7 @@
 % Please edit documentation in R/glam_compare.R
 \name{compare_glam_tt_gaussian}
 \alias{compare_glam_tt_gaussian}
-\title{Compare Currie–Durbán–Eilers Gaussian GLAM vs TT-P-splines.}
+\title{Compare Currie-Durban-Eilers Gaussian GLAM vs TT-P-splines.}
 \usage{
 compare_glam_tt_gaussian(
   d = 3L,

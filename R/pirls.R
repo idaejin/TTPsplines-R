@@ -595,6 +595,7 @@ tt_pirls_fit_cgcv_outer <- function(y, basis, family, ranks, lambda_spec,
 #' Bernoulli with true-objective step-halving uses the R path (FIX 1–2).
 #'
 #' @keywords internal
+#' @noRd
 tt_pirls_fit_rcpp <- function(y, basis, family, ranks, lambda_spec, control,
                               penalty_order = 2, init_cores = NULL, offset = NULL,
                               weights = NULL, linear = NULL, smooth = NULL) {

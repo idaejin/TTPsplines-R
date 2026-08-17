@@ -54,15 +54,15 @@
 #'                  control = tt_control(max_sweeps = 8, compute_edf = FALSE))
 "friedman"
 
-#' Currie–Durbán–Eilers Poisson age × year array
+#' Currie-Durban-Eilers Poisson age x year array
 #'
-#' Simulated mortality-style counts on a regular age–period grid with known
+#' Simulated mortality-style counts on a regular age-period grid with known
 #' smooth log-rate and exposures. Intended for [glam_fit_poisson()] demos
-#' (Currie–Durbán–Eilers GLAM array methods).
+#' (Currie-Durban-Eilers GLAM array methods).
 #'
 #' @format A list with components:
 #' \describe{
-#'   \item{Y}{41 × 31 integer count array.}
+#'   \item{Y}{41 x 31 integer count array.}
 #'   \item{exposure}{Matching exposure array.}
 #'   \item{age, year}{Grid axes.}
 #'   \item{eta, mu}{True log-rate surface and mean counts.}

@@ -1,4 +1,4 @@
-#' Compare Currie–Durbán–Eilers Gaussian GLAM vs TT-P-splines.
+#' Compare Currie-Durban-Eilers Gaussian GLAM vs TT-P-splines.
 #'
 #' Fits all methods on the **same training grid**, selects TT rank with
 #' [tt_rank_select()] using **training data only**, then evaluates

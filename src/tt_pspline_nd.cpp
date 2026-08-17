@@ -89,16 +89,16 @@ inline void fill_row_design_vec(const arma::mat& Left,
 //'
 //' Methods:
 //' - `"blas"`: materialize X then BLAS `X' diag(w) X` / `X' (w*z)` (reference).
-//' - `"fused"`: per-observation outer products (no n×q matrix).
+//' - `"fused"`: per-observation outer products (no n-by-q matrix).
 //' - `"fused_blocked"`: tile rows, small X blocks + BLAS syrk/gemm;
 //'   optional OpenMP reduction over observations via `n_threads`.
-//' - `"kron"`: per-observation Kronecker expansion of (RR')⊗(BB')⊗(LL').
+//' - `"kron"`: per-observation Kronecker expansion of (RR') otimes (BB') otimes (LL').
 //'
-//' Vectorization matches [tt_design_core_d_cpp]: a fastest, then j, then b
-//' so \(x_i = R_i \otimes B_i \otimes L_i\).
+//' Vectorization matches `tt_design_core_d_cpp`: a fastest, then j, then b
+//' so `x_i = R_i otimes B_i otimes L_i`.
 //'
 //' @param n_threads Threads for `fused_blocked` observation reduction (`1` = serial).
-//' @keywords internal
+//' @noRd
 // [[Rcpp::export]]
 List tt_gram_rhs_cpp(const arma::mat& Left,
                      const arma::mat& Right,
@@ -292,7 +292,7 @@ List tt_gram_rhs_cpp(const arma::mat& Left,
 }
 
 //' TRUE if the shared library was built with OpenMP.
-//' @keywords internal
+//' @noRd
 // [[Rcpp::export]]
 bool tt_gram_omp_available() {
 #ifdef _OPENMP
@@ -421,9 +421,12 @@ arma::vec tt_contraction_d_cpp(const List& cores_list, const List& basis_list) {
   return cur.col(0);
 }
 
-//' Full TT-ALS fit (Gaussian, fixed anisotropic λ).
-//' Optional observation `weights` / `offset` (empty ⇒ ones / zeros).
-//' Returns cores, mu (=eta), optional jacobian, block sizes.
+//' Full TT-ALS fit (Gaussian, fixed anisotropic lambda).
+//'
+//' Optional observation `weights` / `offset` (empty means ones / zeros).
+//' Returns cores, mu (= eta), optional jacobian, block sizes.
+//'
+//' @noRd
 // [[Rcpp::export]]
 List tt_fit_d_cpp(const arma::vec& y,
                   const List& basis_list,
@@ -546,7 +549,11 @@ List tt_fit_d_cpp(const arma::vec& y,
   return out;
 }
 
-//' Effective DF: tr[(J'J + P)^{-1} J'J]
+//' Effective DF as trace of the influence matrix.
+//'
+//' Computes tr((J'J + P)^{-1} J'J).
+//'
+//' @noRd
 // [[Rcpp::export]]
 double effective_df_cpp(const arma::mat& jacobian, const arma::mat& penalty) {
   arma::mat xtx = jacobian.t() * jacobian;
@@ -872,7 +879,9 @@ double glm_init_intercept(const std::string& family,
 
 }  // namespace
 
-//' Build weighted Gram S=X'WX and RHS b=X'W zc (materializes X).
+//' Build weighted Gram S = X'WX and RHS b = X'W zc (materializes X).
+//'
+//' @noRd
 // [[Rcpp::export]]
 List weighted_core_system_cpp(const arma::vec& zc,
                               const arma::mat& Left,
@@ -897,7 +906,11 @@ List weighted_core_system_cpp(const arma::vec& zc,
       _["yw"] = zw);
 }
 
-//' Conditional GCV value / coef for fixed λ (weighted or unweighted via Xw,yw).
+//' Conditional GCV value and coef for fixed lambda.
+//'
+//' Weighted or unweighted via Xw, yw.
+//'
+//' @noRd
 // [[Rcpp::export]]
 List conditional_gcv_cpp(const arma::vec& yw,
                          const arma::mat& Xw,
@@ -913,7 +926,9 @@ List conditional_gcv_cpp(const arma::vec& yw,
       _["rss"] = e.rss);
 }
 
-//' Brent/golden optimize λ on conditional GCV (log scale).
+//' Brent/golden optimize lambda on conditional GCV (log scale).
+//'
+//' @noRd
 // [[Rcpp::export]]
 List optimize_lambda_gcv_cpp(const arma::vec& yw,
                              const arma::mat& Xw,
@@ -932,7 +947,11 @@ List optimize_lambda_gcv_cpp(const arma::vec& yw,
       _["n_eval"] = o.n_eval);
 }
 
-//' Weighted core update with optional cGCV λ (criterion: "fixed" | "gcv").
+//' Weighted core update with optional cGCV lambda.
+//'
+//' Criterion is `"fixed"` or `"gcv"`.
+//'
+//' @noRd
 // [[Rcpp::export]]
 List weighted_core_update_cgcv_cpp(const arma::vec& zc,
                                    const arma::mat& Left,
@@ -979,7 +998,10 @@ List weighted_core_update_cgcv_cpp(const arma::vec& zc,
 }
 
 //' Gaussian TT-ALS with per-core conditional GCV (Rcpp).
-//' Optional observation `weights` / `offset` (empty ⇒ ones / zeros).
+//'
+//' Optional observation `weights` / `offset` (empty means ones / zeros).
+//'
+//' @noRd
 // [[Rcpp::export]]
 List tt_cgcv_fit_cpp(const arma::vec& y,
                      const List& basis_list,
@@ -1097,8 +1119,11 @@ List tt_cgcv_fit_cpp(const arma::vec& y,
 }
 
 //' GLM PIRLS + weighted TT-ALS with per-core conditional GCV (Rcpp).
-//' family: "bernoulli" | "poisson" (gaussian → use tt_cgcv_fit_cpp).
-//' Optional observation `weights` / `offset` (empty ⇒ ones / zeros).
+//'
+//' Family is `"bernoulli"` or `"poisson"` (gaussian: use `tt_cgcv_fit_cpp`).
+//' Optional observation `weights` / `offset` (empty means ones / zeros).
+//'
+//' @noRd
 // [[Rcpp::export]]
 List tt_glm_pirls_cgcv_cpp(const arma::vec& y,
                            const List& basis_list,
@@ -1344,9 +1369,12 @@ static arma::cube unit_core_cube(int rl, int p, int rr, int i) {
   return C;
 }
 
-//' Exact conditional P_k^full = A^T S_λ A via TT contractions.
-//' Returns list(P_own, P_other, P_full). k is 1-based (R).
-//' DtD_list: length-d list of p_m x p_m matrices.
+//' Exact conditional full penalty via TT contractions.
+//'
+//' Computes P_k^full = A^T S_lambda A. Returns list(P_own, P_other, P_full).
+//' Margin index is 1-based (R). `DtD_list` is length-d list of p_m x p_m matrices.
+//'
+//' @noRd
 // [[Rcpp::export]]
 List tt_conditional_penalty_full_cpp(const List& cores_list,
                                      int k,
@@ -1420,7 +1448,11 @@ List tt_conditional_penalty_full_cpp(const List& cores_list,
       _["method"] = "tt_cpp");
 }
 
-//' Global discrete P-spline penalty value 0.5 * sum_m λ_m <Θ, T_m Θ>.
+//' Global discrete P-spline penalty value.
+//'
+//' Returns 0.5 * sum_m lambda_m <Theta, T_m Theta>.
+//'
+//' @noRd
 // [[Rcpp::export]]
 double tt_global_penalty_value_cpp(const List& cores_list,
                                    const arma::vec& lambda,
@@ -1442,8 +1474,12 @@ double tt_global_penalty_value_cpp(const List& cores_list,
   return 0.5 * val;
 }
 
-//' Gaussian core update with optional fixed penalty offset P0 (for P_k^full).
-//' Solves (X'X + P0 + λ P) g = X'y with ridge on the system.
+//' Gaussian core update with optional fixed penalty offset P0.
+//'
+//' Solves (X'X + P0 + lambda P) g = X'y with ridge on the system.
+//' Used for P_k^full updates.
+//'
+//' @noRd
 // [[Rcpp::export]]
 arma::vec gaussian_core_update_p0_cpp(const arma::vec& yc,
                                       const arma::mat& Left,
@@ -1571,7 +1607,10 @@ static arma::vec normalize_lambda_arma(const arma::vec& lambda, int d) {
 }
 
 //' Precompute right ordinary / cumulative-penalty bond environments.
-//' Returns list(R0, RP); each length-d, R0[[k]] / RP[[k]] are r_k x r_k.
+//'
+//' Returns list(R0, RP); each length-d. Bond matrices are r_t by r_t.
+//'
+//' @noRd
 // [[Rcpp::export]]
 List tt_penalty_prepare_right_envs_cpp(const List& cores_list,
                                        const arma::vec& lambda,
@@ -1604,6 +1643,8 @@ List tt_penalty_prepare_right_envs_cpp(const List& cores_list,
 }
 
 //' Absorb one core into left environments.
+//'
+//' @noRd
 // [[Rcpp::export]]
 List tt_penalty_left_env_absorb_cpp(const arma::mat& L0,
                                     const arma::mat& LP,
@@ -1617,6 +1658,8 @@ List tt_penalty_left_env_absorb_cpp(const arma::mat& L0,
 }
 
 //' Assemble P_own (unscaled), P_other, P_full from environments.
+//'
+//' @noRd
 // [[Rcpp::export]]
 List tt_penalty_from_envs_cpp(const arma::mat& L0,
                               const arma::mat& LP,
@@ -1638,8 +1681,11 @@ List tt_penalty_from_envs_cpp(const arma::mat& L0,
       _["method"] = "tt_env_cpp");
 }
 
-//' Exact conditional P_k^full via left/right cumulative penalty environments.
-//' k is 1-based. Prefer this over the legacy unit-core path.
+//' Exact conditional full penalty via left/right environments.
+//'
+//' Margin index is 1-based. Prefer this over the legacy unit-core path.
+//'
+//' @noRd
 // [[Rcpp::export]]
 List tt_conditional_penalty_full_env_cpp(const List& cores_list,
                                          int k,

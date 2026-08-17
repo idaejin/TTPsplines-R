@@ -176,11 +176,9 @@ tt_margin_edf <- function(cores, basis, penalties, lambda,
 
 #' Conditional EDF for each TT margin (ALS core design; cGCV diagnostic).
 #'
-#' For margin \(k\),
-#' \(\mathrm{ed}_k=\operatorname{tr}\bigl[(X_k^\top X_k+\lambda_k P_k)^{-1}X_k^\top X_k\bigr]\)
-#' with \(X_k\) the conditional design for core \(G_k\) at the fitted interfaces.
-#' These do **not** sum to the joint EDF; they match the smoother used inside
-#' conditional cGCV core updates.
+#' For each margin, the conditional EDF is the trace of the core-level
+#' smoother at the fitted interfaces (same quantity used inside conditional
+#' cGCV updates). These do **not** sum to the joint EDF.
 #'
 #' @keywords internal
 #' @noRd
