@@ -183,3 +183,18 @@ tt_conditional_penalty_full_env_cpp <- function(cores_list, k, lambda, DtD_list)
     .Call(`_TTPsplines_tt_conditional_penalty_full_env_cpp`, cores_list, k, lambda, DtD_list)
 }
 
+#' Single-core Gaussian ALS update under global P_k^full (fixed λ).
+#'
+#' P1 building block: one margin `k` (1-based), numeric λ, no cGCV, no sweeps.
+#' Builds TT interfaces, Gram S = Z'WZ / RHS b, P_own / P_other / P_full,
+#' and solves (S + P_full) g = b with the same SPD/ridge policy as R
+#' `update_lambda_fixed()` when P_other is present.
+#'
+#' Does **not** mutate input cores. Caller applies `g` if desired.
+#'
+#' @noRd
+#' @keywords internal
+tt_als_core_update_global_cpp <- function(yc, cores_list, basis_list, k, lambda, DtD_list, weight = NULL) {
+    .Call(`_TTPsplines_tt_als_core_update_global_cpp`, yc, cores_list, basis_list, k, lambda, DtD_list, weight)
+}
+

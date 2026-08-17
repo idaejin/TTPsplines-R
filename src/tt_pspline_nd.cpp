@@ -1723,3 +1723,146 @@ List tt_conditional_penalty_full_env_cpp(const List& cores_list,
   const int p = cores[kk].n_cols;
   return tt_penalty_from_envs_cpp(L0, LP, R0, RP, DtD[kk], lam(kk), p);
 }
+
+// ---------------------------------------------------------------------------
+// P1: single-core fixed-λ ALS update under classical global P_k^full
+// Matches R update_lambda_fixed() when P0 = P_other is present:
+//   prefer exact SPD solve on M = S + P_full; ridge fallback otherwise.
+// No cGCV, no sweep loop — one margin only.
+// ---------------------------------------------------------------------------
+
+static arma::vec solve_spd_arma(const arma::mat& A, const arma::vec& b) {
+  arma::mat U;
+  const bool ok = arma::chol(U, A, "upper");
+  if (!ok) {
+    return arma::solve(A, b, arma::solve_opts::likely_sympd);
+  }
+  arma::vec y = arma::solve(arma::trimatl(U.t()), b);
+  return arma::solve(arma::trimatu(U), y);
+}
+
+static arma::vec solve_spd_ridge_arma(const arma::mat& A, const arma::vec& b) {
+  const double base = ridge_scale_arma(A, 1e-6);
+  const double facs[6] = {1.0, 10.0, 1e2, 1e3, 1e4, 1e5};
+  for (int i = 0; i < 6; ++i) {
+    arma::mat Ar = A;
+    Ar.diag() += facs[i] * base;
+    arma::vec g;
+    bool ok = false;
+    try {
+      g = solve_spd_arma(Ar, b);
+      ok = g.is_finite();
+    } catch (...) {
+      ok = false;
+    }
+    if (ok) return g;
+  }
+  arma::mat Ar = A;
+  const double mean_diag = arma::mean(A.diag());
+  Ar.diag() += 1e-3 * (std::isfinite(mean_diag) ? mean_diag : 1.0);
+  return arma::solve(Ar, b, arma::solve_opts::likely_sympd);
+}
+
+static arma::vec solve_global_core_arma(const arma::mat& M, const arma::vec& b) {
+  // Match R update_lambda_fixed with P0 present: try exact, else ridge.
+  arma::vec g;
+  bool ok = false;
+  try {
+    g = solve_spd_arma(M, b);
+    ok = g.is_finite();
+  } catch (...) {
+    ok = false;
+  }
+  if (!ok) g = solve_spd_ridge_arma(M, b);
+  if (!g.is_finite()) g = solve_spd_ridge_arma(M, b);
+  return g;
+}
+
+//' Single-core Gaussian ALS update under global P_k^full (fixed λ).
+//'
+//' P1 building block: one margin `k` (1-based), numeric λ, no cGCV, no sweeps.
+//' Builds TT interfaces, Gram S = Z'WZ / RHS b, P_own / P_other / P_full,
+//' and solves (S + P_full) g = b with the same SPD/ridge policy as R
+//' `update_lambda_fixed()` when P_other is present.
+//'
+//' Does **not** mutate input cores. Caller applies `g` if desired.
+//'
+//' @noRd
+//' @keywords internal
+// [[Rcpp::export]]
+List tt_als_core_update_global_cpp(const arma::vec& yc,
+                                   const List& cores_list,
+                                   const List& basis_list,
+                                   int k,
+                                   const arma::vec& lambda,
+                                   const List& DtD_list,
+                                   Rcpp::Nullable<Rcpp::NumericVector> weight =
+                                       R_NilValue) {
+  std::vector<arma::cube> cores = list_to_cubes(cores_list);
+  std::vector<arma::mat> basis = list_to_mats(basis_list);
+  const int d = static_cast<int>(cores.size());
+  if (k < 1 || k > d) stop("tt_als_core_update_global_cpp: k out of range");
+  if (static_cast<int>(basis.size()) != d) {
+    stop("tt_als_core_update_global_cpp: basis length mismatch");
+  }
+  if (static_cast<int>(DtD_list.size()) != d) {
+    stop("tt_als_core_update_global_cpp: DtD_list length mismatch");
+  }
+  const int n = yc.n_elem;
+  if (static_cast<int>(basis[0].n_rows) != n) {
+    stop("tt_als_core_update_global_cpp: yc / basis nrow mismatch");
+  }
+  arma::vec lam = normalize_lambda_arma(lambda, d);
+  const int kk = k - 1;
+
+  std::vector<arma::mat> L = build_left_interfaces(cores, basis);
+  std::vector<arma::mat> R = build_right_interfaces(cores, basis);
+  const arma::mat& Left = L[kk];
+  const arma::mat& Right = R[kk];
+  const arma::mat& Bk = basis[kk];
+
+  arma::mat X = tt_design_core_d_cpp(Left, Right, Bk);
+  arma::vec w_obs = weight.isNotNull() ? Rcpp::as<arma::vec>(weight)
+                                       : arma::ones(n);
+  if (static_cast<int>(w_obs.n_elem) != n) {
+    stop("tt_als_core_update_global_cpp: weight length mismatch");
+  }
+  for (arma::uword i = 0; i < w_obs.n_elem; ++i) {
+    if (!std::isfinite(w_obs(i)) || w_obs(i) < 0.0) w_obs(i) = 0.0;
+  }
+  arma::vec sw = arma::sqrt(w_obs);
+  arma::mat Xw = X;
+  Xw.each_col() %= sw;
+  arma::vec yw = sw % yc;
+  arma::mat S = Xw.t() * Xw;
+  arma::vec b = Xw.t() * yw;
+
+  List pen = tt_conditional_penalty_full_env_cpp(cores_list, k, lam, DtD_list);
+  arma::mat P_own = as<arma::mat>(pen["P_own"]);
+  arma::mat P_other = as<arma::mat>(pen["P_other"]);
+  arma::mat P_full = as<arma::mat>(pen["P_full"]);
+
+  arma::mat M = S + P_full;
+  arma::vec g = solve_global_core_arma(M, b);
+
+  // Conditional residual and quadratic penalty on this core
+  const double rss_cond =
+      std::max(0.0, arma::as_scalar(arma::dot(yw, yw) - 2.0 * arma::dot(b, g) +
+                                    arma::as_scalar(g.t() * S * g)));
+  const double pen_cond = 0.5 * arma::as_scalar(g.t() * P_full * g);
+  const double q_cond = 0.5 * rss_cond + pen_cond;
+
+  return List::create(
+      _["S"] = S,
+      _["b"] = b,
+      _["P_own"] = P_own,
+      _["P_other"] = P_other,
+      _["P_full"] = P_full,
+      _["g"] = g,
+      _["rss_cond"] = rss_cond,
+      _["penalty_cond"] = pen_cond,
+      _["q_cond"] = q_cond,
+      _["k"] = k,
+      _["lambda"] = lam,
+      _["method"] = "global_fixed_core_cpp");
+}

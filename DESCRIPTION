@@ -60,6 +60,7 @@ Collate:
     'cgcv_outer.R'
     'edf.R'
     'als.R'
+    'als_core_update.R'
     'pirls.R'
     'optimizer_lbfgs.R'
     'optimizer_gd.R'
