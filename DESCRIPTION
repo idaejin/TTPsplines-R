@@ -54,6 +54,7 @@ Collate:
     'families.R'
     'tt_geometry.R'
     'tt_gram.R'
+    'tt_gram_array.R'
     'lambda.R'
     'smooth.R'
     'dlnm.R'

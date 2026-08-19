@@ -189,10 +189,14 @@
                                  Left = NULL,
                                  Right = NULL,
                                  return_design = FALSE,
-                                 null_proj = NULL) {
+                                 null_proj = NULL,
+                                 array_data = NULL) {
+  # array_data: list(k, L_all, R_all, Y_centered, n_grid) supplied by array-mode ALS.
+  # When present, Left/Right are still required for the penalty (same as before),
+  # but the Gram is computed via tt_gram_rhs_array() instead of tt_design_core().
   if (is.null(Left) || is.null(Right)) {
-    L <- left_interfaces(cores, basis)
-    R <- right_interfaces(cores, basis)
+    L <- if (!is.null(array_data)) array_data$L_all else left_interfaces(cores, basis)
+    R <- if (!is.null(array_data)) array_data$R_all else right_interfaces(cores, basis)
     Left <- L[[k]]
     Right <- R[[k]]
   }
@@ -231,10 +235,29 @@
     ))
   }
   gram_method <- control$gram_method %||% "fused_blocked"
-  use_gram <- !identical(gram_method, "legacy") &&
+  # Array mode overrides the Gram path (no weight, no null_proj, Gaussian only).
+  use_array_gram <- !is.null(array_data) && is.null(weight) && is.null(null_proj)
+  use_gram <- !use_array_gram &&
+    !identical(gram_method, "legacy") &&
     exists("tt_gram_rhs_cpp", envir = asNamespace("TTPsplines"), inherits = FALSE)
   Xk <- NULL
-  if (isTRUE(use_gram)) {
+  if (isTRUE(use_array_gram)) {
+    # Update array_data with current k and fresh interfaces (updated after each core)
+    ad <- array_data
+    ad$k <- k
+    gr <- tt_gram_rhs(
+      Left, Right, basis[[k]], target,
+      weight = NULL, array_data = ad
+    )
+    ws <- make_core_workspace(
+      target, X = NULL, pen_k$P_own, lambda[k],
+      control$lambda_bounds, control$tol_lambda,
+      weight = NULL,
+      use_spectral = use_spec,
+      P0 = pen_k$P_other,
+      S = gr$S, b = gr$b
+    )
+  } else if (isTRUE(use_gram)) {
     gr <- tt_gram_rhs(
       Left, Right, basis[[k]], target,
       weight = weight, method = gram_method,

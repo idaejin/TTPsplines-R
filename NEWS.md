@@ -2,6 +2,24 @@
 
 ## Development (0.0.0.9001)
 
+### Array input mode (`array = TRUE`)
+
+* `ttps(Y, axes = list(...), rank = r, k = k, lambda = ..., array = TRUE)`
+  accepts a d-way array `Y` (dim1 fastest, as from `array(y, dim = c(n1,...,nd))`)
+  plus a list of marginal coordinate vectors `axes`.
+* When `array = TRUE` the conditional Gram and RHS for each TT core are computed
+  **without materialising** the n × q_k design matrix, using the Kronecker
+  structure of the complete grid:
+    - `S_k = kron(R'R, kron(Bk'Bk, L'L))` (Gaussian, unweighted)
+    - `b_k` via triple-mode contraction of `Y_centered` over `(L_uniq, Bk, R_uniq)`
+* `axes` can be omitted; defaults to a unit-interval grid for each margin.
+* Restrictions (first version): Gaussian only; `optimizer = "ALS"`; no
+  `linear=`, `smooth=`, or `null_space = "profiled"`.
+* Result is numerically identical to `array = FALSE` on the same grid data
+  (fitted values differ by ≤ machine epsilon in all tests).
+* New internal functions: `tt_gram_rhs_array()`, `.tt_array_extract_interfaces()`,
+  `.tt_array_rhs()` in `R/tt_gram_array.R`.
+
 ### Null-space modes (TODO-SC-NULL)
 
 * `ttps(..., null_space = )`:

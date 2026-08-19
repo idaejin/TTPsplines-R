@@ -135,7 +135,7 @@
 #' @rdname ttps
 #' @export
 ttps <- function(y,
-                 X,
+                 X = NULL,
                  family = stats::gaussian(),
                  rank = 3,
                  k = 10,
@@ -157,10 +157,72 @@ ttps <- function(y,
                       weights = NULL,
                       cyclic = NULL,
                       period = NULL,
-                      null_space = c("joint", "profiled")) {
+                      null_space = c("joint", "profiled"),
+                      array = FALSE,
+                      axes = NULL) {
   cl <- match.call()
   null_space <- match.arg(null_space)
+
+  # ------------------------------------------------------------------
+  # Array mode: y is a d-way array Y, X is replaced by axes list.
+  # ------------------------------------------------------------------
+  array_data_out <- NULL   # populated below when array = TRUE
+  if (isTRUE(array)) {
+    if (!is.array(y) || length(dim(y)) < 2L) {
+      stop(
+        "`array = TRUE` requires `y` to be a d-way array (d >= 2). ",
+        "Provide Y as array(responses, dim = c(n1, ..., nd)).",
+        call. = FALSE
+      )
+    }
+    n_grid <- dim(y)
+    d_arr  <- length(n_grid)
+    if (!is.null(linear) || !is.null(smooth)) {
+      stop("`array = TRUE` does not support `linear=` or `smooth=`.", call. = FALSE)
+    }
+    if (!identical(null_space, "joint")) {
+      stop("`array = TRUE` only supports null_space = 'joint'.", call. = FALSE)
+    }
+    fam_tmp <- normalize_family(family)
+    if (!identical(family_key(fam_tmp), "gaussian")) {
+      stop("`array = TRUE` is currently Gaussian-only.", call. = FALSE)
+    }
+    if (is.null(axes)) {
+      # Default: unit-interval grid for each margin
+      axes <- lapply(n_grid, function(nk) seq(0, 1, length.out = nk))
+    } else {
+      if (!is.list(axes) || length(axes) != d_arr) {
+        stop("`axes` must be a list of length d (one coordinate vector per margin).",
+             call. = FALSE)
+      }
+      for (j in seq_len(d_arr)) {
+        if (length(axes[[j]]) != n_grid[j]) {
+          stop(sprintf("axes[[%d]] has length %d but dim(y)[%d] = %d.",
+                       j, length(axes[[j]]), j, n_grid[j]),
+               call. = FALSE)
+        }
+      }
+    }
+    if (is.null(names(axes))) names(axes) <- paste0("x", seq_len(d_arr))
+    # Build scattered representation: expand.grid (dim1 fastest)
+    idx <- expand.grid(lapply(n_grid, seq_len), KEEP.OUT.ATTRS = FALSE)
+    X <- do.call(cbind, lapply(seq_len(d_arr), function(j) axes[[j]][idx[[j]]]))
+    colnames(X) <- names(axes)
+    y_sc <- as.numeric(y)  # dim1 fastest — matches expand.grid row order
+    # Store array_data: will be attached after basis is built
+    array_data_out <- list(
+      Y        = y,       # original d-way array (centred later)
+      n_grid   = n_grid,
+      axes     = axes,
+      k        = NA_integer_,   # updated per core visit in ALS
+      L_all    = NULL,          # filled per sweep in ALS
+      R_all    = NULL
+    )
+    y <- y_sc
+  }
+
   fam <- normalize_family(family)
+  if (is.null(X)) stop("`X` must be provided (or use `array = TRUE` with `y` as array).", call. = FALSE)
   y <- as.numeric(y)
   X <- as.matrix(X)
   storage.mode(X) <- "double"
@@ -307,6 +369,17 @@ ttps <- function(y,
     )
     null_info <- raw$null_space_info
   } else {
+    # In array mode, attach marginal bases (B_list) to array_data now that basis is built.
+    if (!is.null(array_data_out)) {
+      # basis[[k]] has nrow = n_total (scattered rows); marginal basis is
+      # bb$B[[k]] of size n_k x p. Reconstruct via glam_grid_bases.
+      bb_arr <- glam_grid_bases(array_data_out$axes,
+                                k = p, degree = as.integer(degree))
+      array_data_out$B_marginal <- bb_arr$B
+      # Y_centered will be updated inside ALS after intercept is known.
+      # Pass Y (not centred) as Y_centered placeholder; ALS will subtract intercept.
+      array_data_out$Y_centered <- array_data_out$Y
+    }
     raw <- .ttpspline_dispatch(
       y = y,
       basis = basis,
@@ -322,7 +395,8 @@ ttps <- function(y,
       offset = offset,
       weights = weights,
       linear = linear,
-      smooth = smooth
+      smooth = smooth,
+      array_data = array_data_out
     )
   }
 
@@ -348,7 +422,10 @@ ttps <- function(y,
     parts <- tt_joint_edf_parts(
       raw$cores, basis, raw$penalties, as.numeric(raw$lambda),
       weight = w_edf, max_npar = control$edf_max_npar,
-      null_proj = null_proj, names = mnames
+      null_proj = null_proj, names = mnames,
+      penalty_order = as.integer(penalty_order),
+      cyclic = cyclic,
+      method = control$edf_method %||% "tedf"
     )
     edf_margin <- parts$edf_margin
     edf_margin_cond <- tt_margin_edf_cond(
@@ -376,8 +453,9 @@ ttps <- function(y,
       edf_tt <- edf
       if (is.finite(edf)) {
         edf_note <- paste0(
-          "joint linearized TT map; edf_margin = block tr(H_kk) ",
-          "(sums to edf); edf_margin_cond = ALS/cGCV diagnostic"
+          "T-EDF: left-orthogonal cores + A'S_lambda A; ",
+          "edf_margin = block tr(H_kk) (sums to edf); ",
+          "edf_margin_cond = ALS/cGCV diagnostic"
         )
       } else if (npar_tt > control$edf_max_npar) {
         edf_note <- sprintf(
@@ -523,7 +601,8 @@ ttpspline <- ttps
 .ttpspline_dispatch <- function(y, basis, fam, key, ranks, lambda_spec,
                                 control, penalty_order, optimizer, backend,
                                 init_cores, offset = NULL, weights = NULL,
-                                linear = NULL, smooth = NULL) {
+                                linear = NULL, smooth = NULL,
+                                array_data = NULL) {
   offset <- normalize_offset(offset, length(y))
   weights <- normalize_weights(weights, length(y))
   linear <- normalize_linear(linear, length(y))
@@ -606,15 +685,17 @@ ttpspline <- ttps
 
   # ALS / PIRLS-ALS (default structure-aware path)
   if (identical(key, "gaussian")) {
-    if (identical(backend, "Rcpp") && is.null(linear) && is.null(smooth)) {
+    if (identical(backend, "Rcpp") && is.null(linear) && is.null(smooth) &&
+        is.null(array_data)) {
       tt_als_fit_rcpp(y, basis, ranks, lambda_spec, control, penalty_order,
                       init_cores = init_cores, offset = offset, weights = weights,
                       linear = linear, smooth = smooth)
     } else {
       out <- tt_als_fit(y, basis, ranks, lambda_spec, control, penalty_order,
                        init_cores = init_cores, offset = offset, weights = weights,
-                       linear = linear, smooth = smooth)
-      out$backend <- "R"
+                       linear = linear, smooth = smooth,
+                       array_data = array_data)
+      out$backend <- if (!is.null(array_data)) "R-array" else "R"
       out
     }
   } else {

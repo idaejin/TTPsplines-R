@@ -10,20 +10,31 @@
 #' @keywords internal
 tt_als_fit <- function(y, basis, ranks, lambda_spec, control, penalty_order = 2,
                        init_cores = NULL, offset = NULL, weights = NULL,
-                       linear = NULL, smooth = NULL) {
+                       linear = NULL, smooth = NULL, array_data = NULL) {
   method <- lambda_spec$method
   if (identical(method, "cGCV") &&
       identical(.cgcv_update_mode(control), "outer_simultaneous")) {
-    return(tt_als_fit_cgcv_outer(
-      y, basis, ranks, lambda_spec, control, penalty_order,
-      init_cores = init_cores, offset = offset, weights = weights,
-      linear = linear, smooth = smooth
-    ))
+    # outer_simultaneous does not yet support array mode; fall back
+    if (!is.null(array_data)) {
+      warning(
+        "array mode is not yet supported with cgcv_update='outer_simultaneous'; ",
+        "falling back to sequential.",
+        call. = FALSE
+      )
+      control$cgcv_update <- "sequential"
+    } else {
+      return(tt_als_fit_cgcv_outer(
+        y, basis, ranks, lambda_spec, control, penalty_order,
+        init_cores = init_cores, offset = offset, weights = weights,
+        linear = linear, smooth = smooth
+      ))
+    }
   }
   tt_als_fit_sequential(
     y, basis, ranks, lambda_spec, control, penalty_order,
     init_cores = init_cores, offset = offset, weights = weights,
-    linear = linear, smooth = smooth
+    linear = linear, smooth = smooth,
+    array_data = array_data
   )
 }
 
@@ -33,7 +44,8 @@ tt_als_fit <- function(y, basis, ranks, lambda_spec, control, penalty_order = 2,
 tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
                                   penalty_order = 2, init_cores = NULL,
                                   offset = NULL, weights = NULL,
-                                  linear = NULL, smooth = NULL) {
+                                  linear = NULL, smooth = NULL,
+                                  array_data = NULL) {
   d <- length(basis)
   p <- ncol(basis[[1]])
   method <- lambda_spec$method
@@ -54,6 +66,10 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
   }
   yc <- y - offset - intercept - tt_linear_contrib(linear, beta) -
     tt_smooth_contrib(smooth)
+  # Array mode: update Y_centered now that intercept is known.
+  if (!is.null(array_data)) {
+    array_data$Y_centered <- array_data$Y - intercept
+  }
   if (is.null(init_cores)) {
     cores <- initialize_tt_cores(p, ranks, seed = control$seed, sd = control$init_sd)
   } else {
@@ -80,6 +96,10 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
   t0 <- proc.time()[["elapsed"]]
   use_spec <- isTRUE(control$use_spectral_gcv)
 
+  # In array mode, precompute marginal basis interfaces once per sweep.
+  # basis_arr: marginal bases (one per margin, n_k x p) from array_data.
+  use_array_mode <- !is.null(array_data)
+
   for (sw in seq_len(control$max_sweeps)) {
     use_cache <- isTRUE(control$design_interface_cache %||% TRUE)
     use_ltr <- use_cache && .tt_is_ltr_order(margin_order, d)
@@ -90,6 +110,13 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
     } else if (use_rtl) {
       L_all <- .tt_design_prepare_left(cores, basis)
       R_cur <- matrix(1, nrow(basis[[1]]), 1)
+    }
+    # Array mode: recompute interfaces (scattered basis) for gram and penalty.
+    # The scattered basis was built from the grid, so left_interfaces has the
+    # right structure to extract L_uniq / R_uniq inside tt_gram_rhs_array().
+    if (use_array_mode) {
+      array_data$L_all <- left_interfaces(cores, basis)
+      array_data$R_all <- right_interfaces(cores, basis)
     }
     for (k in margin_order) {
       if (check_q_descent) {
@@ -110,13 +137,16 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
         Left <- NULL
         Right <- NULL
       }
+      # In array mode, pass current k into array_data for the gram dispatch.
+      ad_k <- if (use_array_mode) { array_data$k <- k; array_data } else NULL
       built <- .cgcv_core_workspace(
         cores, k, lambda, basis, yc, ranks, control,
         weight = w, penalty_order = penalty_order,
         use_spectral = identical(method, "cGCV") && isTRUE(control$use_spectral_gcv),
         compute_op_norms = do_trace,
         Left = Left,
-        Right = Right
+        Right = Right,
+        array_data = ad_k
       )
       Pk <- built$P_own
       penalties[[k]] <- Pk
