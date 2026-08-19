@@ -85,6 +85,48 @@ right_interfaces <- function(cores, basis) {
   R
 }
 
+# Marginal interface functions for array mode.
+#
+# These build the *unique* left/right interfaces L*_k and R*_k using
+# marginal bases (n_m x p), one row per grid point of each margin.
+# Cost: O(n_left * r^2 * p) per step — avoids the O(n * r^2 * p)
+# cost of the scattered path when n = prod(n_m) >> n_left.
+#
+# basis_marginal: list of length d, each element n_m x p (marginal B-splines).
+# cores:          TT cores list (same as in the scattered path).
+
+#' @keywords internal
+#' @noRd
+left_interfaces_marginal <- function(cores, basis_marginal) {
+  d <- length(cores)
+  L <- vector("list", d)
+  L[[1L]] <- matrix(1, 1, 1)       # n_left_1 = 1, r_0 = 1
+  cur <- L[[1L]]
+  if (d >= 2L) {
+    for (k in seq_len(d - 1L)) {
+      cur <- contract_left_step_marginal_cpp(cur, cores[[k]], basis_marginal[[k]])
+      L[[k + 1L]] <- cur
+    }
+  }
+  L
+}
+
+#' @keywords internal
+#' @noRd
+right_interfaces_marginal <- function(cores, basis_marginal) {
+  d <- length(cores)
+  R <- vector("list", d)
+  R[[d]] <- matrix(1, 1, 1)        # n_right_d = 1, r_d = 1
+  cur <- R[[d]]
+  if (d >= 2L) {
+    for (k in d:2) {
+      cur <- contract_right_step_marginal_cpp(cur, cores[[k]], basis_marginal[[k]])
+      R[[k - 1L]] <- cur
+    }
+  }
+  R
+}
+
 #' Conditional design for vec(core_k); order a (fast), j, b (slow).
 #' @keywords internal
 tt_design_core <- function(Left, Right, Bk) {

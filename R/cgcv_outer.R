@@ -235,18 +235,27 @@
     ))
   }
   gram_method <- control$gram_method %||% "fused_blocked"
-  # Array mode overrides the Gram path (no weight, no null_proj, Gaussian only).
-  use_array_gram <- !is.null(array_data) && is.null(weight) && is.null(null_proj)
+  # Array mode overrides the Gram path (unweighted Gaussian, no null_proj).
+  # Use array_data$unweighted_gaussian flag (set before normalize_weights runs)
+  # rather than is.null(weight), which is always FALSE after normalization.
+  use_array_gram <- !is.null(array_data) &&
+    isTRUE(array_data$unweighted_gaussian) &&
+    is.null(null_proj)
   use_gram <- !use_array_gram &&
     !identical(gram_method, "legacy") &&
     exists("tt_gram_rhs_cpp", envir = asNamespace("TTPsplines"), inherits = FALSE)
   Xk <- NULL
   if (isTRUE(use_array_gram)) {
-    # Update array_data with current k and fresh interfaces (updated after each core)
+    # Array mode: use marginal basis (n_k x p) not scattered basis (n x p).
+    Bk_use <- if (!is.null(array_data$B_marginal)) {
+      array_data$B_marginal[[k]]
+    } else {
+      basis[[k]]
+    }
     ad <- array_data
     ad$k <- k
     gr <- tt_gram_rhs(
-      Left, Right, basis[[k]], target,
+      Left, Right, Bk_use, target,
       weight = NULL, array_data = ad
     )
     ws <- make_core_workspace(

@@ -97,36 +97,47 @@
 #' For weighted / GLM use, fall back to [tt_gram_rhs()].
 #'
 #' @param k Margin index (1-based).
-#' @param Left Full left interface matrix for core k (n_total x r_l) as provided
-#'   by ALS (scattered layout, dim1 fastest).
-#' @param Right Full right interface matrix for core k (n_total x r_r) as
-#'   provided by ALS (scattered layout, dim1 fastest).
+#' @param Left Left interface for core k.  When `marginal_iface = TRUE`
+#'   this is already the unique matrix (n_left x r_l) from
+#'   [left_interfaces_marginal()].  When `marginal_iface = FALSE` it is
+#'   the full scattered interface (n_total x r_l) and unique rows are
+#'   extracted internally.
+#' @param Right Analogous right interface.
 #' @param Bk n_k x p marginal B-spline basis for margin k.
 #' @param Y_centered d-way array of centred responses, dim1 fastest.
 #' @param n_grid Integer vector (n_1, ..., n_d).
+#' @param marginal_iface Logical. If TRUE, Left/Right are already the unique
+#'   (marginal) interfaces; no row extraction needed.
 #' @return List with `S` (q_k x q_k), `b` (length q_k), `q` (= q_k), and
 #'   `method = "array_kron"`.
 #' @keywords internal
 #' @noRd
-tt_gram_rhs_array <- function(k, Left, Right, Bk, Y_centered, n_grid) {
-  d <- length(n_grid)
+tt_gram_rhs_array <- function(k, Left, Right, Bk, Y_centered, n_grid,
+                               marginal_iface = FALSE) {
+  d       <- length(n_grid)
   n_total <- prod(n_grid)
   n_left  <- if (k == 1L) 1L else prod(n_grid[seq_len(k - 1L)])
   n_k     <- n_grid[k]
   n_right <- if (k == d) 1L else prod(n_grid[(k + 1L):d])
 
-  # Unique left rows are exactly the first n_left rows in the scattered layout.
-  L_uniq <- Left[seq_len(n_left), , drop = FALSE]
+  if (isTRUE(marginal_iface)) {
+    # Left/Right already are the unique marginal interfaces.
+    L_uniq <- Left
+    R_uniq <- Right
+  } else {
+    # Scattered layout: extract unique rows.
+    # Left: first n_left rows.
+    L_uniq <- Left[seq_len(n_left), , drop = FALSE]
+    # Right: rows at stride n_left * n_k.
+    stride_r <- n_left * n_k
+    idx_r    <- seq(1L, n_total, by = stride_r)
+    R_uniq   <- Right[idx_r[seq_len(n_right)], , drop = FALSE]
+  }
 
-  # Unique right rows are at a fixed stride n_left * n_k in the scattered layout.
-  stride_r <- n_left * n_k
-  idx_r <- seq(1L, n_total, by = stride_r)
-  R_uniq <- Right[idx_r[seq_len(n_right)], , drop = FALSE]
-
-  # Gram via Kronecker product of marginal grams
+  # Gram via Kronecker product of three small marginal grams.
   S <- kronecker(crossprod(R_uniq),
                  kronecker(crossprod(Bk), crossprod(L_uniq)))
-  # RHS via triple-mode contraction
+  # RHS via triple-mode contraction (never forms X_k).
   b <- .tt_array_rhs(L_uniq, Bk, R_uniq, Y_centered, k, n_grid)
   q <- ncol(L_uniq) * ncol(Bk) * ncol(R_uniq)
   list(S = S, b = b, q = q, method = "array_kron")

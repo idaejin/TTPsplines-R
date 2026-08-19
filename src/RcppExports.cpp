@@ -412,6 +412,32 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// contract_left_step_marginal_cpp
+arma::mat contract_left_step_marginal_cpp(const arma::mat& left, const arma::cube& core, const arma::mat& Bk);
+RcppExport SEXP _TTPsplines_contract_left_step_marginal_cpp(SEXP leftSEXP, SEXP coreSEXP, SEXP BkSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type left(leftSEXP);
+    Rcpp::traits::input_parameter< const arma::cube& >::type core(coreSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Bk(BkSEXP);
+    rcpp_result_gen = Rcpp::wrap(contract_left_step_marginal_cpp(left, core, Bk));
+    return rcpp_result_gen;
+END_RCPP
+}
+// contract_right_step_marginal_cpp
+arma::mat contract_right_step_marginal_cpp(const arma::mat& right, const arma::cube& core, const arma::mat& Bk);
+RcppExport SEXP _TTPsplines_contract_right_step_marginal_cpp(SEXP rightSEXP, SEXP coreSEXP, SEXP BkSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type right(rightSEXP);
+    Rcpp::traits::input_parameter< const arma::cube& >::type core(coreSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Bk(BkSEXP);
+    rcpp_result_gen = Rcpp::wrap(contract_right_step_marginal_cpp(right, core, Bk));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_TTPsplines_tt_design_core_d_cpp", (DL_FUNC) &_TTPsplines_tt_design_core_d_cpp, 3},
@@ -439,6 +465,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_TTPsplines_tt_als_core_update_global_cpp", (DL_FUNC) &_TTPsplines_tt_als_core_update_global_cpp, 7},
     {"_TTPsplines_tt_als_sweep_global_cpp", (DL_FUNC) &_TTPsplines_tt_als_sweep_global_cpp, 7},
     {"_TTPsplines_tt_als_fit_fixed_global_cpp", (DL_FUNC) &_TTPsplines_tt_als_fit_fixed_global_cpp, 10},
+    {"_TTPsplines_contract_left_step_marginal_cpp", (DL_FUNC) &_TTPsplines_contract_left_step_marginal_cpp, 3},
+    {"_TTPsplines_contract_right_step_marginal_cpp", (DL_FUNC) &_TTPsplines_contract_right_step_marginal_cpp, 3},
     {NULL, NULL, 0}
 };
 

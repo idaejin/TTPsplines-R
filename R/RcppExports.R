@@ -221,3 +221,15 @@ tt_als_fit_fixed_global_cpp <- function(y, cores_list, basis_list, lambda, DtD_l
     .Call(`_TTPsplines_tt_als_fit_fixed_global_cpp`, y, cores_list, basis_list, lambda, DtD_list, weight, offset, max_sweeps, tol, margin_order)
 }
 
+#' @keywords internal
+#' @noRd
+contract_left_step_marginal_cpp <- function(left, core, Bk) {
+    .Call(`_TTPsplines_contract_left_step_marginal_cpp`, left, core, Bk)
+}
+
+#' @keywords internal
+#' @noRd
+contract_right_step_marginal_cpp <- function(right, core, Bk) {
+    .Call(`_TTPsplines_contract_right_step_marginal_cpp`, right, core, Bk)
+}
+

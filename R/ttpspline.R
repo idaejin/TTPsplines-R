@@ -209,14 +209,18 @@ ttps <- function(y,
     X <- do.call(cbind, lapply(seq_len(d_arr), function(j) axes[[j]][idx[[j]]]))
     colnames(X) <- names(axes)
     y_sc <- as.numeric(y)  # dim1 fastest — matches expand.grid row order
-    # Store array_data: will be attached after basis is built
+    # Store array_data: will be attached after basis is built.
+    # unweighted_gaussian: TRUE when the user passed no weights, enabling the
+    # Kronecker Gram path in cgcv_outer / tt_gram_rhs (checked before
+    # normalize_weights converts NULL to ones).
     array_data_out <- list(
-      Y        = y,       # original d-way array (centred later)
-      n_grid   = n_grid,
-      axes     = axes,
-      k        = NA_integer_,   # updated per core visit in ALS
-      L_all    = NULL,          # filled per sweep in ALS
-      R_all    = NULL
+      Y                    = y,
+      n_grid               = n_grid,
+      axes                 = axes,
+      k                    = NA_integer_,
+      L_all                = NULL,
+      R_all                = NULL,
+      unweighted_gaussian  = is.null(weights)
     )
     y <- y_sc
   }
@@ -371,11 +375,23 @@ ttps <- function(y,
   } else {
     # In array mode, attach marginal bases (B_list) to array_data now that basis is built.
     if (!is.null(array_data_out)) {
-      # basis[[k]] has nrow = n_total (scattered rows); marginal basis is
-      # bb$B[[k]] of size n_k x p. Reconstruct via glam_grid_bases.
-      bb_arr <- glam_grid_bases(array_data_out$axes,
-                                k = p, degree = as.integer(degree))
-      array_data_out$B_marginal <- bb_arr$B
+      # Extract marginal bases (n_k x p) from the scattered basis (n_total x p)
+      # by taking the first n_k rows for each margin k. In dim1-fastest order,
+      # rows 1..n_k of basis[[k]] correspond to the n_k grid points of margin k
+      # (all other margins fixed at their first value). This guarantees that
+      # B_marginal[[k]] uses exactly the same knots as the scattered path.
+      n_grid_loc <- array_data_out$n_grid
+      d_loc <- length(n_grid_loc)
+      B_marginal_list <- vector("list", d_loc)
+      for (.km in seq_len(d_loc)) {
+        # In dim1-fastest (expand.grid) order, the n_km unique evaluations of
+        # margin k are found at rows 1, n_left+1, 2*n_left+1, ..., where
+        # n_left = prod(n_grid[1..(k-1)]).
+        n_left_km <- if (.km == 1L) 1L else prod(n_grid_loc[seq_len(.km - 1L)])
+        idx_km <- 1L + (seq_len(n_grid_loc[.km]) - 1L) * n_left_km
+        B_marginal_list[[.km]] <- basis[[.km]][idx_km, , drop = FALSE]
+      }
+      array_data_out$B_marginal <- B_marginal_list
       # Y_centered will be updated inside ALS after intercept is known.
       # Pass Y (not centred) as Y_centered placeholder; ALS will subtract intercept.
       array_data_out$Y_centered <- array_data_out$Y

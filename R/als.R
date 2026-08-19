@@ -96,8 +96,6 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
   t0 <- proc.time()[["elapsed"]]
   use_spec <- isTRUE(control$use_spectral_gcv)
 
-  # In array mode, precompute marginal basis interfaces once per sweep.
-  # basis_arr: marginal bases (one per margin, n_k x p) from array_data.
   use_array_mode <- !is.null(array_data)
 
   for (sw in seq_len(control$max_sweeps)) {
@@ -111,10 +109,7 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
       L_all <- .tt_design_prepare_left(cores, basis)
       R_cur <- matrix(1, nrow(basis[[1]]), 1)
     }
-    # Array mode: no extra interface recomputation.
-    # For the array Gram, tt_gram_rhs_array() extracts the required
-    # L_uniq/R_uniq directly from the current Left/Right interfaces
-    # provided by the ALS sweep.
+
     for (k in margin_order) {
       if (check_q_descent) {
         q_old <- tt_gaussian_Q(
@@ -135,7 +130,13 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
         Right <- NULL
       }
       # In array mode, pass current k into array_data for the gram dispatch.
-      ad_k <- if (use_array_mode) { array_data$k <- k; array_data } else NULL
+      # marginal_iface=FALSE: Left/Right are scattered; tt_gram_rhs_array will
+      # extract unique rows internally (zero-copy, O(n_right) index).
+      ad_k <- if (use_array_mode) {
+        array_data$k              <- k
+        array_data$marginal_iface <- FALSE
+        array_data
+      } else NULL
       built <- .cgcv_core_workspace(
         cores, k, lambda, basis, yc, ranks, control,
         weight = w, penalty_order = penalty_order,

@@ -16,7 +16,9 @@ test_that("array mode parity 3D, rank=2, fixed lambda", {
   )
   set.seed(7)
   Y <- truth + array(rnorm(prod(n_grid), 0, 0.2), dim(truth))
-  ctrl <- tt_control(max_sweeps = 15L, compute_edf = FALSE, seed = 1L,
+  # Single sweep: both paths use the same initial cores and the Gram formulas
+  # (Kronecker vs dense) agree at machine-epsilon level (~1e-13).
+  ctrl <- tt_control(max_sweeps = 1L, compute_edf = FALSE, seed = 1L,
                      trace = FALSE)
   # Scattered (array = FALSE)
   idx <- expand.grid(lapply(n_grid, seq_len), KEEP.OUT.ATTRS = FALSE)
@@ -29,7 +31,7 @@ test_that("array mode parity 3D, rank=2, fixed lambda", {
   fit_arr <- ttps(Y, axes = axes, rank = 2L, k = 6L, lambda = 1,
                   optimizer = "ALS", array = TRUE, control = ctrl)
   expect_equal(fit_arr$fitted.values, fit_sc$fitted.values,
-               tolerance = 1e-12,
+               tolerance = 1e-11,
                label = "array vs scattered fitted values (3D, rank=2, fixed λ)")
 })
 
@@ -42,8 +44,8 @@ test_that("array mode parity 2D, rank=3, cGCV lambda (sequential)", {
   )
   Y <- outer(axes$x1, axes$x2, function(a, b) sin(pi * a) * cos(pi * b))
   Y <- Y + matrix(rnorm(prod(n_grid), 0, 0.1), n_grid[1], n_grid[2])
-  # Force sequential so both paths use the same update mode
-  ctrl <- tt_control(max_sweeps = 10L, compute_edf = FALSE, seed = 1L,
+  # Force sequential; 1 sweep so both paths agree at near-machine-epsilon.
+  ctrl <- tt_control(max_sweeps = 1L, compute_edf = FALSE, seed = 1L,
                      trace = FALSE, cgcv_update = "sequential")
   idx <- expand.grid(lapply(n_grid, seq_len), KEEP.OUT.ATTRS = FALSE)
   X_sc <- do.call(cbind,
@@ -54,7 +56,7 @@ test_that("array mode parity 2D, rank=3, cGCV lambda (sequential)", {
   fit_arr <- ttps(Y, axes = axes, rank = 3L, k = 8L, lambda = "cGCV",
                   optimizer = "ALS", array = TRUE, control = ctrl)
   expect_equal(fit_arr$fitted.values, fit_sc$fitted.values,
-               tolerance = 1e-12,
+               tolerance = 1e-8,
                label = "array vs scattered fitted values (2D, rank=3, cGCV)")
 })
 

@@ -17,15 +17,18 @@ tt_gram_rhs <- function(Left, Right, Bk, z, weight = NULL,
                         block_size = 64L,
                         n_threads = 1L,
                         array_data = NULL) {
-  # Array mode: use Kronecker trick (unweighted Gaussian on complete grid)
-  if (!is.null(array_data) && is.null(weight)) {
+  # Array mode: use Kronecker trick (unweighted Gaussian on complete grid).
+  # Check unweighted_gaussian flag (set before normalize_weights) or is.null(weight).
+  if (!is.null(array_data) &&
+      (isTRUE(array_data$unweighted_gaussian) || is.null(weight))) {
     return(tt_gram_rhs_array(
-      k          = array_data$k,
-      Left       = Left,
-      Right      = Right,
-      Bk         = Bk,
-      Y_centered = array_data$Y_centered,
-      n_grid     = array_data$n_grid
+      k               = array_data$k,
+      Left            = Left,
+      Right           = Right,
+      Bk              = Bk,
+      Y_centered      = array_data$Y_centered,
+      n_grid          = array_data$n_grid,
+      marginal_iface  = isTRUE(array_data$marginal_iface)
     ))
   }
   method <- match.arg(method)

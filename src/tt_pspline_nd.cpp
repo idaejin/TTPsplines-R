@@ -2127,3 +2127,108 @@ List tt_als_fit_fixed_global_cpp(
       _["history"] = history,
       _["method"] = "global_fixed_fit_cpp");
 }
+
+// -----------------------------------------------------------------------
+// Marginal interface contraction for array-mode ALS.
+//
+// These functions operate on marginal bases (n_k x p, one row per grid
+// point of margin k) rather than scattered bases (n x p, one row per
+// observation).  They are used to build the unique left/right interfaces
+// L*_k (n_left x r) and R*_k (n_right x r) needed by the array-mode
+// Kronecker Gram without ever expanding to the full n-row scattered basis.
+//
+// contract_left_step_marginal_cpp
+//   left : n_left x r_left  (current left interface, unique rows)
+//   core : r_left x p x r_right  (TT core k as Armadillo cube)
+//   Bk   : n_k x p  (marginal B-spline basis for dimension k)
+//   Returns: (n_left * n_k) x r_right
+//
+//   out[(i_left-1)*n_k + i_k, b] =
+//     sum_j  (sum_a left[i_left, a] * core[a, j, b]) * Bk[i_k, j]
+//
+// contract_right_step_marginal_cpp
+//   right: n_right x r_right  (current right interface, unique rows)
+//   core : r_left x p x r_right
+//   Bk   : n_k x p
+//   Returns: (n_k * n_right) x r_left  (outer index = i_k, inner = i_right)
+//
+//   out[(i_k-1)*n_right + i_right, a] =
+//     sum_j  (sum_b right[i_right, b] * core[a, j, b]) * Bk[i_k, j]
+// -----------------------------------------------------------------------
+
+//' @keywords internal
+//' @noRd
+// [[Rcpp::export]]
+arma::mat contract_left_step_marginal_cpp(const arma::mat& left,
+                                          const arma::cube& core,
+                                          const arma::mat& Bk) {
+  const int n_left = static_cast<int>(left.n_rows);
+  const int r_left = static_cast<int>(left.n_cols);
+  const int p      = static_cast<int>(core.n_cols);
+  const int r_right = static_cast<int>(core.n_slices);
+  const int n_k    = static_cast<int>(Bk.n_rows);
+
+  if (static_cast<int>(left.n_cols) != static_cast<int>(core.n_rows))
+    stop("contract_left_step_marginal_cpp: left ncol != core nrow");
+  if (static_cast<int>(Bk.n_cols) != p)
+    stop("contract_left_step_marginal_cpp: Bk ncol != core ncol");
+
+  // M[i_left, (j, b)] = sum_a left[i_left, a] * core[a, j, b]
+  // = (left  *  core_unfolded_along_rows)
+  // Unfold core as (r_left) x (p * r_right), reshape per slice.
+  // We accumulate column by column over j.
+  arma::mat out(n_left * n_k, r_right, arma::fill::zeros);
+
+  for (int j = 0; j < p; ++j) {
+    // tmp: n_left x r_right = left * core[:, j, :]
+    arma::mat Cj = core_slice_j(core, j);   // r_left x r_right
+    arma::mat tmp = left * Cj;              // n_left x r_right
+
+    // outer product with Bk[:, j]: n_k x 1
+    const arma::vec bj = Bk.col(j);
+    for (int i_k = 0; i_k < n_k; ++i_k) {
+      out.rows(i_k * n_left, (i_k + 1) * n_left - 1) += bj(i_k) * tmp;
+    }
+  }
+  return out;
+}
+
+//' @keywords internal
+//' @noRd
+// [[Rcpp::export]]
+arma::mat contract_right_step_marginal_cpp(const arma::mat& right,
+                                           const arma::cube& core,
+                                           const arma::mat& Bk) {
+  const int n_right  = static_cast<int>(right.n_rows);
+  const int r_right  = static_cast<int>(right.n_cols);
+  const int p        = static_cast<int>(core.n_cols);
+  const int r_left   = static_cast<int>(core.n_rows);
+  const int n_k      = static_cast<int>(Bk.n_rows);
+
+  if (static_cast<int>(right.n_cols) != static_cast<int>(core.n_slices))
+    stop("contract_right_step_marginal_cpp: right ncol != core nslices");
+  if (static_cast<int>(Bk.n_cols) != p)
+    stop("contract_right_step_marginal_cpp: Bk ncol != core ncol");
+
+  // Output ordering matches the scattered (dim1-fastest / expand.grid) layout.
+  // In the scattered right interface, the pre-existing right block index varies
+  // slower (outer) while the new margin's index varies faster (inner).
+  // Row index (0-based): i_right * n_k + i_k.
+  // This ensures the resulting unique right interface has the same row order
+  // as rows extracted from scattered right_interfaces().
+  arma::mat out(n_k * n_right, r_left, arma::fill::zeros);
+
+  for (int j = 0; j < p; ++j) {
+    arma::mat Cj = core_slice_j(core, j);   // r_left x r_right
+    arma::mat tmp = right * Cj.t();         // n_right x r_left
+
+    const arma::vec bj = Bk.col(j);
+    for (int i_right = 0; i_right < n_right; ++i_right) {
+      for (int i_k = 0; i_k < n_k; ++i_k) {
+        // Row i_right * n_k + i_k
+        out.row(i_right * n_k + i_k) += bj(i_k) * tmp.row(i_right);
+      }
+    }
+  }
+  return out;
+}
