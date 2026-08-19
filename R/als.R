@@ -132,11 +132,13 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
 
     for (k in margin_order) {
       if (check_q_descent) {
+        f_q <- if (use_marginal) tt_contraction_marginal(cores, basis_marginal) else NULL
         q_old <- tt_gaussian_Q(
           y, cores, intercept, basis, lambda,
           offset = offset, weights = w,
           penalty_order = penalty_order, cyclic = cyclic,
-          linear = linear, beta = beta, smooth = smooth
+          linear = linear, beta = beta, smooth = smooth,
+          f_precomputed = f_q
         )$value
       }
       if (use_marginal) {
@@ -262,11 +264,13 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
       }
 
       if (check_q_descent) {
+        f_qn <- if (use_marginal) tt_contraction_marginal(cores, basis_marginal) else NULL
         q_new <- tt_gaussian_Q(
           y, cores, intercept, basis, lambda,
           offset = offset, weights = w,
           penalty_order = penalty_order, cyclic = cyclic,
-          linear = linear, beta = beta, smooth = smooth
+          linear = linear, beta = beta, smooth = smooth,
+          f_precomputed = f_qn
         )$value
         dq <- q_new - q_old
         if (is.finite(dq) && dq > q_max_increase) q_max_increase <- dq
@@ -276,7 +280,11 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
       }
     }
     # Refresh additive (smooth + α, β) given current TT surface; update residual
-    f <- tt_contraction(cores, basis)
+    f <- if (use_marginal) {
+      tt_contraction_marginal(cores, basis_marginal)
+    } else {
+      tt_contraction(cores, basis)
+    }
     add <- tt_refresh_additive(y, offset, f, linear = linear, smooth = smooth,
                                weights = w, control = control)
     intercept <- add$intercept
@@ -286,8 +294,10 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
       tt_smooth_contrib(smooth)
 
     n_sweeps <- sw
-    eta <- tt_eta(offset, intercept, cores, basis,
-                  linear = linear, beta = beta, smooth = smooth)
+    # f is already the TT contraction; use it directly to build eta
+    eta <- as.numeric(offset) + as.numeric(intercept) +
+      tt_linear_contrib(linear, beta) +
+      tt_smooth_contrib(smooth) + f
     rss <- sum(w * (y - eta)^2)
     pen_val <- tt_global_penalty_value(
       cores, lambda, penalty_order = penalty_order, cyclic = cyclic
@@ -313,8 +323,14 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
     }
   }
 
-  eta <- tt_eta(offset, intercept, cores, basis,
-                linear = linear, beta = beta, smooth = smooth)
+  f_final <- if (use_marginal) {
+    tt_contraction_marginal(cores, basis_marginal)
+  } else {
+    tt_contraction(cores, basis)
+  }
+  eta <- as.numeric(offset) + as.numeric(intercept) +
+    tt_linear_contrib(linear, beta) +
+    tt_smooth_contrib(smooth) + f_final
   cgcv_df <- if (length(cgcv_trace)) do.call(rbind, cgcv_trace) else NULL
   list(
     cores = cores,

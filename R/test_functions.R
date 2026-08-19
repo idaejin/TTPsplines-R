@@ -248,6 +248,159 @@ simulate_friedman <- function(n = 800, sigma = 1, seed = 3,
   out
 }
 
+#' Dette--Pepelyshev 8D test function.
+#'
+#' The function is defined on \eqn{[0,1]^8} and has non-negligible effects in
+#' all eight coordinates as well as strong low-order interactions.
+#' Reference: Dette and Pepelyshev (2010),
+#' \url{https://www.sfu.ca/~ssurjano/detpep108d.html}.
+#'
+#' @param x Numeric matrix / data frame with at least 8 columns (extra ignored).
+#'   Inputs must lie in \eqn{[0,1]^8}.
+#' @return Numeric vector of function values.
+#' @references Dette, H. and Pepelyshev, A. (2010). Generalized Latin hypercube
+#'   design for computer experiments. *Technometrics* **52**, 421--429.
+#' @export
+#' @examples
+#' X <- matrix(runif(80), 10, 8)
+#' f_dette(X)
+
+# Internal: vectorised Dette-Pepelyshev (all 8 terms, standard form).
+#' @keywords internal
+#' @noRd
+.f_dette_internal <- function(x) {
+  X <- as.matrix(x)
+  x1 <- X[, 1]; x2 <- X[, 2]; x3 <- X[, 3]
+  x4 <- X[, 4]; x5 <- X[, 5]; x6 <- X[, 6]
+  x7 <- X[, 7]; x8 <- X[, 8]
+  4 * (x1 - 2 + 8 * x2 - 8 * x2^2)^2 +
+    (3 - 4 * x2)^2 +
+    16 * sqrt(x3 + 1) * (2 * x3 - 1)^2 +
+    (x4 - x3)^2 +
+    (x5 - 1)^2 +
+    (x6 - 1)^2 +
+    (x7 - 1)^2 +
+    (x8 - 1)^2
+}
+
+#' @export
+f_dette <- function(x) {
+  X <- .as_input_matrix(x, min_d = 8L, name = "Dette-Pepelyshev 8D")
+  .f_dette_internal(X)
+}
+
+#' Simulate a Dette--Pepelyshev 8D point-process / Poisson sample.
+#'
+#' Inputs are drawn uniformly on \eqn{[0,1]^8}.  For `d < 8`, only the first
+#' `d` inputs vary; the rest are fixed at 0.5 (matching the PDF experiment).
+#'
+#' @param n_events Approximate number of Poisson events (controls `rate_scale`).
+#' @param d Number of active dimensions (1--8; remaining fixed at 0.5).
+#' @param n_bins Number of grid bins per axis.
+#' @param rate_scale Scalar that controls the overall event rate.
+#' @param rate_offset Log-intensity offset (shifts overall level).
+#' @param holdout_frac Fraction of occupied cells held out for testing.
+#' @param seed RNG seed.
+#' @return A list with components:
+#'   \describe{
+#'     \item{`X_train`, `X_test`}{Cell centres (\eqn{n \times d}) for
+#'       training and test occupied cells.}
+#'     \item{`y_train`, `y_test`}{Event counts.}
+#'     \item{`eta_true`}{True log-intensity function (closure).}
+#'     \item{`d`, `n_bins`, `n_events`, `seed`}{Metadata.}
+#'   }
+#' @export
+simulate_dette <- function(n_events  = 500,
+                           d         = 4L,
+                           n_bins    = 12L,
+                           rate_scale = 3,
+                           rate_offset = 5,
+                           holdout_frac = 0.10,
+                           seed      = 0L) {
+  d <- as.integer(d)
+  stopifnot(d >= 1L, d <= 8L)
+  if (!is.null(seed)) set.seed(as.integer(seed))
+
+  ## True log-intensity on [0,1]^d (remaining dims fixed at 0.5)
+  eta_true_fn <- function(X) {
+    X <- as.matrix(X)
+    X8 <- matrix(0.5, nrow(X), 8L)
+    X8[, seq_len(d)] <- X[, seq_len(d)]
+    raw <- .f_dette_internal(X8)
+    rng <- range(raw)
+    rate_offset + rate_scale * (raw - rng[1]) / (rng[2] - rng[1])
+  }
+
+  ## Thinning: draw Poisson process via acceptance-rejection
+  ## proposal: uniform on [0,1]^d; keep with prob lambda(x)/lambda_max
+  lambda_max_est <- exp(rate_offset + rate_scale)   # upper bound
+  n_propose <- ceiling(n_events * lambda_max_est * 1.5)
+  X_prop <- matrix(stats::runif(n_propose * d), n_propose, d)
+  eta_prop <- eta_true_fn(X_prop)
+  lambda_prop <- exp(eta_prop)
+  accept <- stats::runif(n_propose) < lambda_prop / lambda_max_est
+  X_pts <- X_prop[accept, , drop = FALSE]
+  cat(sprintf("Thinning: %d events accepted (approx target %d)\n",
+              nrow(X_pts), n_events))
+
+  ## Bin onto regular grid
+  breaks <- seq(0, 1, length.out = n_bins + 1L)
+  centres <- (breaks[-1L] + breaks[-length(breaks)]) / 2
+  cell_idx <- matrix(0L, nrow(X_pts), d)
+  for (j in seq_len(d)) {
+    cell_idx[, j] <- findInterval(X_pts[, j], breaks, rightmost.closed = TRUE)
+    cell_idx[, j] <- pmax(1L, pmin(n_bins, cell_idx[, j]))
+  }
+  ## Convert multi-index to scalar key and tally
+  strides <- cumprod(c(1L, rep(n_bins, d - 1L)))
+  keys    <- as.integer(cell_idx %*% strides - sum(strides) + 1L)
+  tbl     <- tabulate(keys, nbins = prod(rep(n_bins, d)))
+  occupied <- which(tbl > 0L)
+  y_occ   <- tbl[occupied]
+
+  ## Reconstruct centres for occupied cells
+  multi_idx <- function(linear_idx) {
+    idx <- matrix(0L, length(linear_idx), d)
+    rem <- linear_idx - 1L
+    for (j in seq_len(d)) {
+      idx[, j] <- (rem %% n_bins) + 1L
+      rem <- rem %/% n_bins
+    }
+    idx
+  }
+  cidx  <- multi_idx(occupied)
+  X_occ <- matrix(centres[cidx], ncol = d)
+
+  cat(sprintf("Occupied cells: %d / %d (%.4f%%)\n",
+              length(occupied),
+              n_bins^d,
+              100 * length(occupied) / n_bins^d))
+
+  ## Train / test split
+  n_occ  <- length(occupied)
+  n_test <- max(1L, round(holdout_frac * n_occ))
+  test_idx  <- sort(sample.int(n_occ, n_test))
+  train_idx <- setdiff(seq_len(n_occ), test_idx)
+
+  list(
+    X_train      = X_occ[train_idx, , drop = FALSE],
+    y_train      = y_occ[train_idx],
+    X_test       = X_occ[test_idx,  , drop = FALSE],
+    y_test       = y_occ[test_idx],
+    centres      = centres,
+    breaks       = breaks,
+    cell_X_occ   = X_occ,
+    cell_y_occ   = y_occ,
+    train_idx    = train_idx,
+    test_idx     = test_idx,
+    eta_true_fn  = eta_true_fn,
+    d            = d,
+    n_bins       = n_bins,
+    n_events     = nrow(X_pts),
+    seed         = seed
+  )
+}
+
 #' @export
 print.ttps_sim <- function(x, ...) {
   cat(sprintf("TTPsplines simulation: %s\n", x$name %||% "custom"))

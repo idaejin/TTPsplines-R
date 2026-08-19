@@ -121,11 +121,12 @@ tt_linear_contrib <- function(linear, beta) {
 #' @keywords internal
 #' @noRd
 tt_eta <- function(offset, intercept, cores, basis,
-                   linear = NULL, beta = NULL, smooth = NULL) {
+                   linear = NULL, beta = NULL, smooth = NULL,
+                   f_precomputed = NULL) {
+  f <- if (!is.null(f_precomputed)) f_precomputed else tt_contraction(cores, basis)
   as.numeric(offset) + as.numeric(intercept) +
     tt_linear_contrib(linear, beta) +
-    tt_smooth_contrib(smooth) +
-    tt_contraction(cores, basis)
+    tt_smooth_contrib(smooth) + f
 }
 
 #' Normalize unpenalized parametric design (NULL → NULL).

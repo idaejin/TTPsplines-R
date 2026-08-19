@@ -667,11 +667,13 @@ tt_gaussian_Q <- function(y, cores, intercept, basis, lambda,
                           penalty_order = 2L, cyclic = NULL,
                           penalty_mode = "global",
                           linear = NULL, beta = NULL,
-                          smooth = NULL) {
+                          smooth = NULL,
+                          f_precomputed = NULL) {
   offset <- normalize_offset(offset, length(y))
   w <- normalize_weights(weights, length(y))
   eta <- tt_eta(offset, intercept, cores, basis,
-                linear = linear, beta = beta, smooth = smooth)
+                linear = linear, beta = beta, smooth = smooth,
+                f_precomputed = f_precomputed)
   rss <- sum(w * (y - eta)^2)
   normalize_penalty_mode(penalty_mode)
   pen <- tt_global_penalty_value(

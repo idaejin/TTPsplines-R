@@ -55,6 +55,17 @@ tt_contraction <- function(cores, basis) {
   drop(cur)
 }
 
+# Array-mode contraction: uses marginal bases (n_k x p each) instead of
+# full scattered bases (n x p). Cost: O(n_left * n_k * r * p) per step
+# vs O(n * r * p) scattered. Total: O(n * r * p / m^(d/2)) roughly.
+tt_contraction_marginal <- function(cores, basis_marginal) {
+  cur <- matrix(1, 1, 1)   # n_left_1 = 1
+  for (k in seq_along(cores)) {
+    cur <- contract_left_step_marginal_cpp(cur, cores[[k]], basis_marginal[[k]])
+  }
+  drop(cur)
+}
+
 left_interfaces <- function(cores, basis) {
   d <- length(cores)
   n <- nrow(basis[[1]])
