@@ -3,8 +3,8 @@
 #' Does not return the design matrix. See [tt_gram_rhs_cpp()] methods:
 #' `blas`, `fused`, `fused_blocked`, `kron`.
 #'
-#' When `array_data` is supplied (a list with `k`, `L_all`, `R_all`,
-#' `Y_centered`, `n_grid`), the Gram and RHS are computed via the array
+#' When `array_data` is supplied (a list with `k`, `Y_centered`, `n_grid`),
+#' the Gram and RHS are computed via the array
 #' Kronecker trick ([tt_gram_rhs_array()]) without forming the design matrix.
 #' This is only valid for unweighted Gaussian data on a complete grid.
 #'
@@ -21,8 +21,8 @@ tt_gram_rhs <- function(Left, Right, Bk, z, weight = NULL,
   if (!is.null(array_data) && is.null(weight)) {
     return(tt_gram_rhs_array(
       k          = array_data$k,
-      L_all      = array_data$L_all,
-      R_all      = array_data$R_all,
+      Left       = Left,
+      Right      = Right,
       Bk         = Bk,
       Y_centered = array_data$Y_centered,
       n_grid     = array_data$n_grid

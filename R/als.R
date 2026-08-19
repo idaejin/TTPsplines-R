@@ -111,13 +111,10 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
       L_all <- .tt_design_prepare_left(cores, basis)
       R_cur <- matrix(1, nrow(basis[[1]]), 1)
     }
-    # Array mode: recompute interfaces (scattered basis) for gram and penalty.
-    # The scattered basis was built from the grid, so left_interfaces has the
-    # right structure to extract L_uniq / R_uniq inside tt_gram_rhs_array().
-    if (use_array_mode) {
-      array_data$L_all <- left_interfaces(cores, basis)
-      array_data$R_all <- right_interfaces(cores, basis)
-    }
+    # Array mode: no extra interface recomputation.
+    # For the array Gram, tt_gram_rhs_array() extracts the required
+    # L_uniq/R_uniq directly from the current Left/Right interfaces
+    # provided by the ALS sweep.
     for (k in margin_order) {
       if (check_q_descent) {
         q_old <- tt_gaussian_Q(
