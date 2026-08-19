@@ -97,17 +97,37 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
   use_spec <- isTRUE(control$use_spectral_gcv)
 
   use_array_mode <- !is.null(array_data)
+  # In array mode with marginal bases available, build marginal (unique-row)
+  # interfaces instead of scattered (n-row) interfaces.
+  # Cost per step: O(n_left * r^2 * p)  vs  O(n * r^2 * p) scattered.
+  # The marginal and scattered unique rows are numerically identical
+  # given the same cores, so the Gram path is unchanged.
+  use_marginal <- use_array_mode && !is.null(array_data$B_marginal)
+  basis_marginal <- if (use_marginal) array_data$B_marginal else NULL
 
   for (sw in seq_len(control$max_sweeps)) {
     use_cache <- isTRUE(control$design_interface_cache %||% TRUE)
     use_ltr <- use_cache && .tt_is_ltr_order(margin_order, d)
     use_rtl <- use_cache && .tt_is_rtl_order(margin_order, d)
-    if (use_ltr) {
-      R_all <- .tt_design_prepare_right(cores, basis)
-      L_cur <- matrix(1, nrow(basis[[1]]), 1)
-    } else if (use_rtl) {
-      L_all <- .tt_design_prepare_left(cores, basis)
-      R_cur <- matrix(1, nrow(basis[[1]]), 1)
+
+    if (use_marginal) {
+      # Build marginal interfaces: each matrix has n_left or n_right rows
+      # (not n_total rows), matching the unique rows of the scattered path.
+      if (use_ltr) {
+        R_all_m <- right_interfaces_marginal(cores, basis_marginal)
+        L_cur_m <- matrix(1, 1, 1)
+      } else if (use_rtl) {
+        L_all_m <- left_interfaces_marginal(cores, basis_marginal)
+        R_cur_m <- matrix(1, 1, 1)
+      }
+    } else {
+      if (use_ltr) {
+        R_all <- .tt_design_prepare_right(cores, basis)
+        L_cur <- matrix(1, nrow(basis[[1]]), 1)
+      } else if (use_rtl) {
+        L_all <- .tt_design_prepare_left(cores, basis)
+        R_cur <- matrix(1, nrow(basis[[1]]), 1)
+      }
     }
 
     for (k in margin_order) {
@@ -119,7 +139,18 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
           linear = linear, beta = beta, smooth = smooth
         )$value
       }
-      if (use_ltr) {
+      if (use_marginal) {
+        if (use_ltr) {
+          Left  <- L_cur_m
+          Right <- R_all_m[[k]]
+        } else if (use_rtl) {
+          Left  <- L_all_m[[k]]
+          Right <- R_cur_m
+        } else {
+          Left  <- NULL
+          Right <- NULL
+        }
+      } else if (use_ltr) {
         Left <- L_cur
         Right <- R_all[[k]]
       } else if (use_rtl) {
@@ -129,12 +160,11 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
         Left <- NULL
         Right <- NULL
       }
-      # In array mode, pass current k into array_data for the gram dispatch.
-      # marginal_iface=FALSE: Left/Right are scattered; tt_gram_rhs_array will
-      # extract unique rows internally (zero-copy, O(n_right) index).
+      # In array mode pass k and marginal_iface flag to the Gram dispatcher.
+      # marginal_iface=TRUE: Left/Right are already the unique marginal matrices.
       ad_k <- if (use_array_mode) {
         array_data$k              <- k
-        array_data$marginal_iface <- FALSE
+        array_data$marginal_iface <- use_marginal
         array_data
       } else NULL
       built <- .cgcv_core_workspace(
@@ -191,10 +221,20 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
       cores[[k]] <- array(g_use, c(ranks[k], p, ranks[k + 1L]))
       lambda[k] <- lam_new
 
-      if (use_ltr && k < d) {
-        L_cur <- .tt_design_left_absorb(L_cur, cores[[k]], basis[[k]])
-      } else if (use_rtl && k > 1L) {
-        R_cur <- .tt_design_right_absorb(R_cur, cores[[k]], basis[[k]])
+      if (use_marginal) {
+        if (use_ltr && k < d) {
+          L_cur_m <- contract_left_step_marginal_cpp(
+            L_cur_m, cores[[k]], basis_marginal[[k]])
+        } else if (use_rtl && k > 1L) {
+          R_cur_m <- contract_right_step_marginal_cpp(
+            R_cur_m, cores[[k]], basis_marginal[[k]])
+        }
+      } else {
+        if (use_ltr && k < d) {
+          L_cur <- .tt_design_left_absorb(L_cur, cores[[k]], basis[[k]])
+        } else if (use_rtl && k > 1L) {
+          R_cur <- .tt_design_right_absorb(R_cur, cores[[k]], basis[[k]])
+        }
       }
 
       if (do_trace) {
