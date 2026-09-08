@@ -27,9 +27,18 @@ To register vignettes in the installed library (needed for `vignette(...)`):
 ```r
 # from a clone of this repo:
 devtools::install(build_vignettes = TRUE)
-# or from GitHub:
-remotes::install_github("idaejin/TTPsplines-R", build_vignettes = TRUE)
+
+# from GitHub (force = TRUE if remotes skips because the SHA is unchanged):
+remotes::install_github(
+  "idaejin/TTPsplines-R",
+  force = TRUE,
+  build_vignettes = TRUE,
+  dependencies = TRUE
+)
 ```
+
+`pak::pak()` installs the package but does **not** build vignettes; use
+`remotes` / `devtools` with `build_vignettes = TRUE` for `vignette(...)`.
 
 Then open with an explicit package (or `library(TTPsplines)` first):
 
