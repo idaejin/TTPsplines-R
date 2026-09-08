@@ -12,51 +12,55 @@ Within that geometry the package keeps \(r \neq \lambda \neq \mathrm{EDF}\) conc
 
 ## Install
 
+**Package only** (fast; no vignettes):
+
 ```r
 # install.packages("pak")
 pak::pak("idaejin/TTPsplines-R")
-# or: remotes::install_github("idaejin/TTPsplines-R")
 ```
 
-If an older install errors in `tt_joint_edf_parts` with unused arguments
-(`penalty_order` / `cyclic` / `edf_method`), reinstall from GitHub (needs
-`ggcv.R` in `Collate`, SHA ≥ `867991c`).
-
-To register vignettes in the installed library (needed for `vignette(...)`):
+**Package + vignettes** (needed for `vignette(...)` / `browseVignettes()`):
 
 ```r
-# from a clone of this repo:
-devtools::install(build_vignettes = TRUE)
-
-# from GitHub (force = TRUE if remotes skips because the SHA is unchanged):
+# install.packages("remotes")
 remotes::install_github(
   "idaejin/TTPsplines-R",
-  force = TRUE,
+  force = TRUE,              # required if remotes skips an unchanged SHA
   build_vignettes = TRUE,
-  dependencies = TRUE
+  dependencies = TRUE        # knitr, rmarkdown, ...
 )
 ```
 
-`pak::pak()` installs the package but does **not** build vignettes; use
-`remotes` / `devtools` with `build_vignettes = TRUE` for `vignette(...)`.
-
-Then open with an explicit package (or `library(TTPsplines)` first):
+From a local clone:
 
 ```r
-vignette("getting-started", package = "TTPsplines")
-vignette("margin-activity-path", package = "TTPsplines")
+devtools::install(build_vignettes = TRUE)
+# or without vignettes: devtools::load_all()
+```
+
+`pak` and `devtools::load_all()` do **not** register vignettes in the library.
+
+### Vignettes
+
+After a vignette-enabled install:
+
+```r
 browseVignettes("TTPsplines")
+vignette("getting-started", package = "TTPsplines")
 ```
 
-`devtools::load_all()` does **not** install vignettes into the library, so
-`vignette("getting-started")` will still warn until you `install(..., build_vignettes = TRUE)`.
-
-Local (development folder `ttpsplines-pkg/`):
-
-```r
-devtools::load_all("path/to/ttpsplines-pkg")
-# or: pak::local_install("path/to/ttpsplines-pkg")
-```
+| Vignette | Topic |
+|----------|--------|
+| `getting-started` | Scattered TT fit, families, datasets |
+| `cgcv` | λ: fixed / cGCV / CV / gGCV |
+| `rank-selection` | TT rank via CV + 1-SE |
+| `margin-activity-path` | Margin screening |
+| `generalized` | Poisson / Bernoulli |
+| `aic-bic` | In-sample AIC / BIC from EDF |
+| `glam-vs-tt` | Full tensor vs TT |
+| `glam-poisson` | GLAM Poisson + exposure |
+| `scalability` | Storage / timing notes |
+| `uncertainty` | SE / bands (Level-1) |
 
 ## Quick start
 
@@ -296,12 +300,13 @@ tst$drop_candidate_names
 
 ## Choosing λ (fixed / cGCV / CV / gGCV)
 
-| Spec | Role |
-|------|------|
-| numeric / length-`d` | Fixed isotropic or anisotropic \(\lambda\) |
-| `"cGCV"` (default) | Conditional GCV inside ALS / PIRLS (product selector) |
-| `"CV"` | K-fold CV of each \(\lambda_k\) (default: first sweep, then freeze) |
-| `"gGCV"` | Experimental **joint** TT-gGCV via Monte Carlo GDF (Gaussian scattered only; expensive) |
+| Spec | Role | Notes |
+|------|------|-------|
+| numeric / length-`d` | Fixed isotropic or anisotropic \(\lambda\) | Always available |
+| `"cGCV"` (default) | Conditional / product GCV inside ALS / PIRLS | Default dynamics: `cgcv_update = "outer_simultaneous"` |
+| `"CV"` | K-fold CV of each \(\lambda_k\) | ALS / PIRLS only; default `cv_sweeps = 1` (tune then freeze) |
+| `"gGCV"` | Joint TT-gGCV (Monte Carlo GDF) | Experimental; Gaussian scattered only; expensive — prefer `tt_ggcv()` |
+
 
 ```r
 # Default product selector
