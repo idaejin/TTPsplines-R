@@ -167,8 +167,8 @@ print(cmp[, intersect(cols, names(cmp))], row.names = FALSE)
 ALS / PIRLS **sweeps** always run in R under the classical global penalty
 \(P_k^{\mathrm{full}}\). Compiled Rcpp code accelerates **kernels** (Gram/RHS,
 penalty assembly) when available. Requesting `backend = "Rcpp"` for ALS does
-**not** enable a full C++ ALS fitter: `resolve_backend()` warns and keeps the
-R sweep (helpers still used). Legacy own-margin fitters in
+**not** enable a full C++ ALS fitter: the package warns and keeps the R
+sweep (Rcpp kernels still used when available). Legacy own-margin fitters in
 `src/tt_pspline_nd.cpp` (`tt_cgcv_fit_cpp`, …) are unused by `ttps()`.
 
 Vignette chunks often force `backend = "R"` for clarity. Micro-timings on tiny

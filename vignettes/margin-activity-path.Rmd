@@ -150,3 +150,10 @@ Rscript inst/examples/reprex_margin_activity_path.R
 
 Fixed seeds `20260817` / `20260818`, `backend = "R"`, and CSV outputs under
 `inst/examples/margin_activity_path_figs/reprex_*.csv`.
+
+# See also
+
+- `vignette("cgcv", package = "TTPsplines")` — λ selectors (cGCV / CV / gGCV)
+- `vignette("rank-selection", package = "TTPsplines")` — TT rank via CV + 1-SE
+- `vignette("getting-started", package = "TTPsplines")`
+

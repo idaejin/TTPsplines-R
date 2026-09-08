@@ -29,7 +29,7 @@ library(TTPsplines)
 | Layer | Meaning |
 |-------|---------|
 | \(r\) | **structural capacity** (TT rank) |
-| \(\lambda\) | **directional smoothness** (fixed or cGCV) |
+| \(\lambda\) | **directional smoothness** (fixed / cGCV / CV / gGCV) |
 | EDF | **effective flexibility** after P-spline penalization |
 | \(k^d\) | Full tensor-product coefficients |
 | TT stored | Packed core entries (\(\approx O(dkr^2)\) uniform ranks) |
@@ -109,11 +109,12 @@ fit <- tt_rank_refit(sel)
 summary(fit)
 ```
 
-## Optional: cGCV inside folds
+## Optional: automatic \(\lambda\) inside folds
 
-When `lambda = "cGCV"`, each fold selects \(\lambda\) **only on its
-training rows**, then scores the held-out fold. Validation data never
-enter cGCV. Details: `vignette("cgcv")`.
+When `lambda = "cGCV"` (or `"CV"`), each fold selects \(\lambda\) **only on
+its training rows**; held-out validation never enters that search. Joint
+`"gGCV"` is usually too expensive inside rank CV. Details:
+`vignette("cgcv")`.
 
 ```{r cgcv, eval = FALSE}
 sel_cgcv <- tt_rank_select(

@@ -179,6 +179,12 @@ c(
 predict(fit_b, X_i[1:5, ], type = "response")
 ```
 
+# Complete grids
+
+For Gaussian data on a full product grid, `ttps(..., array = TRUE)` uses
+Kronecker Gram structure (see the package README). Poisson arrays with
+exposure belong to `glam_fit_poisson()` (`vignette("glam-poisson")`).
+
 # Regenerating the packaged samples
 
 ```{r regen, eval = FALSE}

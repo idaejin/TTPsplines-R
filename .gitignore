@@ -13,3 +13,4 @@ doc
 inst/benchmarks/results/
 vignettes/*.html
 vignettes/*.R
+vignettes/_build_check.csv

@@ -12,3 +12,5 @@
 ^Meta$
 ^doc$
 ^data-raw$
+^scripts$
+^vignettes/_build_check\.csv$

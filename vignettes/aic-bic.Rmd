@@ -17,13 +17,14 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 how to turn that EDF into **AIC / BIC**-style scores for fixed-\(\lambda\)
 comparisons (e.g. candidate ranks or anisotropic \(\lambda\)).
 
-Use exported [tt_ic()] with `fit$deviance` and joint linearized `fit$edf`.
+Use exported `tt_ic()` with `fit$deviance` and joint linearized `fit$edf`.
 There is still **no** `AIC()` / `BIC()` S3 method. Rank selection for
 prediction still belongs to `tt_rank_select()` (CV + 1-SE); see
 `vignette("rank-selection")`.
 
 ```{r}
 library(TTPsplines)
+stopifnot("tt_ic" %in% getNamespaceExports("TTPsplines"))
 ```
 
 # Complexity layers (again)
