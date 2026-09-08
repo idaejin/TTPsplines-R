@@ -56,7 +56,9 @@ predict(fit_b, X[1:5, ], type = "response")
 ```
 
 Automatic λ: `lambda = "cGCV"` (see `fit$lambda_boundary` if estimates hug
-the search bounds), or `lambda = "CV"` for k-fold search (`tt_control(cv_sweeps, cv_rule)`).
+the search bounds), or `lambda = "CV"` for k-fold search under ALS / PIRLS
+(`tt_control(cv_folds, cv_sweeps, cv_rule)`). Joint `"gGCV"` is Gaussian-only
+— see `vignette("cgcv")`.
 
 # Grid Poisson via GLAM
 
@@ -67,7 +69,7 @@ see `vignette("glam-poisson")` and `data(glam_poisson)`.
 # See also
 
 - `vignette("getting-started", package = "TTPsplines")`
-- `vignette("cgcv", package = "TTPsplines")` — automatic \(\lambda\)
+- `vignette("cgcv", package = "TTPsplines")` — cGCV / CV / gGCV for \(\lambda\)
 - `vignette("rank-selection", package = "TTPsplines")`
 - `vignette("glam-poisson", package = "TTPsplines")`
 

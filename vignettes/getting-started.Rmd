@@ -34,15 +34,18 @@ where a full tensor would cost \(O(k^d)\) and TT costs \(O(dkr^2)\).
 By default the package uses **classical directional discrete-difference
 (P-spline) penalties on \(\Theta\)**. Tensor-network B-splines already use
 TT of B-spline weights with such penalties in system identification; this
-package focuses on **statistical smoother practice** (GLM, cGCV, rank
-helpers, baselines), not priority for that coefficient geometry.
+package focuses on **statistical smoother practice** (GLM, λ selectors,
+rank helpers, baselines), not priority for that coefficient geometry.
 
 Family-aware default solver (`optimizer = "auto"`): Gaussian → ALS,
 Poisson → PIRLS-ALS, binomial → L-BFGS. Rank \(r\) is **not** chosen inside
 `ttps()` (see `vignette("rank-selection")`); directional \(\lambda\) can
-be fixed or selected by cGCV (`vignette("cgcv")`).
+be fixed, `"cGCV"` (default), `"CV"`, or experimental `"gGCV"`
+(`vignette("cgcv")`).
 Keep \(r \neq \lambda \neq \mathrm{EDF}\) conceptually distinct.
+
 For high-\(d\) **margin screening** see `vignette("margin-activity-path")`.
+
 # Why these datasets?
 
 Classic UQ response surfaces are convenient demos: known truth, strong
@@ -135,8 +138,8 @@ fit_s$compression_ratio
 rmse(fitted(fit_s), sobol_g$f)
 ```
 
-For anisotropic automatic \(\lambda\), see `vignette("cgcv")`
-(`lambda = "cGCV"`, boundary diagnostics).
+For automatic \(\lambda\), see `vignette("cgcv")`
+(`lambda = "cGCV"` default; also `"CV"` and experimental `"gGCV"`).
 
 # Friedman #1 (\(d=5\))
 
@@ -187,7 +190,7 @@ fit <- ttps(dat$y, dat$X, rank = 3, k = 10, lambda = "cGCV")
 # See also
 
 - `vignette("generalized", package = "TTPsplines")` — Poisson / Bernoulli
-- `vignette("cgcv", package = "TTPsplines")` — fixed vs conditional GCV for \(\lambda\)
+- `vignette("cgcv", package = "TTPsplines")` — fixed / cGCV / CV / gGCV for \(\lambda\)
 - `vignette("rank-selection", package = "TTPsplines")` — CV + 1-SE for \(r\)
 - `vignette("aic-bic", package = "TTPsplines")` — AIC / BIC from linearized EDF
 - `vignette("glam-vs-tt", package = "TTPsplines")` — full tensor vs TT

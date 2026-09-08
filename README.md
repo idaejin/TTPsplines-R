@@ -6,7 +6,7 @@
 
 **Experimental** R package for **Tensor-Train P-splines**: non-additive multidimensional **statistical** smooth / GLM regression on **scattered** continuous covariates.
 
-The TT factorization compresses the **coefficient tensor** \(\Theta\) of a tensor-product P-spline (no observation grid required) and uses classical **directional discrete-difference (P-spline) penalties**. That coefficient geometry already appears in tensor-network B-splines for system identification; this package does **not** claim priority for “TT of B-spline weights + difference penalties.” Its focus is **smoother practice**: GLM families, TT-aware conditional GCV, predictive rank selection helpers, GLAM / full-tensor baselines when feasible, and an open fitting API (`ttps()`).
+The TT factorization compresses the **coefficient tensor** \(\Theta\) of a tensor-product P-spline (no observation grid required) and uses classical **directional discrete-difference (P-spline) penalties**. That coefficient geometry already appears in tensor-network B-splines for system identification; this package does **not** claim priority for “TT of B-spline weights + difference penalties.” Its focus is **smoother practice**: GLM families, TT-aware conditional GCV (default), optional k-fold `lambda = "CV"`, experimental joint TT-gGCV, predictive rank selection helpers, array-mode / GLAM baselines when feasible, and an open fitting API (`ttps()`).
 
 Within that geometry the package keeps \(r \neq \lambda \neq \mathrm{EDF}\) conceptually distinct (rank is structural capacity; \(\lambda\) is roughness; EDF is a post-penalty diagnostic).
 
@@ -206,6 +206,22 @@ On-the-fly redraws: `simulate_ishigami()`, `simulate_sobol_g()`,
 Vignette: `vignette("getting-started", package = "TTPsplines")`.
 Script: `Rscript inst/examples/example_test_functions.R`.
 
+## Complete grids (`array = TRUE`)
+
+For a full rectangular response array (Gaussian ALS), pass the array and
+marginal axes so Gram/RHS use Kronecker structure without materialising the
+scattered \(n\times q_k\) design:
+
+```r
+# Y is dim1-fastest, as from array(y, dim = c(n1, n2, n3))
+fit_a <- ttps(Y, axes = list(x1, x2, x3), rank = 2, k = 8, lambda = 1,
+              array = TRUE)
+```
+
+Restrictions in this version: Gaussian + ALS; no `linear=` / `smooth=` /
+`null_space = "profiled"`. Numerically matches scattered `ttps()` on the same
+grid. For exposure-weighted Poisson grids prefer `glam_fit_poisson()`.
+
 ## Choosing the TT rank (CV + 1-SE)
 
 `ttps(..., rank = r)` always uses that exact rank (no auto-selection).
@@ -250,15 +266,38 @@ tst <- tt_margin_drop_test(y, X, rank = 2, k = 5, lambda = 1, method = "nested")
 tst$drop_candidate_names
 ```
 
-## Choosing λ (cGCV)
+## Choosing λ (fixed / cGCV / CV / gGCV)
+
+| Spec | Role |
+|------|------|
+| numeric / length-`d` | Fixed isotropic or anisotropic \(\lambda\) |
+| `"cGCV"` (default) | Conditional GCV inside ALS / PIRLS (product selector) |
+| `"CV"` | K-fold CV of each \(\lambda_k\) (default: first sweep, then freeze) |
+| `"gGCV"` | Experimental **joint** TT-gGCV via Monte Carlo GDF (Gaussian scattered only; expensive) |
 
 ```r
+# Default product selector
 fit <- ttps(y, X, rank = 2, k = 8, lambda = "cGCV")
 fit$lambda
 fit$lambda_boundary   # check for bound hits
+
+# K-fold CV (ALS / PIRLS only). Default: tune on sweep 1, then freeze.
+fit_cv <- ttps(
+  y, X, rank = 2, k = 8, lambda = "CV",
+  control = tt_control(cv_folds = 5, cv_rule = "min", cv_sweeps = 1)
+)
+fit_cv$cv          # folds, grid, rule, trace
+
+# Joint TT-gGCV (opt-in oracle; prefer tt_ggcv() for search diagnostics)
+# fit_g <- ttps(y, X, rank = 2, k = 6, lambda = "gGCV",
+#               control = tt_control(ggcv_n_global = 16, ggcv_M_search = 4))
+# opt <- tt_ggcv(y, X, rank = 2, k = 6, n_global = 16, M_search = 4)
 ```
 
-If λ sits on a search bound, diagnose with multi-start (stable vs unstable
+Useful knobs: `tt_control(cv_folds, cv_ngrid, cv_grid, cv_sweeps, cv_rule)` and
+`tt_control(ggcv_n_global, ggcv_n_refine, ggcv_M_search, ggcv_M_final, ggcv_include_cgcv_anchor)`.
+
+If cGCV λ sits on a search bound, diagnose with multi-start (stable vs unstable
 hits) via `ttps_multistart()` — see `vignette("cgcv")`.
 
 Vignette: `vignette("cgcv", package = "TTPsplines")`.
@@ -313,11 +352,11 @@ Scripts: `inst/examples/example_glam_poisson.R`,
 | TT-ALS / PIRLS / global L-BFGS | rank-/λ-adaptive `auto` |
 | Family-aware `auto` optimizer | rank-/λ-adaptive `auto` |
 | Gaussian / Poisson / Bernoulli | SA-CAB, SOP, DMRG |
-| `lambda` fixed / `"cGCV"` / `"CV"` | automatic rank inside `ttps()` |
+| `lambda` fixed / `"cGCV"` / `"CV"`; experimental `"gGCV"` / `tt_ggcv()` | automatic rank inside `ttps()` |
 | `tt_rank_select()` + `tt_rank_refit()` | LRT / bootstrap rank tests |
 | `tt_margin_activity_path()` (margin screening) | group-lasso on TT cores |
 | Experimental: `GD`, `Damped-Newton-ALS`, `LBFGS-ALS` | mixed effects / TMB |
-| GLAM Gaussian + Poisson (fixed λ, d≤3) | higher-d GLAM / REML |
+| `array = TRUE` Gaussian grids + GLAM Poisson (fixed λ, d≤3) | higher-d GLAM / REML |
 
 ## License
 

@@ -219,7 +219,7 @@ reflect **local minima / under-iteration**, not structural need for \(r=3\)
 # See also
 
 - `vignette("rank-selection", package = "TTPsplines")` — CV + 1-SE for \(r\)
-- `vignette("cgcv", package = "TTPsplines")` — fixed vs cGCV for \(\lambda\)
+- `vignette("cgcv", package = "TTPsplines")` — fixed / cGCV / CV / gGCV for \(\lambda\)
 - `vignette("generalized", package = "TTPsplines")` — Poisson / Bernoulli
 - `tt_complexity()`, `deviance()`, `summary()`
 

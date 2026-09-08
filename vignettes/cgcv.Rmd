@@ -1,8 +1,8 @@
 ---
-title: "Choosing λ with conditional GCV"
+title: "Choosing λ (cGCV, CV, gGCV)"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Choosing λ with conditional GCV}
+  %\VignetteIndexEntry{Choosing λ (cGCV, CV, gGCV)}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -20,9 +20,17 @@ Directional smoothing \(\boldsymbol\lambda=(\lambda_1,\ldots,\lambda_d)\) is
 \boxed{r \neq \lambda \neq \mathrm{EDF}}.
 \]
 
-This note covers **fixed** \(\lambda\) vs **conditional GCV (cGCV)** inside
-`ttps()`. Rank selection is `vignette("rank-selection")`; in-sample
-AIC/BIC is `vignette("aic-bic")`.
+This note covers \(\lambda\) selectors inside `ttps()`:
+
+| Spec | Role |
+|------|------|
+| numeric / length-`d` | Fixed isotropic or anisotropic |
+| `"cGCV"` (default) | Conditional / product GCV inside ALS / PIRLS |
+| `"CV"` | K-fold CV of each \(\lambda_k\) (ALS / PIRLS) |
+| `"gGCV"` | Experimental joint TT-gGCV (Gaussian scattered; expensive) |
+
+Rank selection is `vignette("rank-selection")`; in-sample AIC/BIC is
+`vignette("aic-bic")`.
 
 ```{r}
 library(TTPsplines)
@@ -175,9 +183,10 @@ data.frame(
 
 # With GLMs
 
-The same `lambda = "cGCV"` works for Poisson (PIRLS-ALS). Bernoulli /
-L-BFGS paths also accept `"cGCV"`, but separation / bound hits are more
-common — check `lambda_boundary`.
+The same `lambda = "cGCV"` (and `"CV"` under PIRLS-ALS) works for Poisson.
+Bernoulli / L-BFGS paths also accept `"cGCV"`, but separation / bound hits
+are more common — check `lambda_boundary`. `"CV"` requires ALS / PIRLS-ALS
+(not global L-BFGS). `"gGCV"` is Gaussian-only.
 
 ```{r poisson, warning=TRUE}
 set.seed(2)
@@ -213,9 +222,104 @@ sel <- tt_rank_select(
 )
 ```
 
+# K-fold CV (`lambda = "CV"`)
+
+`lambda = "CV"` runs a **k-fold** grid search for each core's \(\lambda_k\)
+during ALS (Gaussian) or PIRLS (Poisson), then continues the fit at the
+chosen values. Default behaviour (Rafa): tune on the **first** sweep only
+(`cv_sweeps = 1`), then freeze \(\boldsymbol\lambda\).
+
+Requires ALS / PIRLS-ALS (not global L-BFGS). Score is MSE on held-out
+working residuals for the current core design.
+
+```{r cv}
+fit_cv <- ttps(
+  y, X[, 1:2],
+  family = gaussian(),
+  rank = 1, k = 5,
+  lambda = "CV",
+  control = tt_control(
+    max_sweeps = 6,
+    backend = "R",
+    compute_edf = FALSE,
+    cv_folds = 3,
+    cv_ngrid = 7,
+    cv_rule = "min",
+    cv_sweeps = 1,
+    seed = 3,
+    warn_lambda_boundary = FALSE
+  )
+)
+c(
+  method = fit_cv$lambda_method,
+  lambda = paste(sprintf("%.4g", fit_cv$lambda), collapse = ", "),
+  folds = fit_cv$cv$folds,
+  rule = fit_cv$cv$rule,
+  sweeps = fit_cv$cv$sweeps
+)
+head(fit_cv$cv$trace)
+```
+
+Useful knobs:
+
+| Control | Role |
+|---------|------|
+| `cv_folds` | Number of folds (default `5`) |
+| `cv_ngrid` | Log-grid size over `lambda_bounds` if `cv_grid` is `NULL` |
+| `cv_grid` | Explicit positive grid (overrides `cv_ngrid`) |
+| `cv_sweeps` | How many ALS/PIRLS iterations retune before freeze (`1`, larger, or `Inf`) |
+| `cv_rule` | `"min"` (default) or `"1se"` (larger \(\lambda\), less under-smoothing) |
+
+`"1se"` keeps the **largest** \(\lambda\) whose CV score is within one SE of
+the minimum — useful when `"min"` under-smooths.
+
+# Joint TT-gGCV (`lambda = "gGCV"` / `tt_ggcv()`)
+
+Product cGCV is the **default**. Joint **TT-gGCV** optimizes all directional
+\(\boldsymbol\lambda\) together with a Monte Carlo estimate of global GCV
+(Hutchinson-style GDF of the fixed-rank TT ALS map). It is much more
+expensive and currently **Gaussian scattered only** (no `array = TRUE`,
+`linear=` / `smooth=`, or non-uniform weights).
+
+Prefer the dedicated helper when you want search diagnostics:
+
+```{r ggcv, eval = FALSE}
+opt <- tt_ggcv(
+  y, X[, 1:2],
+  rank = 2, k = 5,
+  n_global = 16, n_refine = 2,
+  M_search = 4, M_final = 8,
+  control = tt_control(max_sweeps = 6, backend = "R", compute_edf = FALSE)
+)
+opt$lambda
+opt$gcv
+fit_g <- opt$fit
+```
+
+Or via `ttps()`:
+
+```{r ggcv-ttps, eval = FALSE}
+fit_g <- ttps(
+  y, X[, 1:2],
+  rank = 2, k = 5,
+  lambda = "gGCV",
+  control = tt_control(
+    max_sweeps = 6, backend = "R", compute_edf = FALSE,
+    ggcv_n_global = 16, ggcv_M_search = 4, ggcv_M_final = 8
+  )
+)
+fit_g$lambda_method
+fit_g$lambda
+```
+
+Knobs: `ggcv_n_global`, `ggcv_n_refine`, `ggcv_M_search`, `ggcv_M_final`,
+`ggcv_include_cgcv_anchor` (default `TRUE` seeds with a cGCV fit).
+
 # What this is not
 
 - Not REML.
+- Not a claim that `"CV"` or `"gGCV"` dominate `"cGCV"` for every problem —
+  cGCV remains the default product selector.
 - Not coordinate AIC/BIC λ search (lab prototype; IC formulas in
   `vignette("aic-bic")`).
 - Not a substitute for choosing TT rank \(r\).
