@@ -13,7 +13,7 @@ tt_control(
   lambda_bounds = c(1e-04, 10000),
   lambda_tol = NULL,
   lambda_update = "auto",
-  backend = c("auto", "R", "Rcpp", "keras"),
+  backend = c("auto", "R", "Rcpp"),
   sparse = c("auto", TRUE, FALSE),
   use_spectral_gcv = TRUE,
   outer_maxit = 20,
@@ -26,10 +26,6 @@ tt_control(
   gd_step_factor = 0.5,
   gd_step_min = 1e-12,
   gd_armijo_c = 1e-04,
-  adam_lr = 0.001,
-  adam_epochs = 1000,
-  adam_batch_size = NULL,
-  adam_patience = 30,
   trace = FALSE,
   monitor = NULL,
   damping = TRUE,
@@ -70,6 +66,11 @@ tt_control(
   cv_grid = NULL,
   cv_sweeps = 1L,
   cv_rule = c("min", "1se"),
+  ggcv_n_global = NULL,
+  ggcv_n_refine = 5L,
+  ggcv_M_search = 15L,
+  ggcv_M_final = 40L,
+  ggcv_include_cgcv_anchor = TRUE,
   design_interface_cache = TRUE,
   gram_method = c("fused_blocked", "fused", "kron", "blas", "legacy"),
   gram_threads = 1L
@@ -92,7 +93,7 @@ tt_control(
 
 \item{lambda_update}{Reserved (\code{"auto"}); future releases may extend.}
 
-\item{backend}{\code{"auto"}, \code{"R"}, \code{"Rcpp"}, or \code{"keras"} (Adam only).
+\item{backend}{\code{"auto"}, \code{"R"}, or \code{"Rcpp"}.
 For ALS / PIRLS, sweeps stay in \strong{R} (global \(P_k^{\mathrm{full}}\));
 \code{"Rcpp"} / \code{"auto"} still accelerate Gram/RHS and penalty helpers via
 compiled kernels when available — there is \strong{no} full C++ ALS fitter yet.
@@ -103,7 +104,7 @@ not used by \code{\link[=ttps]{ttps()}}.}
 
 \item{use_spectral_gcv}{Use spectral cache inside Brent cGCV when feasible.}
 
-\item{outer_maxit}{Outer alternation iters (LBFGS/Adam + cGCV).}
+\item{outer_maxit}{Outer alternation iters (LBFGS/GD + cGCV).}
 
 \item{outer_tol}{Outer relative change tolerance.}
 
@@ -123,9 +124,6 @@ not used by \code{\link[=ttps]{ttps()}}.}
 \item{gd_step_min}{Smallest GD step before declaring line-search failure.}
 
 \item{gd_armijo_c}{Armijo sufficient-decrease constant (default 1e-4).}
-
-\item{adam_lr, adam_epochs, adam_batch_size, adam_patience}{Adam/Keras knobs
-(optional backend; \code{adam_batch_size = NULL} means full-batch).}
 
 \item{trace}{Print iteration progress (\code{TRUE}/\code{FALSE}). Alias of \code{monitor}.}
 
@@ -236,6 +234,16 @@ Use a larger integer, or \code{Inf}, to re-tune as cores move.}
 \item{cv_rule}{\code{"min"} (default; grid argmin) or \code{"1se"} (largest \(\lambda\)
 whose CV score is within one SE of the minimum — less under-smoothing).}
 
+\item{ggcv_n_global}{Sobol budget for \code{lambda = "gGCV"} / \code{\link[=tt_ggcv]{tt_ggcv()}}
+(\code{NULL} → dimension default). Joint gGCV is much more expensive than cGCV.}
+
+\item{ggcv_n_refine}{Local \code{nlminb} refinements for gGCV (default \code{5}).}
+
+\item{ggcv_M_search, ggcv_M_final}{Monte Carlo GDF probe counts for search /
+final re-evaluation (defaults \code{15} / \code{40}).}
+
+\item{ggcv_include_cgcv_anchor}{Seed gGCV with a cGCV solution (default \code{TRUE}).}
+
 \item{design_interface_cache}{If \code{TRUE} (default), LTR/RTL ALS sweeps
 precompute the inactive-side design interfaces once and absorb the
 updated core into the active side. Set \code{FALSE} only for equivalence
@@ -254,6 +262,5 @@ A list of class \code{"tt_control"}.
 }
 \description{
 Separates algorithmic knobs from the model API. Optimizer-specific fields
-for L-BFGS / Adam are reserved; Adam/Keras is optional and not required
-for the default ALS + cGCV workflows.
+for L-BFGS / GD are reserved; the default ALS + cGCV workflows do not need them.
 }

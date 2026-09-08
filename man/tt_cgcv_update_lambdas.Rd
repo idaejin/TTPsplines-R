@@ -2,7 +2,7 @@
 % Please edit documentation in R/optimizer_lbfgs.R
 \name{tt_cgcv_update_lambdas}
 \alias{tt_cgcv_update_lambdas}
-\title{One conditional cGCV pass over all cores (shared with outer LBFGS/Adam).}
+\title{One conditional cGCV pass over all cores (shared with outer LBFGS/GD).}
 \usage{
 tt_cgcv_update_lambdas(
   y,
@@ -19,6 +19,6 @@ tt_cgcv_update_lambdas(
 )
 }
 \description{
-One conditional cGCV pass over all cores (shared with outer LBFGS/Adam).
+One conditional cGCV pass over all cores (shared with outer LBFGS/GD).
 }
 \keyword{internal}

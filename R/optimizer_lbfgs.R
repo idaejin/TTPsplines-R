@@ -184,7 +184,7 @@
   )
 }
 
-#' One conditional cGCV pass over all cores (shared with outer LBFGS/Adam).
+#' One conditional cGCV pass over all cores (shared with outer LBFGS/GD).
 #' @keywords internal
 tt_cgcv_update_lambdas <- function(y, cores, intercept, basis, penalties, lambda,
                                    control, weight = NULL, z = NULL, offset = NULL,

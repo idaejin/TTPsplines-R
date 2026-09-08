@@ -16,12 +16,15 @@ tt_global_gcv(
   scheme = c("forward", "central"),
   control = tt_control(max_sweeps = 40, tol = 1e-10, compute_edf = FALSE, seed = 1L),
   init = NULL,
-  backend = "R",
+  fit_backend = c("R", "Rcpp_fixed"),
+  backend = NULL,
   k = 8L,
   degree = 3L,
   penalty_order = 2L,
   on_nonconverged = c("error", "warn", "na"),
   warm_start = TRUE,
+  gdf_init = NULL,
+  fidelity = NULL,
   ...
 )
 }
@@ -42,11 +45,22 @@ tt_global_gcv(
 
 \item{init}{Optional warm-start cores for the base fit.}
 
-\item{backend}{Backend for ALS (\code{"R"} recommended for lab reproducibility).}
+\item{fit_backend}{Lab ALS backend: \code{"R"} (\code{\link[=ttps]{ttps()}}) or \code{"Rcpp_fixed"}
+(P3 C++ fixed-λ fitter). All fixed-λ fits in this call (base + GDF
+perturbations) use \code{\link[=.tt_lab_fit_fixed]{.tt_lab_fit_fixed()}}.}
+
+\item{backend}{Deprecated alias; ignored when \code{fit_backend} is set.}
 
 \item{k, degree, penalty_order}{Basis / penalty settings.}
 
 \item{on_nonconverged}{Forwarded to GDF estimator.}
+
+\item{warm_start}{Legacy GDF init alias.}
+
+\item{gdf_init}{\code{"probe_warm"} or \code{"cold"} for MC perturbations.}
+
+\item{fidelity}{Optional stage label recorded in the result (\code{"sobol"},
+\code{"refine"}, \code{"final"}, or custom).}
 
 \item{...}{Extra args to \code{fit_fun} / GDF.}
 }

@@ -26,8 +26,10 @@ tt_rank_profile(
 \code{"gaussian"}, \code{"poisson"}, \code{"binomial"}.}
 
 \item{lambda}{Numeric (isotropic / anisotropic fixed), \code{"cGCV"} (conditional
-GCV, default), or \code{"CV"} (k-fold CV of each \(\lambda_n\) on the first ALS
-sweep, then frozen).}
+GCV, default), \code{"CV"} (k-fold CV of each \(\lambda_n\); by default on
+the first ALS/PIRLS sweep then frozen — see \code{tt_control(cv_sweeps, cv_rule)}),
+or \code{"gGCV"} (joint TT-gGCV via Monte Carlo GDF; Gaussian scattered only;
+much slower — see \code{\link[=tt_ggcv]{tt_ggcv()}} and \verb{tt_control(ggcv_*)}).}
 
 \item{k}{Number of B-spline basis functions per margin.}
 

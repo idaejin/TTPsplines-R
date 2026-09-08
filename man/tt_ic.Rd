@@ -7,31 +7,41 @@
 tt_ic(fit, criterion = c("AIC", "BIC"))
 }
 \arguments{
-\item{fit}{A \code{\link{ttps}()} / \code{\link{ttpspline}()} fit with finite
-\code{fit$edf} (\code{tt_control(compute_edf = TRUE)}).}
+\item{fit}{A \code{\link[=ttps]{ttps()}} / \code{\link[=ttpspline]{ttpspline()}} fit with finite \code{fit$edf}
+(\code{tt_control(compute_edf = TRUE)}).}
 
-\item{criterion}{\code{"AIC"} (penalty 2) or \code{"BIC"} (penalty \eqn{\log n}).}
+\item{criterion}{\code{"AIC"} (penalty \(2\)) or \code{"BIC"} (penalty \(\log n\)).}
 }
 \value{
 Scalar numeric criterion value.
 }
 \description{
 Working AIC / BIC using joint linearized \code{fit$edf} (not \code{npar_tt}).
-The intercept is not inside the TT EDF, so the penalty uses
-\eqn{\widehat{\mathrm{edf}}+1}.
+The intercept is \strong{not} inside the TT EDF, so the penalty uses
+\(\widehat{\mathrm{edf}}+1\).
 }
 \details{
 \itemize{
-\item \strong{Gaussian:} \eqn{n\log(\mathrm{RSS}/n)+\mathrm{pen}\cdot(\mathrm{edf}+1)}
+\item \strong{Gaussian:} \(n\log(\mathrm{RSS}/n)+\mathrm{pen}\cdot(\mathrm{edf}+1)\)
 (\code{fit$deviance} stores RSS).
-\item \strong{Poisson / Bernoulli:} \eqn{D+\mathrm{pen}\cdot(\mathrm{edf}+1)}
+\item \strong{Poisson / Bernoulli:} \(D+\mathrm{pen}\cdot(\mathrm{edf}+1)\)
 (\code{fit$deviance} is GLM deviance).
 }
+
 This is a linearized / PIRLS working criterion, not an \code{mgcv}-style REML
-score and not a substitute for \code{\link{tt_rank_select}()} when the goal is
+score and not a substitute for \code{tt_rank_select()} when the goal is
 predictive rank choice.
 }
+\examples{
+\dontrun{
+data(ishigami)
+X <- as.matrix(ishigami[, c("x1", "x2", "x3")])
+fit <- ttps(ishigami$y, X, rank = 2, k = 6, lambda = 1,
+            control = tt_control(max_sweeps = 6, compute_edf = TRUE))
+tt_ic(fit, "AIC")
+tt_ic(fit, "BIC")
+}
+}
 \seealso{
-\code{\link{tt_edf}()}, \code{\link{tt_rank_select}()},
-\code{vignette("aic-bic", package = "TTPsplines")}
+\code{\link[=tt_edf]{tt_edf()}}, \code{\link[=tt_rank_select]{tt_rank_select()}}, \code{vignette("aic-bic")}
 }

@@ -40,18 +40,15 @@ test_that("same init yields ALS and LBFGS eta close (fixed lambda)", {
   expect_equal(fit_lbfgs$optimizer, "LBFGS")
 })
 
-test_that("Adam fails with clear optional-backend message", {
+test_that("Adam is not offered as an optimizer", {
   set.seed(1)
   X <- matrix(runif(40 * 2), 40, 2)
   y <- rnorm(40)
   expect_error(
     ttps(y, X, rank = 1, k = 4, lambda = 1, optimizer = "Adam",
               control = tt_control(backend = "R", max_sweeps = 2)),
-    "Adam"
+    "arg|match|Adam"
   )
-  st <- tt_keras_status()
-  expect_true(is.list(st))
-  expect_false(isTRUE(tt_has_keras()) && FALSE) # smoke: callable
 })
 
 test_that("joint EDF is finite for small Gaussian fits", {

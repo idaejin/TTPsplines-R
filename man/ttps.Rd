@@ -6,7 +6,7 @@
 \usage{
 ttps(
   y,
-  X,
+  X = NULL,
   family = stats::gaussian(),
   rank = 3,
   k = 10,
@@ -14,8 +14,8 @@ ttps(
   penalty_order = 2,
   lambda = "cGCV",
   optimizer = c("auto", "ALS", "PIRLS-ALS", "Damped-Newton-ALS", "LBFGS-ALS", "GD",
-    "LBFGS", "hybrid", "Adam"),
-  backend = c("auto", "R", "Rcpp", "keras"),
+    "LBFGS", "hybrid"),
+  backend = c("auto", "R", "Rcpp"),
   init = NULL,
   control = tt_control(),
   monitor = FALSE,
@@ -27,7 +27,9 @@ ttps(
   weights = NULL,
   cyclic = NULL,
   period = NULL,
-  null_space = c("joint", "profiled")
+  null_space = c("joint", "profiled"),
+  array = FALSE,
+  axes = NULL
 )
 }
 \arguments{
@@ -49,10 +51,10 @@ For data-driven choice use \code{\link[=tt_rank_select]{tt_rank_select()}} then 
 \item{penalty_order}{Difference penalty order.}
 
 \item{lambda}{Numeric (isotropic / anisotropic fixed), \code{"cGCV"} (conditional
-GCV, default), \code{"CV"} (k-fold CV of each \(\lambda_k\); by default on
+GCV, default), \code{"CV"} (k-fold CV of each \(\lambda_n\); by default on
 the first ALS/PIRLS sweep then frozen — see \code{tt_control(cv_sweeps, cv_rule)}),
 or \code{"gGCV"} (joint TT-gGCV via Monte Carlo GDF; Gaussian scattered only;
-see \code{\link{tt_ggcv}} and \code{tt_control(ggcv_*)}).}
+much slower — see \code{\link[=tt_ggcv]{tt_ggcv()}} and \verb{tt_control(ggcv_*)}).}
 
 \item{optimizer}{One of:
 \itemize{
@@ -65,11 +67,10 @@ binomial \(\to\) \code{"LBFGS"} (see \code{optimizer_requested} /
 \item \code{"LBFGS-ALS"} — block/core-wise L-BFGS on each \(Q_k\) (≠ global LBFGS);
 \item \code{"GD"} — global first-order on \(\mathcal L\) (diagnostic);
 \item \code{"LBFGS"} — global quasi-Newton on \(\mathcal L\);
-\item \code{"hybrid"} — experimental ALS→LBFGS polish;
-\item \code{"Adam"} — optional Keras (not yet implemented).
+\item \code{"hybrid"} — experimental ALS→LBFGS polish.
 }}
 
-\item{backend}{\code{"auto"}, \code{"R"}, \code{"Rcpp"}, or \code{"keras"}. Overridden by
+\item{backend}{\code{"auto"}, \code{"R"}, or \code{"Rcpp"}. Overridden by
 \code{control$backend} only when this argument is \code{"auto"} and control is not;
 prefer setting backend here or in \code{\link[=tt_control]{tt_control()}}. ALS / PIRLS always use
 the R sweep under the global penalty; \code{"Rcpp"} accelerates kernels only
@@ -101,7 +102,7 @@ specs, e.g.
 penalty order. Per-term smoothing: \code{lambda} (numeric or \code{"cGCV"}, default
 from \code{lambda_smooth}) \strong{or} \code{target_edf} (choose \(\lambda\) so
 \(\mathrm{edf}(\lambda)\approx\) target; requires \verb{m < target_edf <= k}).
-Unsupported for LBFGS / GD / hybrid / Adam / LBFGS-ALS / DN-ALS (error).}
+Unsupported for LBFGS / GD / hybrid / LBFGS-ALS / DN-ALS (error).}
 
 \item{lambda_smooth}{Default smoother penalty for terms in \code{smooth} that
 omit \code{lambda} and \code{target_edf} (\code{"cGCV"} or a nonnegative scalar).}
@@ -140,13 +141,13 @@ Three orthogonal choices:
 \itemize{
 \item \code{optimizer}: estimation philosophy —
 structure-aware \code{ALS} / \code{PIRLS-ALS}, or direct penalized
-likelihood \code{GD} / \code{LBFGS} / \code{Adam}.
+likelihood \code{GD} / \code{LBFGS}.
 \code{auto} is a simple family-aware default (Gaussian \(\to\) ALS,
 Poisson \(\to\) PIRLS-ALS, binomial \(\to\) LBFGS); always overridable.
 \item \code{lambda}: fixed isotropic/anisotropic, \code{"cGCV"}, \code{"CV"}, or \code{"gGCV"}
 (k-fold grid search; default first ALS/PIRLS sweep then frozen)
 \item \code{backend}: \code{"R"} for ALS/PIRLS sweeps; \code{"Rcpp"} = kernel helpers
-only (not a full C++ ALS fitter); \code{"keras"} reserved for Adam
+only (not a full C++ ALS fitter)
 }
 }
 \examples{

@@ -535,7 +535,7 @@ plot.ttpspline <- function(x,
   if (identical(key, "gaussian") || identical(opt, "ALS")) {
     return("NA (not used; Gaussian ALS)")
   }
-  if (opt %in% c("LBFGS", "GD", "Adam", "Damped-Newton-ALS", "LBFGS-ALS")) {
+  if (opt %in% c("LBFGS", "GD", "Damped-Newton-ALS", "LBFGS-ALS")) {
     return(sprintf("NA (not used; %s)", opt))
   }
   "NA (not used)"

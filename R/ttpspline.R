@@ -8,13 +8,13 @@
 #' \itemize{
 #'   \item \code{optimizer}: estimation philosophy —
 #'     structure-aware \code{ALS} / \code{PIRLS-ALS}, or direct penalized
-#'     likelihood \code{GD} / \code{LBFGS} / \code{Adam}.
+#'     likelihood \code{GD} / \code{LBFGS}.
 #'     \code{auto} is a simple family-aware default (Gaussian \(\to\) ALS,
 #'     Poisson \(\to\) PIRLS-ALS, binomial \(\to\) LBFGS); always overridable.
 #'   \item \code{lambda}: fixed isotropic/anisotropic, `"cGCV"`, `"CV"`, or `"gGCV"`
 #'     (k-fold grid search; default first ALS/PIRLS sweep then frozen)
 #'   \item \code{backend}: `"R"` for ALS/PIRLS sweeps; `"Rcpp"` = kernel helpers
-#'     only (not a full C++ ALS fitter); `"keras"` reserved for Adam
+#'     only (not a full C++ ALS fitter)
 #' }
 #'
 #' @param y Numeric response (`0/1` for binomial; counts for Poisson).
@@ -43,10 +43,9 @@
 #'     \item `"LBFGS-ALS"` — block/core-wise L-BFGS on each \(Q_k\) (≠ global LBFGS);
 #'     \item `"GD"` — global first-order on \(\mathcal L\) (diagnostic);
 #'     \item `"LBFGS"` — global quasi-Newton on \(\mathcal L\);
-#'     \item `"hybrid"` — experimental ALS→LBFGS polish;
-#'     \item `"Adam"` — optional Keras (not yet implemented).
+#'     \item `"hybrid"` — experimental ALS→LBFGS polish.
 #'   }
-#' @param backend `"auto"`, `"R"`, `"Rcpp"`, or `"keras"`. Overridden by
+#' @param backend `"auto"`, `"R"`, or `"Rcpp"`. Overridden by
 #'   `control$backend` only when this argument is `"auto"` and control is not;
 #'   prefer setting backend here or in [tt_control()]. ALS / PIRLS always use
 #'   the R sweep under the global penalty; `"Rcpp"` accelerates kernels only
@@ -71,7 +70,7 @@
 #'   penalty order. Per-term smoothing: `lambda` (numeric or `"cGCV"`, default
 #'   from `lambda_smooth`) **or** `target_edf` (choose \(\lambda\) so
 #'   \(\mathrm{edf}(\lambda)\approx\) target; requires `m < target_edf <= k`).
-#'   Unsupported for LBFGS / GD / hybrid / Adam / LBFGS-ALS / DN-ALS (error).
+#'   Unsupported for LBFGS / GD / hybrid / LBFGS-ALS / DN-ALS (error).
 #' @param lambda_smooth Default smoother penalty for terms in `smooth` that
 #'   omit `lambda` and `target_edf` (`"cGCV"` or a nonnegative scalar).
 #' @param null_space How to treat the discrete P-spline penalty null space:
@@ -148,8 +147,8 @@ ttps <- function(y,
                  lambda = "cGCV",
                  optimizer = c("auto", "ALS", "PIRLS-ALS",
                                "Damped-Newton-ALS", "LBFGS-ALS",
-                               "GD", "LBFGS", "hybrid", "Adam"),
-                 backend = c("auto", "R", "Rcpp", "keras"),
+                               "GD", "LBFGS", "hybrid"),
+                 backend = c("auto", "R", "Rcpp"),
                  init = NULL,
                       control = tt_control(),
                       monitor = FALSE,
@@ -264,7 +263,7 @@ ttps <- function(y,
   optimizer <- opt_res$dispatch
   # linear=/smooth= force structure-aware ALS/PIRLS (incl. binomial auto→LBFGS)
   if (!is.null(linear) || !is.null(smooth)) {
-    unsupported <- c("LBFGS", "GD", "hybrid", "Adam",
+    unsupported <- c("LBFGS", "GD", "hybrid",
                      "Damped-Newton-ALS", "LBFGS-ALS")
     if (identical(optimizer_requested, "auto") &&
         identical(optimizer_used, "LBFGS")) {
@@ -664,19 +663,12 @@ ttpspline <- ttps
   linear <- normalize_linear(linear, length(y))
   smooth <- normalize_smooth(smooth, length(y))
   if ((!is.null(linear) || !is.null(smooth)) &&
-      optimizer %in% c("Adam", "hybrid", "LBFGS", "GD",
+      optimizer %in% c("hybrid", "LBFGS", "GD",
                        "Damped-Newton-ALS", "LBFGS-ALS")) {
     stop(
       "`linear=` / `smooth=` are not supported with optimizer='", optimizer, "'.",
       call. = FALSE
     )
-  }
-  if (identical(optimizer, "Adam")) {
-    return(tt_adam_fit(
-      y, basis, ranks, lambda_spec, control, penalty_order,
-      init_cores = init_cores, family = if (identical(key, "gaussian")) NULL else fam,
-      offset = offset, weights = weights
-    ))
   }
 
   if (identical(optimizer, "hybrid")) {

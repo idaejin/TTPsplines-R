@@ -1,4 +1,4 @@
-# Direct-likelihood optimizers (GD / LBFGS / Adam)
+# Direct-likelihood optimizers (GD / LBFGS)
 
 TTPsplines separates **structure-aware** estimation from **direct** minimization of the same penalized objective
 
@@ -16,7 +16,6 @@ TTPsplines separates **structure-aware** estimation from **direct** minimization
 | `LBFGS-ALS` | Conditional L-BFGS on each \(Q_k\) | Experimental / benchmark |
 | `GD` | First-order GD + Armijo on \(\mathcal L\) | Experimental / paper baseline |
 | `LBFGS` | Quasi-Newton on \(\mathcal L\) | Default for Bernoulli (`auto`) |
-| `Adam` | Adaptive first-order (Keras; stub) | Future |
 
 `GD` reuses the **same analytical objective and gradient** as `LBFGS` (`R/optimizer_lbfgs.R`). It is **not** a PIRLS variant.
 

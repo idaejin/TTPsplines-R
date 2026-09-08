@@ -1,6 +1,6 @@
 #' Initialize TT cores (reproducible across optimizers).
 #'
-#' Use the same `init` object for ALS / L-BFGS / Adam so optimizer benchmarks
+#' Use the same `init` object for ALS / L-BFGS so optimizer benchmarks
 #' differ only by algorithm, not by random start (gauge aside).
 #'
 #' @param d Number of modes, or a covariate matrix `X` (uses `ncol(X)`).

@@ -30,7 +30,6 @@ Imports:
     splines
 Suggests:
     Matrix,
-    reticulate,
     testthat (>= 3.0.0),
     knitr,
     rmarkdown
@@ -67,7 +66,6 @@ Collate:
     'optimizer_gd.R'
     'optimizer_conditional.R'
     'optimizer_hybrid.R'
-    'optimizer_adam.R'
     'objective.R'
     'ttpspline.R'
     'complexity.R'

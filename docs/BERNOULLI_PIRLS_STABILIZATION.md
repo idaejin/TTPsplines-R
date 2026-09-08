@@ -71,7 +71,7 @@ PIRLS history rows (always stored on the R Bernoulli path): objective, nll, pena
 ### Explicitly **not** done in this gate
 
 - No hard \(|\eta|\) cap.
-- No Adam / Keras.
+- No Keras / TF dependency.
 - No cFS / cREML / penalty change.
 - Default optimizer remains ALS (hybrid is experimental only).
 

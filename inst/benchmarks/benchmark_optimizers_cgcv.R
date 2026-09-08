@@ -2,7 +2,6 @@
 #
 # ALS: cGCV on each core visit.
 # LBFGS: outer alternation (optimize cores → conditional cGCV → repeat).
-# Adam: stub / unavailable.
 #
 #   Rscript inst/benchmarks/benchmark_optimizers_cgcv.R
 
@@ -24,7 +23,7 @@ local({
   n_tr <- as.integer(Sys.getenv("TTPSPLINES_BENCH_N", "800"))
   k <- as.integer(Sys.getenv("TTPSPLINES_BENCH_K", "6"))
   ranks <- as.integer(strsplit(Sys.getenv("TTPSPLINES_BENCH_RANKS", "2,3"), ",")[[1]])
-  optimizers <- c("ALS", "LBFGS", "Adam")
+  optimizers <- c("ALS", "LBFGS")
   seed_data <- 31L
   seed_init <- 123L
 

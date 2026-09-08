@@ -12,7 +12,8 @@ glam_fit_poisson(
   penalty_order = 2L,
   pirls_maxit = 25L,
   tol = 1e-08,
-  trace = FALSE
+  trace = FALSE,
+  fit_weights = NULL
 )
 }
 \arguments{

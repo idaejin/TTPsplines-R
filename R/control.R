@@ -1,8 +1,7 @@
 #' Control parameters for [ttps()].
 #'
 #' Separates algorithmic knobs from the model API. Optimizer-specific fields
-#' for L-BFGS / Adam are reserved; Adam/Keras is optional and not required
-#' for the default ALS + cGCV workflows.
+#' for L-BFGS / GD are reserved; the default ALS + cGCV workflows do not need them.
 #'
 #' @param max_sweeps Maximum ALS sweeps (Gaussian / inner GLM).
 #' @param pirls_maxit Maximum outer PIRLS iterations (GLM).
@@ -12,7 +11,7 @@
 #' @param lambda_bounds Length-2 bounds for automatic λ search on log scale.
 #' @param lambda_tol Alias of `tol_lambda`.
 #' @param lambda_update Reserved (`"auto"`); future releases may extend.
-#' @param backend `"auto"`, `"R"`, `"Rcpp"`, or `"keras"` (Adam only).
+#' @param backend `"auto"`, `"R"`, or `"Rcpp"`.
 #'   For ALS / PIRLS, sweeps stay in **R** (global \(P_k^{\mathrm{full}}\));
 #'   `"Rcpp"` / `"auto"` still accelerate Gram/RHS and penalty helpers via
 #'   compiled kernels when available — there is **no** full C++ ALS fitter yet.
@@ -20,7 +19,7 @@
 #'   not used by [ttps()].
 #' @param sparse `"auto"`, `TRUE`, or `FALSE` (v0: dense bases; hybrid reserved).
 #' @param use_spectral_gcv Use spectral cache inside Brent cGCV when feasible.
-#' @param outer_maxit Outer alternation iters (LBFGS/Adam + cGCV).
+#' @param outer_maxit Outer alternation iters (LBFGS/GD + cGCV).
 #' @param outer_tol Outer relative change tolerance.
 #' @param lbfgs_maxit Max L-BFGS iterations.
 #' @param gd_lr Initial / nominal GD step size (start of Armijo search when
@@ -31,8 +30,6 @@
 #' @param gd_step_factor Backtracking factor for GD line search (default 0.5).
 #' @param gd_step_min Smallest GD step before declaring line-search failure.
 #' @param gd_armijo_c Armijo sufficient-decrease constant (default 1e-4).
-#' @param adam_lr,adam_epochs,adam_batch_size,adam_patience Adam/Keras knobs
-#'   (optional backend; `adam_batch_size = NULL` means full-batch).
 #' @param trace Print iteration progress (`TRUE`/`FALSE`). Alias of `monitor`.
 #' @param monitor Alias of `trace` — set `monitor = TRUE` to watch ALS / PIRLS /
 #'   L-BFGS / GD sweeps. If both are supplied, either `TRUE` enables logging.
@@ -128,7 +125,7 @@ tt_control <- function(max_sweeps = 50,
                        lambda_bounds = c(1e-4, 1e4),
                        lambda_tol = NULL,
                        lambda_update = "auto",
-                       backend = c("auto", "R", "Rcpp", "keras"),
+                       backend = c("auto", "R", "Rcpp"),
                        sparse = c("auto", TRUE, FALSE),
                        use_spectral_gcv = TRUE,
                        outer_maxit = 20,
@@ -141,10 +138,6 @@ tt_control <- function(max_sweeps = 50,
                        gd_step_factor = 0.5,
                        gd_step_min = 1e-12,
                        gd_armijo_c = 1e-4,
-                       adam_lr = 1e-3,
-                       adam_epochs = 1000,
-                       adam_batch_size = NULL,
-                       adam_patience = 30,
                        trace = FALSE,
                        monitor = NULL,
                        damping = TRUE,
@@ -235,10 +228,6 @@ tt_control <- function(max_sweeps = 50,
       gd_step_factor = as.numeric(gd_step_factor),
       gd_step_min = as.numeric(gd_step_min),
       gd_armijo_c = as.numeric(gd_armijo_c),
-      adam_lr = as.numeric(adam_lr),
-      adam_epochs = as.integer(adam_epochs),
-      adam_batch_size = if (is.null(adam_batch_size)) NULL else as.integer(adam_batch_size),
-      adam_patience = as.integer(adam_patience),
       trace = isTRUE(trace),
       monitor = isTRUE(trace),
       damping = isTRUE(damping),
@@ -347,10 +336,6 @@ resolve_backend <- function(control, optimizer = "ALS") {
     }
   }
   if (identical(be, "auto")) {
-    if (identical(optimizer, "Adam")) {
-      if (isTRUE(tt_has_keras())) return("keras")
-      return("keras") # caller will error with install hint
-    }
     # Direct / conditional-likelihood R paths
     if (optimizer %in% c("LBFGS", "GD", "hybrid",
                          "Damped-Newton-ALS", "LBFGS-ALS")) {
@@ -361,12 +346,6 @@ resolve_backend <- function(control, optimizer = "ALS") {
   }
   if (identical(be, "Rcpp") && !.ttpsplines_has_rcpp()) {
     warning("Rcpp backend unavailable; falling back to R.", call. = FALSE)
-    return("R")
-  }
-  if (identical(be, "keras") && !identical(optimizer, "Adam")) {
-    warning("backend='keras' is only used with optimizer='Adam'; ignoring.",
-            call. = FALSE)
-    if (.ttpsplines_has_rcpp()) return("Rcpp")
     return("R")
   }
   be

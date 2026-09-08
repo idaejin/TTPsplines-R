@@ -23,6 +23,6 @@ tt_initialize(d, rank = 3, k = 10, seed = 1, sd = 0.15, ...)
 List of TT core arrays with attribute \code{ranks}.
 }
 \description{
-Use the same \code{init} object for ALS / L-BFGS / Adam so optimizer benchmarks
+Use the same \code{init} object for ALS / L-BFGS so optimizer benchmarks
 differ only by algorithm, not by random start (gauge aside).
 }

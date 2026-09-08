@@ -39,6 +39,10 @@ tt_global_lambda_optimize_v1(
   expand_step = 3,
   stop_on_stable_region = TRUE,
   min_batches_before_stop = 2L,
+  fit_backend = c("R", "Rcpp_fixed"),
+  adaptive_fidelity = TRUE,
+  fidelity = NULL,
+  gdf_init = c("probe_warm", "cold"),
   verbose = FALSE
 )
 }
@@ -101,6 +105,15 @@ near-optimal region intervals stabilize (default TRUE). Prefer FALSE
 for higher-d validation gates.}
 
 \item{min_batches_before_stop}{Minimum batches before early stop can fire.}
+
+\item{fit_backend}{Lab ALS backend (\code{"R"} / \code{"Rcpp_fixed"}).}
+
+\item{adaptive_fidelity}{If \code{TRUE} (default), use stage-wise ALS budgets
+(sobol / refine / final); winner decided only after high-fidelity reeval.}
+
+\item{fidelity}{Optional override list from \code{\link[=.tt_lab_default_fidelity]{.tt_lab_default_fidelity()}}.}
+
+\item{gdf_init}{\code{"probe_warm"} (default) or \code{"cold"} for GDF perturbations.}
 
 \item{verbose}{Print stage progress.}
 }

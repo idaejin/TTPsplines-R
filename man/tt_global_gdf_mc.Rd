@@ -14,8 +14,10 @@ tt_global_gdf_mc(
   probe_seed = 1L,
   probes = NULL,
   warm_start = TRUE,
+  gdf_init = NULL,
   on_nonconverged = c("error", "warn", "na"),
   control = NULL,
+  fit_backend = NULL,
   ...
 )
 }
@@ -37,11 +39,16 @@ tt_global_gdf_mc(
 
 \item{probes}{Optional \verb{n x M} probe matrix (overrides \code{probe_seed} / \code{M}).}
 
-\item{warm_start}{Passed to the default refitter.}
+\item{warm_start}{Legacy alias (\code{TRUE}→\code{probe_warm}, \code{FALSE}→\code{cold}).}
+
+\item{gdf_init}{\code{"probe_warm"} (clone \code{fit_base$cores} per probe) or \code{"cold"}.
+Probes never chain; \code{fit_base$cores} must remain unchanged.}
 
 \item{on_nonconverged}{\code{"error"}, \code{"warn"}, or \code{"na"} (record NA contribution).}
 
 \item{control}{Optional \code{\link[=tt_control]{tt_control()}} override for perturbed refits.}
+
+\item{fit_backend}{Lab ALS backend for default refits (\code{"R"} / \code{"Rcpp_fixed"}).}
 
 \item{...}{Passed to \code{refit_fun}.}
 }

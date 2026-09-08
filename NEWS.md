@@ -2,6 +2,12 @@
 
 ## Development (0.0.0.9001)
 
+### Removed Adam/Keras stub
+
+* Dropped unused `optimizer = "Adam"` / `backend = "keras"` stub, `tt_has_keras()`,
+  `tt_keras_status()`, `reticulate` Suggests, and the optional Keras benchmark script.
+  Direct-likelihood path remains ALS / PIRLS-ALS / LBFGS / GD (+ experimental hybrids).
+
 ### Information criteria
 
 * New exported `tt_ic(fit, "AIC"|"BIC")`: working AIC/BIC from joint linearized `fit$edf` (+1 for intercept).
@@ -96,7 +102,7 @@
   `contrast_row=` gives SE of a link contrast for centered RR curves.
 * Threaded through `predict` (matching `smooth=` / `linear=` newdata),
   `tt_rank_select` / `tt_rank_refit`, `ttps_multistart`.
-* Unsupported (error): LBFGS / GD / hybrid / Adam / DN-ALS / LBFGS-ALS.
+* Unsupported (error): LBFGS / GD / hybrid / DN-ALS / LBFGS-ALS.
 
 ### Methodological
 

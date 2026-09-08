@@ -31,6 +31,10 @@ tt_global_lambda_optimize(
   extra_theta = NULL,
   epsilon_rel = 0.001,
   scheme = c("forward", "central"),
+  fit_backend = c("R", "Rcpp_fixed"),
+  adaptive_fidelity = TRUE,
+  fidelity = NULL,
+  gdf_init = c("probe_warm", "cold"),
   verbose = FALSE
 )
 }
@@ -75,6 +79,15 @@ objective, then GCV).}
 prior solution used as an explicit anchor (\verb{prior_solution_*}).}
 
 \item{epsilon_rel, scheme}{Forwarded to MC-GDF.}
+
+\item{fit_backend}{Lab ALS backend (\code{"R"} / \code{"Rcpp_fixed"}).}
+
+\item{adaptive_fidelity}{If \code{TRUE} (default), use stage-wise ALS budgets
+(sobol / refine / final); winner decided only after high-fidelity reeval.}
+
+\item{fidelity}{Optional override list from \code{\link[=.tt_lab_default_fidelity]{.tt_lab_default_fidelity()}}.}
+
+\item{gdf_init}{\code{"probe_warm"} (default) or \code{"cold"} for GDF perturbations.}
 
 \item{verbose}{Print stage progress.}
 }

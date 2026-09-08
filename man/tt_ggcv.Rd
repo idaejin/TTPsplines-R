@@ -15,26 +15,26 @@ tt_ggcv(
   theta_upper = NULL,
   n_global = NULL,
   n_refine = 5L,
-  n_diverse = NULL,
-  M_search = NULL,
-  M_final = NULL,
-  core_starts_search = NULL,
-  core_starts_final = NULL,
-  min_dist = NULL,
-  boundary_tol = NULL,
-  seed = NULL,
-  k = 10,
-  degree = 3,
-  penalty_order = 2,
-  control = tt_control(),
+  n_diverse = 10L,
+  M_search = 15L,
+  M_final = 40L,
+  core_starts_search = 1L,
+  core_starts_final = 3L,
+  min_dist = 0.75,
+  boundary_tol = 0.05,
+  seed = 1L,
+  k = 8L,
+  degree = 3L,
+  penalty_order = 2L,
+  control = tt_control(max_sweeps = 40L, compute_edf = FALSE, seed = 1L),
   include_cgcv_anchor = TRUE,
   extra_theta = NULL,
-  epsilon_rel = NULL,
-  scheme = NULL,
-  fit_backend = NULL,
-  adaptive_fidelity = NULL,
+  epsilon_rel = 0.001,
+  scheme = c("forward", "central"),
+  fit_backend = c("R", "Rcpp_fixed"),
+  adaptive_fidelity = TRUE,
   fidelity = NULL,
-  gdf_init = NULL,
+  gdf_init = c("probe_warm", "cold"),
   verbose = FALSE,
   ...
 )
@@ -46,7 +46,7 @@ tt_ggcv(
 
 \item{rank}{Fixed TT rank (scalar).}
 
-\item{family}{Currently only \code{\link[stats:family]{stats::gaussian()}}.}
+\item{family}{Currently only \code{\link[stats:gaussian]{stats::gaussian()}}.}
 
 \item{theta_lower, theta_upper}{Box in \(\log_{10}\lambda\) (default from
 \code{control$lambda_bounds}).}
@@ -67,7 +67,7 @@ tt_ggcv(
 
 \item{k, degree, penalty_order}{Basis / penalty.}
 
-\item{control}{\code{\link{tt_control}()} for ALS budgets.}
+\item{control}{\code{\link[=tt_control]{tt_control()}} for ALS budgets.}
 
 \item{include_cgcv_anchor}{Seed with a cGCV fit.}
 
@@ -84,9 +84,8 @@ tt_ggcv(
 \item{...}{Unused (error if supplied).}
 }
 \value{
-A list with \code{lambda}, \code{theta}, \code{gcv}, \code{gdf}, \code{fit},
-\code{boundary}, and search diagnostics. The embedded \code{fit} is a
-\code{\link{ttps}()} object.
+A list with \code{lambda}, \code{theta}, \code{gcv}, \code{gdf}, \code{fit}, \code{boundary}, and
+search diagnostics. The embedded \code{fit} is a \code{\link[=ttps]{ttps()}} object.
 }
 \description{
 Optimizes all directional \(\boldsymbol\lambda\) jointly by a Monte Carlo
@@ -94,7 +93,18 @@ estimate of global GCV (Hutchinson-style GDF of the fixed-rank TT ALS map).
 This is the experimental \strong{TT-gGCV} oracle; it does \strong{not} replace the
 default conditional selector \code{lambda = "cGCV"}.
 }
+\examples{
+\dontrun{
+set.seed(1)
+n <- 200
+X <- cbind(runif(n), runif(n))
+y <- sin(2 * pi * X[, 1]) + 0.3 * sin(pi * X[, 2]) + rnorm(n, sd = 0.25)
+opt <- tt_ggcv(y, X, rank = 2, k = 6,
+               n_global = 16, M_search = 4, M_final = 8,
+               control = tt_control(max_sweeps = 8))
+opt$lambda
+}
+}
 \seealso{
-\code{\link{ttps}()} with \code{lambda = "gGCV"}, \code{\link{tt_control}()}
-(\code{ggcv_*} knobs).
+\code{\link[=ttps]{ttps()}} with \code{lambda = "gGCV"}, \code{\link[=tt_control]{tt_control()}} (\verb{ggcv_*} knobs).
 }

@@ -1,6 +1,6 @@
 # Optimizer comparison — FIXED lambda (fair init / bases / data)
 #
-# Compares ALS vs LBFGS (Adam stub recorded as unavailable).
+# Compares ALS vs LBFGS.
 # Metrics: eta/mu prediction quality, deviance/RSS, wall time, iterations.
 # Do NOT compare TT cores (gauge non-identifiability).
 #
@@ -26,7 +26,7 @@ local({
   n_tr <- as.integer(Sys.getenv("TTPSPLINES_BENCH_N", "1000"))
   k <- as.integer(Sys.getenv("TTPSPLINES_BENCH_K", "6"))
   ranks <- as.integer(strsplit(Sys.getenv("TTPSPLINES_BENCH_RANKS", "2,3"), ",")[[1]])
-  optimizers <- c("ALS", "LBFGS", "Adam")
+  optimizers <- c("ALS", "LBFGS")
   seed_data <- 21L
   seed_init <- 123L
   lambda_fixed <- 1

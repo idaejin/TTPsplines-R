@@ -15,7 +15,8 @@ tt_als_fit(
   offset = NULL,
   weights = NULL,
   linear = NULL,
-  smooth = NULL
+  smooth = NULL,
+  array_data = NULL
 )
 }
 \description{

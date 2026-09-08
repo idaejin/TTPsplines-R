@@ -7,7 +7,7 @@
 parse_lambda_spec(lambda, d, control = NULL)
 }
 \arguments{
-\item{lambda}{Scalar, length-\code{d} vector, \code{"cGCV"}, or \code{"CV"}.}
+\item{lambda}{Scalar, length-\code{d} vector, \code{"cGCV"}, \code{"CV"}, or \code{"gGCV"}.}
 
 \item{d}{Number of margins.}
 

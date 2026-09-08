@@ -27,12 +27,11 @@
 # | `benchmark_bernoulli.R` | Scattered Bernoulli; ranks × {fixed, cGCV} |
 # | `benchmark_rank.R` | `tt_rank_profile` + test RMSE |
 # | `benchmark_glam.R` | Grid GLAM vs TT, **same fixed λ** (compression) |
-# | `benchmark_optimizers_fixed.R` | ALS vs LBFGS vs Adam stub; fixed λ; same init |
-# | `benchmark_optimizers_cgcv.R` | ALS vs LBFGS vs Adam stub; cGCV; same init |
+# | `benchmark_optimizers_fixed.R` | ALS vs LBFGS; fixed λ; same init |
+# | `benchmark_optimizers_cgcv.R` | ALS vs LBFGS; cGCV; same init |
 # | `diagnose_als_vs_lbfgs.R` | Objective / multi-init / cross warm-start / λ paths |
 # | `benchmark_ishigami_rank_init.R` | Ishigami r=2 vs r=3 multi-seed + TT truncate warm-start |
 # | `benchmark_bernoulli_audit.R` | Bernoulli PIRLS vs LBFGS root-cause audit (`--quick`/`--full`) |
-# | `python/benchmark_keras_tt.py` | Optional autodiff comparator (no TF dependency) |
 #
 # Shared DGP / metrics: `helpers.R`.
 #

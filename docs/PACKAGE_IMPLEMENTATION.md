@@ -22,9 +22,9 @@ Public API separates three decisions:
 
 | Axis | Argument | Options |
 |------|----------|---------|
-| Optimizer | `optimizer` | `ALS` (default), `LBFGS`, `Adam` (stub) |
+| Optimizer | `optimizer` | `ALS` (default), `LBFGS`, `GD`, … |
 | Smoothing | `lambda` | scalar / length-`d` fixed, `"cGCV"` |
-| Backend | `backend` / `tt_control(backend=)` | `auto`, `R`, `Rcpp`, `keras` |
+| Backend | `backend` / `tt_control(backend=)` | `auto`, `R`, `Rcpp` |
 
 Internal λ dispatch:
 
@@ -47,11 +47,10 @@ Same statistical model for all optimizers: non-additive TT P-spline surface on s
 | `R/als.R` | ALS Gaussian; `init`; `values`; spectral flag |
 | `R/pirls.R` | PIRLS GLM; `init`; weighted cGCV |
 | `R/optimizer_lbfgs.R` | Global L-BFGS + outer cGCV |
-| `R/optimizer_adam.R` | `tt_has_keras()` / `tt_keras_status()` + stub |
 | `R/ttpspline.R` | `optimizer` / `backend` / `init` dispatch |
 | `R/methods.R` | Summary shows optimizer / outer / λ evals |
 | `DESCRIPTION` / `NAMESPACE` | Collate + exports |
-| `tests/testthat/test-api.R` | λ / init / LBFGS / Adam stub tests |
+| `tests/testthat/test-api.R` | λ / init / LBFGS tests |
 
 ## Public API
 
@@ -59,7 +58,6 @@ Same statistical model for all optimizers: non-additive TT P-spline surface on s
 ttps(y, X, family, rank, k, degree, penalty_order,
           lambda, optimizer, backend, init, control, knots)
 tt_control(...); tt_rank(); tt_initialize(); tt_complexity(); tt_rank_profile()
-tt_has_keras(); tt_keras_status()
 # S3: print, summary, predict, fitted, residuals, coef, deviance, plot
 ```
 
@@ -77,14 +75,13 @@ tt_has_keras(); tt_keras_status()
 |-----------|--------|
 | ALS | **Primary / default** — Gaussian + PIRLS GLM |
 | LBFGS | **Implemented (R)** — joint cores; outer cGCV alternation |
-| Adam/Keras | **Stub only** — clear error; no TF hard dependency |
 
 ## cGCV status
 
 - Conditional GCV per core with Brent/`optimize()` on \(\eta=\log\lambda\)
 - Workspace caches `S`, `b`, `P`, weighted `Xw`/`yw`
 - Optional spectral cache (`use_spectral_gcv = TRUE`)
-- ALS: update λ on each core visit; LBFGS/Adam: outer freeze-cores then conditional update
+- ALS: update λ on each core visit; LBFGS/GD: outer freeze-cores then conditional update
 - **Not** global GCV on the dense coefficient tensor
 
 ## Rcpp / sparse
@@ -101,7 +98,7 @@ tt_has_keras(); tt_keras_status()
 ## Tests
 
 - Gaussian fixed/cGCV, poisson, bernoulli, predict=fitted, reserved λ methods
-- λ expansion/validation, `tt_initialize` reproducibility, ALS vs LBFGS surface proximity, Adam stub message, anisotropic λ
+- λ expansion/validation, `tt_initialize` reproducibility, ALS vs LBFGS surface proximity, anisotropic λ
 - Complexity layers (storage / intrinsic / EDF)
 
 ## Benchmarks
@@ -115,11 +112,10 @@ Lab + `inst/benchmarks/` remain the reference. Optimizer comparison benchmarks s
 
 ## Blockers / deferred
 
-1. **Adam/Keras full implementation** — deferred until ALS + cGCV + Rcpp + GLM are solid  
-2. Joint EDF — **implemented** (linearized stacked Jacobian; skip via `edf_max_npar`)  
-3. Sparse / matrix-free backends — experimental  
-4. Automated lab↔package parity suite  
-5. Bernoulli stability at high rank  
+1. Joint EDF — **implemented** (linearized stacked Jacobian; skip via `edf_max_npar`)  
+2. Sparse / matrix-free backends — experimental  
+3. Automated lab↔package parity suite  
+4. Bernoulli stability at high rank  
 
 ## Not implemented yet
 
@@ -141,9 +137,6 @@ fit <- ttps(y, X, rank = 3, lambda = "cGCV")
 
 # L-BFGS + cGCV
 fit <- ttps(y, X, rank = 3, optimizer = "LBFGS", lambda = "cGCV")
-
-# Adam — errors with install/status guidance until implemented
-# fit <- ttps(y, X, rank = 3, optimizer = "Adam", lambda = "cGCV")
 
 # Fair optimizer comparison
 init <- tt_initialize(X, rank = 3, seed = 123)

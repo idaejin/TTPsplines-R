@@ -13,13 +13,13 @@
 ## API axes
 
 ```text
-optimizer ∈ {auto*, ALS, PIRLS-ALS, Damped-Newton-ALS*, LBFGS-ALS*, GD*, LBFGS, hybrid*, Adam*}
+optimizer ∈ {auto*, ALS, PIRLS-ALS, Damped-Newton-ALS*, LBFGS-ALS*, GD*, LBFGS, hybrid*}
 lambda    ∈ {scalar, length-d, "cGCV", "CV"}
-backend   ∈ {auto, R, Rcpp, keras*}
+backend   ∈ {auto, R, Rcpp}
 * auto (v1, documented): Gaussian→ALS, Poisson→PIRLS-ALS, binomial→LBFGS
   Transparent: fit$optimizer_requested / optimizer_used / optimizer_reason
   ALS / PIRLS-ALS = structure-aware conditional solves
-  GD / LBFGS / Adam = direct penalized likelihood (same objective; Adam stub)
+  GD / LBFGS = direct penalized likelihood (same objective)
   Damped-Newton-ALS / LBFGS-ALS = experimental conditional solvers
   hybrid = experimental ALS→LBFGS polish
 ```
@@ -32,14 +32,14 @@ Public entry: `ttps(..., optimizer=, backend=, init=)` plus `tt_initialize()`.
 DESCRIPTION, NAMESPACE, LICENSE, README.md, PORTING.md
 R/  TTPsplines-package, linalg, basis, penalties, rank, control,
     initialization, families, tt_geometry, lambda, als, pirls,
-    optimizer_lbfgs, optimizer_adam, ttpspline,
+    optimizer_lbfgs, ttpspline,
     complexity, methods, rank_profile, glam, RcppExports
 src/ tt_pspline_nd.cpp (+ Makevars, RcppExports.cpp)
 tests/testthat/test-ttpspline.R, test-api.R, test-complexity-layers.R
 docs/PACKAGE_IMPLEMENTATION.md
 vignettes/ getting-started, generalized, cgcv, rank-selection, aic-bic,
            glam-vs-tt, glam-poisson, uncertainty, scalability
-inst/benchmarks/ *.R + python/benchmark_keras_tt.py (stubs)
+inst/benchmarks/ *.R
 ```
 
 ## 2. Existing lab code reused
@@ -89,8 +89,7 @@ Lab scripts/docs/outputs **not moved or deleted**. As of 2026-08-10 the lab **in
 2. Optional: sparse B-spline storage; matrix-free \(S_k\)  
 3. Parity suite: lab scripts vs package on shared seeds  
 4. `devtools::document()` for Rd pages  
-5. Full Adam/Keras backend (currently stub)  
-6. Split `src/tt_pspline_nd.cpp` into modules (cosmetic)
+5. Split `src/tt_pspline_nd.cpp` into modules (cosmetic)
 
 ## Minimal working examples
 
