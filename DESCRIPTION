@@ -83,6 +83,7 @@ Collate:
     'global_gcv_lab.R'
     'global_lambda_optimize.R'
     'global_lambda_optimize_v1.R'
+    'ggcv.R'
     'test_functions.R'
     'data.R'
     'RcppExports.R'
