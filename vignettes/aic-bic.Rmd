@@ -17,9 +17,9 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 how to turn that EDF into **AIC / BIC**-style scores for fixed-\(\lambda\)
 comparisons (e.g. candidate ranks or anisotropic \(\lambda\)).
 
-There is **no** `AIC()` / `BIC()` S3 method yet: compute the criteria from
-`fit$deviance` and `fit$edf` as below. Rank selection for prediction still
-belongs to `tt_rank_select()` (CV + 1-SE); see
+Use exported [tt_ic()] with `fit$deviance` and joint linearized `fit$edf`.
+There is still **no** `AIC()` / `BIC()` S3 method. Rank selection for
+prediction still belongs to `tt_rank_select()` (CV + 1-SE); see
 `vignette("rank-selection")`.
 
 ```{r}
@@ -65,30 +65,7 @@ penalties below use \(\widehat{\mathrm{edf}}+1\).
 
 # Working formulas
 
-Helpers used in this vignette (not exported package API yet):
-
-```{r helpers}
-`%||%` <- function(a, b) if (!is.null(a)) a else b
-
-tt_ic <- function(fit, criterion = c("AIC", "BIC")) {
-  criterion <- match.arg(criterion)
-  edf <- fit$edf
-  if (!is.finite(edf)) {
-    stop("fit$edf is missing; refit with tt_control(compute_edf = TRUE).")
-  }
-  n <- as.integer(fit$n %||% length(fitted(fit)))
-  df <- edf + 1                       # + intercept
-  pen <- if (identical(criterion, "AIC")) 2 else log(n)
-  key <- fit$family_key %||% fit$family$family
-
-  if (identical(key, "gaussian")) {
-    # Gaussian: n log(RSS/n) + pen * df  (RSS stored in fit$deviance)
-    return(n * log(fit$deviance / n) + pen * df)
-  }
-  # Poisson / Bernoulli: deviance + pen * df
-  fit$deviance + pen * df
-}
-```
+Package helper: `tt_ic(fit, "AIC")` / `tt_ic(fit, "BIC")` (exported).
 
 **Gaussian** (same as the lab coordinate-AIC notes):
 \[
@@ -210,7 +187,7 @@ reflect **local minima / under-iteration**, not structural need for \(r=3\)
 
 # What this is not
 
-- Not `AIC(fit)` / `BIC(fit)` methods (not implemented yet).
+- Not `AIC(fit)` / `BIC(fit)` methods (use `tt_ic()` instead).
 - Not REML.
 - Not a substitute for hold-out or CV when the goal is prediction.
 - Not a claim that linearized TT EDF equals dense-tensor EDF.
@@ -221,7 +198,7 @@ reflect **local minima / under-iteration**, not structural need for \(r=3\)
 - `vignette("rank-selection", package = "TTPsplines")` — CV + 1-SE for \(r\)
 - `vignette("cgcv", package = "TTPsplines")` — fixed / cGCV / CV / gGCV for \(\lambda\)
 - `vignette("generalized", package = "TTPsplines")` — Poisson / Bernoulli
-- `tt_complexity()`, `deviance()`, `summary()`
+- `tt_ic()`, `tt_edf()`, `tt_complexity()`, `deviance()`, `summary()`
 
 # References
 

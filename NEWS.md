@@ -2,6 +2,10 @@
 
 ## Development (0.0.0.9001)
 
+### Information criteria
+
+* New exported `tt_ic(fit, "AIC"|"BIC")`: working AIC/BIC from joint linearized `fit$edf` (+1 for intercept).
+
 ### Array input mode (`array = TRUE`)
 
 * `ttps(Y, axes = list(...), rank = r, k = k, lambda = ..., array = TRUE)`

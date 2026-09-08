@@ -349,15 +349,16 @@ tt_edf(fit)      # tidy extract / recompute
 
 ## AIC / BIC (linearized EDF)
 
-In-sample information criteria use joint linearized `fit$edf` (not `npar_tt`):
+In-sample information criteria use joint linearized `fit$edf` (not `npar_tt`)
+via exported `tt_ic()`:
 
 ```r
-# Gaussian: n * log(RSS/n) + 2 * (edf + 1)
-# Poisson / Bernoulli: deviance + 2 * (edf + 1)
+tt_ic(fit, "AIC")   # Gaussian: n * log(RSS/n) + 2 * (edf + 1)
+tt_ic(fit, "BIC")   # Poisson / Bernoulli: deviance + pen * (edf + 1)
 ```
 
 Vignette: `vignette("aic-bic", package = "TTPsplines")`.
-There is no `AIC()` / `BIC()` method yet.
+There is no `AIC()` / `BIC()` S3 method yet (`tt_ic()` is the API).
 
 ## GLAM Poisson (Currie–Durbán–Eilers)
 

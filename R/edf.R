@@ -402,3 +402,69 @@ print.tt_edf <- function(x, digits = 3, ...) {
   }
   invisible(x)
 }
+
+#' Information criteria from linearized TT EDF
+#'
+#' Working AIC / BIC using joint linearized `fit$edf` (not `npar_tt`).
+#' The intercept is **not** inside the TT EDF, so the penalty uses
+#' \(\widehat{\mathrm{edf}}+1\).
+#'
+#' - **Gaussian:** \(n\log(\mathrm{RSS}/n)+\mathrm{pen}\cdot(\mathrm{edf}+1)\)
+#'   (`fit$deviance` stores RSS).
+#' - **Poisson / Bernoulli:** \(D+\mathrm{pen}\cdot(\mathrm{edf}+1)\)
+#'   (`fit$deviance` is GLM deviance).
+#'
+#' This is a linearized / PIRLS working criterion, not an `mgcv`-style REML
+#' score and not a substitute for `tt_rank_select()` when the goal is
+#' predictive rank choice.
+#'
+#' @param fit A [ttps()] / [ttpspline()] fit with finite `fit$edf`
+#'   (`tt_control(compute_edf = TRUE)`).
+#' @param criterion `"AIC"` (penalty \(2\)) or `"BIC"` (penalty \(\log n\)).
+#' @return Scalar numeric criterion value.
+#' @seealso [tt_edf()], [tt_rank_select()], `vignette("aic-bic")`
+#' @examples
+#' \dontrun{
+#' data(ishigami)
+#' X <- as.matrix(ishigami[, c("x1", "x2", "x3")])
+#' fit <- ttps(ishigami$y, X, rank = 2, k = 6, lambda = 1,
+#'             control = tt_control(max_sweeps = 6, compute_edf = TRUE))
+#' tt_ic(fit, "AIC")
+#' tt_ic(fit, "BIC")
+#' }
+#' @export
+tt_ic <- function(fit, criterion = c("AIC", "BIC")) {
+  if (!inherits(fit, c("ttps", "ttpspline"))) {
+    stop("tt_ic() expects a ttps() / ttpspline fit.", call. = FALSE)
+  }
+  criterion <- match.arg(criterion)
+  edf <- fit$edf
+  if (is.null(edf) || !is.finite(edf)) {
+    stop("fit$edf is missing; refit with tt_control(compute_edf = TRUE).",
+         call. = FALSE)
+  }
+  n <- as.integer(fit$n %||% length(stats::fitted(fit)))
+  if (!is.finite(n) || n < 2L) {
+    stop("Cannot determine sample size n from fit.", call. = FALSE)
+  }
+  df <- as.numeric(edf) + 1                       # + intercept
+  pen <- if (identical(criterion, "AIC")) 2 else log(n)
+  key <- fit$family_key %||% {
+    if (is.list(fit$family) && !is.null(fit$family$family)) fit$family$family
+    else "gaussian"
+  }
+  key <- tolower(as.character(key)[1L])
+  dev <- as.numeric(fit$deviance)
+  if (!is.finite(dev)) {
+    stop("fit$deviance is missing or non-finite.", call. = FALSE)
+  }
+  if (identical(key, "gaussian")) {
+    if (dev <= 0) {
+      warning("Non-positive RSS in tt_ic(); returning NA.", call. = FALSE)
+      return(NA_real_)
+    }
+    return(n * log(dev / n) + pen * df)
+  }
+  # Poisson / Bernoulli (and other GLM): deviance + pen * df
+  dev + pen * df
+}
