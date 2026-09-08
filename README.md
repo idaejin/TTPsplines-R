@@ -18,6 +18,10 @@ pak::pak("idaejin/TTPsplines-R")
 # or: remotes::install_github("idaejin/TTPsplines-R")
 ```
 
+If an older install errors in `tt_joint_edf_parts` with unused arguments
+(`penalty_order` / `cyclic` / `edf_method`), reinstall from GitHub (needs
+`ggcv.R` in `Collate`, SHA ≥ `867991c`).
+
 To register vignettes in the installed library (needed for `vignette(...)`):
 
 ```r
@@ -146,9 +150,10 @@ Always overridable:
 ```r
 # Explicit overrides (research / benchmarking)
 fit_b_als <- ttps(y, X, family = binomial(), rank = 2, k = 8, lambda = 5,
-                       optimizer = "PIRLS-ALS")
-fit_g_lb  <- ttps(yg, X, family = gaussian(), rank = 2, k = 8, lambda = 1,
-                       optimizer = "LBFGS")
+                  optimizer = "PIRLS-ALS")
+yg <- rnorm(nrow(X))  # any Gaussian response
+fit_g_lb <- ttps(yg, X, family = gaussian(), rank = 2, k = 8, lambda = 1,
+                 optimizer = "LBFGS")
 ```
 
 Fixed anisotropic λ: `lambda = c(1, 10, 0.5)`.
@@ -213,9 +218,23 @@ marginal axes so Gram/RHS use Kronecker structure without materialising the
 scattered \(n\times q_k\) design:
 
 ```r
-# Y is dim1-fastest, as from array(y, dim = c(n1, n2, n3))
-fit_a <- ttps(Y, axes = list(x1, x2, x3), rank = 2, k = 8, lambda = 1,
-              array = TRUE)
+set.seed(1)
+n1 <- 12; n2 <- 10; n3 <- 8
+x1 <- seq(0, 1, length.out = n1)
+x2 <- seq(0, 1, length.out = n2)
+x3 <- seq(0, 1, length.out = n3)
+g <- expand.grid(x1 = x1, x2 = x2, x3 = x3)
+mu <- sin(2 * pi * g$x1) * cos(2 * pi * g$x2) + 0.5 * g$x3
+# dim1-fastest layout (same as array(y, dim = c(n1, n2, n3)))
+Y <- array(mu + rnorm(n1 * n2 * n3, sd = 0.2), dim = c(n1, n2, n3))
+
+fit_a <- ttps(
+  Y, axes = list(x1, x2, x3),
+  rank = 2, k = 8, lambda = 1,
+  array = TRUE,
+  control = tt_control(max_sweeps = 8, backend = "auto")
+)
+summary(fit_a)
 ```
 
 Restrictions in this version: Gaussian + ALS; no `linear=` / `smooth=` /
