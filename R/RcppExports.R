@@ -233,3 +233,15 @@ contract_right_step_marginal_cpp <- function(right, core, Bk) {
     .Call(`_TTPsplines_contract_right_step_marginal_cpp`, right, core, Bk)
 }
 
+#' Array-mode RHS: b = X_k' y without forming X_k (unweighted).
+#'
+#' Y_flat is column-major with dims (n_left, n_k, n_right), matching R
+#' `array(..., c(n_left, n_k, n_right))`. Column order of b matches
+#' `kron(R, kron(B, L))` / `tt_design_core` (a fastest, then j, then b).
+#'
+#' @keywords internal
+#' @noRd
+tt_array_rhs_cpp <- function(L_uniq, Bk, R_uniq, Y_flat, n_left, n_k, n_right) {
+    .Call(`_TTPsplines_tt_array_rhs_cpp`, L_uniq, Bk, R_uniq, Y_flat, n_left, n_k, n_right)
+}
+

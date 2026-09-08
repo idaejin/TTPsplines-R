@@ -66,22 +66,24 @@
 #' @noRd
 .tt_array_rhs <- function(L_uniq, Bk, R_uniq, Y_arr, k, n_grid) {
   d       <- length(n_grid)
-  n_left  <- nrow(L_uniq);  rl <- ncol(L_uniq)
-  n_k     <- n_grid[k];     p  <- ncol(Bk)
-  n_right <- nrow(R_uniq);  rr <- ncol(R_uniq)
-  # Reshape Y to (n_left x n_k x n_right) -- dim1 fastest
-  Y_flat <- array(as.numeric(Y_arr), c(n_left, n_k, n_right))
-  # Step 1: contract left mode with L_uniq' -> r_l x n_k x n_right
-  Y1 <- crossprod(L_uniq, matrix(Y_flat, n_left, n_k * n_right))
-  # Step 2: contract middle mode with Bk' -> p x (r_l * n_right)
-  # Permute Y1 to (n_k x r_l x n_right), flatten to (n_k x r_l*n_right)
+  n_left  <- nrow(L_uniq)
+  n_k     <- n_grid[k]
+  n_right <- nrow(R_uniq)
+  rl <- ncol(L_uniq); p <- ncol(Bk)
+  Y_flat <- as.numeric(array(as.numeric(Y_arr), c(n_left, n_k, n_right)))
+  if (exists("tt_array_rhs_cpp", mode = "function")) {
+    return(as.numeric(tt_array_rhs_cpp(
+      L_uniq, Bk, R_uniq, Y_flat, as.integer(n_left), as.integer(n_k),
+      as.integer(n_right)
+    )))
+  }
+  # Fallback R path (used if C++ not loaded)
+  Y_flat_arr <- array(Y_flat, c(n_left, n_k, n_right))
+  Y1 <- crossprod(L_uniq, matrix(Y_flat_arr, n_left, n_k * n_right))
   Y1_perm <- aperm(array(Y1, c(rl, n_k, n_right)), c(2L, 1L, 3L))
-  BtY     <- crossprod(Bk, matrix(Y1_perm, n_k, rl * n_right))   # p x (rl*n_right)
-  # Step 3: contract right mode with R_uniq -> (r_l*p) x r_r
-  # Permute BtY to (r_l x p x n_right), flatten to (r_l*p x n_right)
+  BtY     <- crossprod(Bk, matrix(Y1_perm, n_k, rl * n_right))
   BtY_perm <- aperm(array(BtY, c(p, rl, n_right)), c(2L, 1L, 3L))
-  b <- as.numeric(matrix(BtY_perm, rl * p, n_right) %*% R_uniq)   # r_l*p*r_r
-  b
+  as.numeric(matrix(BtY_perm, rl * p, n_right) %*% R_uniq)
 }
 
 # --------------------------------------------------------------------
@@ -93,8 +95,8 @@
 #' Computes S = X_k' X_k and b = X_k' y using the Kronecker structure of
 #' a complete data grid, without materialising the n x q_k design matrix X_k.
 #'
-#' Restriction: unweighted Gaussian only in this version.
-#' For weighted / GLM use, fall back to [tt_gram_rhs()].
+#' Restriction: unweighted Gaussian.  For weighted / GLM use on a complete
+#' grid, see [tt_gram_rhs_array_weighted()] (row-tensor Gram).
 #'
 #' @param k Margin index (1-based).
 #' @param Left Left interface for core k.  When `marginal_iface = TRUE`
@@ -141,4 +143,88 @@ tt_gram_rhs_array <- function(k, Left, Right, Bk, Y_centered, n_grid,
   b <- .tt_array_rhs(L_uniq, Bk, R_uniq, Y_centered, k, n_grid)
   q <- ncol(L_uniq) * ncol(Bk) * ncol(R_uniq)
   list(S = S, b = b, q = q, method = "array_kron")
+}
+
+# --------------------------------------------------------------------
+# Weighted array-mode Gram (GLAM-style row tensors): X_k' W X_k without X_k.
+# --------------------------------------------------------------------
+
+#' Row tensor (row-wise self Khatri--Rao): column (a,a') at index a + (a'-1)*c.
+#' @keywords internal
+#' @noRd
+.tt_row_tensor <- function(M) {
+  c_ <- ncol(M)
+  M[, rep(seq_len(c_), times = c_), drop = FALSE] *
+    M[, rep(seq_len(c_), each = c_), drop = FALSE]
+}
+
+#' Weighted array-mode Gram and RHS for one TT core (general weights, no X).
+#'
+#' Computes S = X_k' W X_k and b = X_k' W z on a complete grid for an
+#' arbitrary (non-separable) weight array W, without materialising the
+#' n x q_k design matrix.  This is the GLAM row-tensor identity applied to
+#' the three factors (L, B_k, R) of the conditional design:
+#'
+#'   S[(a,j,b),(a',j',b')] = sum_i w_i L[iL,a]L[iL,a'] B[ik,j]B[ik,j'] R[iR,b]R[iR,b']
+#'
+#' i.e. a triple-mode contraction of the weight array with the row tensors
+#' L~ (n_left x r_l^2), B~ (n_k x p^2), R~ (n_right x r_r^2).  Cost is
+#' O(m r^2) for the dominant contraction (m = prod(n_grid)) versus
+#' O(m q_k^2) for the scattered weighted Gram.  Used by Poisson/GLM PIRLS
+#' in array mode, where the working weights change every iteration.
+#'
+#' @param k Margin index (1-based).
+#' @param Left,Right Interfaces: marginal (unique-row) when
+#'   `marginal_iface = TRUE`, otherwise full scattered (n x r) matrices from
+#'   which unique rows are extracted (expand.grid / dim1-fastest layout).
+#' @param Bk n_k x p marginal B-spline basis.
+#' @param w Weight vector, length prod(n_grid), grid (dim1-fastest) order.
+#' @param z Working response vector, same length/order as `w`.
+#' @param n_grid Integer vector (n_1, ..., n_d).
+#' @param marginal_iface Logical; see `Left`.
+#' @return List with `S` (q_k x q_k), `b` (length q_k), `q`, and
+#'   `method = "array_kron_weighted"`.
+#' @keywords internal
+#' @noRd
+tt_gram_rhs_array_weighted <- function(k, Left, Right, Bk, w, z, n_grid,
+                                       marginal_iface = FALSE) {
+  d       <- length(n_grid)
+  n_total <- prod(n_grid)
+  n_left  <- if (k == 1L) 1L else prod(n_grid[seq_len(k - 1L)])
+  n_k     <- n_grid[k]
+  n_right <- if (k == d) 1L else prod(n_grid[(k + 1L):d])
+
+  if (isTRUE(marginal_iface)) {
+    L_uniq <- Left
+    R_uniq <- Right
+  } else {
+    L_uniq <- Left[seq_len(n_left), , drop = FALSE]
+    idx_r  <- seq(1L, n_total, by = n_left * n_k)
+    R_uniq <- Right[idx_r[seq_len(n_right)], , drop = FALSE]
+  }
+  rl <- ncol(L_uniq); p <- ncol(Bk); rr <- ncol(R_uniq)
+
+  Lt <- .tt_row_tensor(L_uniq)   # n_left  x rl^2
+  Bt <- .tt_row_tensor(Bk)       # n_k     x p^2
+  Rt <- .tt_row_tensor(R_uniq)   # n_right x rr^2
+
+  # Triple-mode contraction of the weight array with the row tensors.
+  W_flat <- array(as.numeric(w), c(n_left, n_k, n_right))
+  T1  <- crossprod(Lt, matrix(W_flat, n_left, n_k * n_right))   # rl^2 x (n_k n_right)
+  T1p <- aperm(array(T1, c(rl * rl, n_k, n_right)), c(2L, 1L, 3L))
+  T2  <- crossprod(Bt, matrix(T1p, n_k, rl * rl * n_right))     # p^2 x (rl^2 n_right)
+  T2p <- aperm(array(T2, c(p * p, rl * rl, n_right)), c(2L, 1L, 3L))
+  T3  <- matrix(T2p, rl * rl * p * p, n_right) %*% Rt           # (rl^2 p^2) x rr^2
+
+  # Reorder (a,a',j,j',b,b') -> ((a,j,b),(a',j',b')), matching the
+  # kron(R, kron(B, L)) column ordering of the conditional design.
+  S6 <- array(T3, c(rl, rl, p, p, rr, rr))
+  q  <- rl * p * rr
+  S  <- matrix(aperm(S6, c(1L, 3L, 5L, 2L, 4L, 6L)), q, q)
+  S  <- (S + t(S)) / 2
+
+  # RHS: X_k' W z = unweighted triple contraction of the (w * z) array.
+  b <- .tt_array_rhs(L_uniq, Bk, R_uniq,
+                     array(as.numeric(w) * as.numeric(z), n_grid), k, n_grid)
+  list(S = S, b = b, q = q, method = "array_kron_weighted")
 }

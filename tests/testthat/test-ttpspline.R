@@ -96,14 +96,3 @@ test_that("bernoulli can still request ALS explicitly", {
   expect_true(all(predict(fit, type = "response") > 0 &
                     predict(fit, type = "response") < 1))
 })
-
-test_that("unimplemented lambda methods are reserved", {
-  set.seed(1)
-  X <- matrix(runif(50 * 2), 50, 2)
-  y <- rnorm(50)
-  expect_error(
-    ttps(y, X, rank = 1, k = 5, lambda = "cFS",
-              control = tt_control(max_sweeps = 2, backend = "R")),
-    "not implemented"
-  )
-})

@@ -310,10 +310,10 @@ Scripts: `inst/examples/example_glam_poisson.R`,
 
 | In v0 | Not yet |
 |---|---|
-| TT-ALS / PIRLS / global L-BFGS | TT-cFS, cREML |
+| TT-ALS / PIRLS / global L-BFGS | rank-/λ-adaptive `auto` |
 | Family-aware `auto` optimizer | rank-/λ-adaptive `auto` |
 | Gaussian / Poisson / Bernoulli | SA-CAB, SOP, DMRG |
-| `lambda` fixed / `"cGCV"` | automatic rank inside `ttps()` |
+| `lambda` fixed / `"cGCV"` / `"CV"` | automatic rank inside `ttps()` |
 | `tt_rank_select()` + `tt_rank_refit()` | LRT / bootstrap rank tests |
 | `tt_margin_activity_path()` (margin screening) | group-lasso on TT cores |
 | Experimental: `GD`, `Damped-Newton-ALS`, `LBFGS-ALS` | mixed effects / TMB |

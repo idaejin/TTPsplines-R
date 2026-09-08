@@ -130,6 +130,9 @@ ttps_dlnm <- function(y,
   # Margin sizes: exposures k, lag k_lag
   p_vec <- c(rep(k, p_exp), k_lag)
   lambda_spec <- parse_lambda_spec(lambda, d = d_tt, control = control)
+  if (identical(lambda_spec$method, "CV")) {
+    stop("lambda = 'CV' is not implemented for ttps_dlnm().", call. = FALSE)
+  }
 
   basis_lags <- dlnm$basis_lags
   cyclic <- rep(FALSE, d_tt)

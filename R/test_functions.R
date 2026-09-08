@@ -310,33 +310,70 @@ f_dette <- function(x) {
 #'     \item{`d`, `n_bins`, `n_events`, `seed`}{Metadata.}
 #'   }
 #' @export
-simulate_dette <- function(n_events  = 500,
-                           d         = 4L,
-                           n_bins    = 12L,
-                           rate_scale = 3,
-                           rate_offset = 5,
+simulate_dette <- function(n_events    = 500,
+                           d           = 4L,
+                           n_bins      = 12L,
+                           rate_scale  = 3,
+                           rate_offset = 0,
                            holdout_frac = 0.10,
-                           seed      = 0L) {
+                           seed        = 0L) {
   d <- as.integer(d)
   stopifnot(d >= 1L, d <= 8L)
-  if (!is.null(seed)) set.seed(as.integer(seed))
+
+  ## Calibrate: sample reference points to find raw range (deterministic offset)
+  set.seed(as.integer(seed) + 99L)
+  X_ref <- matrix(stats::runif(5000L * d), 5000L, d)
+  X8_ref <- matrix(0.5, 5000L, 8L)
+  X8_ref[, seq_len(d)] <- X_ref
+  raw_ref <- .f_dette_internal(X8_ref)
+  raw_min <- min(raw_ref); raw_max <- max(raw_ref)
 
   ## True log-intensity on [0,1]^d (remaining dims fixed at 0.5)
+  ## eta(x) = rate_offset + rate_scale * (f(x) - f_min) / (f_max - f_min)
+  ## So eta ranges from rate_offset to rate_offset + rate_scale.
+  ## lambda_max = exp(rate_offset + rate_scale) -- but we express per-cell.
+  ## Per-cell mean = cell_vol * lambda(x) where cell_vol = (1/n_bins)^d.
+  ## To get ~n_events total: n_events = cell_vol * sum lambda(x_i) over grid.
+  ## We calibrate rate_offset so that the total expected count = n_events.
   eta_true_fn <- function(X) {
     X <- as.matrix(X)
     X8 <- matrix(0.5, nrow(X), 8L)
     X8[, seq_len(d)] <- X[, seq_len(d)]
     raw <- .f_dette_internal(X8)
-    rng <- range(raw)
-    rate_offset + rate_scale * (raw - rng[1]) / (rng[2] - rng[1])
+    rate_offset + rate_scale * (raw - raw_min) / (raw_max - raw_min)
   }
 
-  ## Thinning: draw Poisson process via acceptance-rejection
-  ## proposal: uniform on [0,1]^d; keep with prob lambda(x)/lambda_max
-  lambda_max_est <- exp(rate_offset + rate_scale)   # upper bound
-  n_propose <- ceiling(n_events * lambda_max_est * 1.5)
+  ## Calibrate rate_offset to hit n_events total on the grid
+  ## E[N] = cell_vol * sum_{all cells} exp(eta(centre_i))
+  cell_vol <- (1 / n_bins)^d
+  ## Approximate sum using reference sample
+  eta_ref  <- eta_true_fn(X_ref)
+  ## E[N] = cell_vol * n_bins^d * mean(exp(eta)) = mean(exp(eta))
+  ## (since cell_vol * n_bins^d = 1 and mean over uniform approx integral)
+  mean_lambda <- mean(exp(eta_ref))
+  ## Adjust rate_offset so mean_lambda = n_events / 1 (unit box, intensity per unit vol)
+  ## target: mean(exp(eta + delta)) = n_events  => delta = log(n_events) - log(mean_lambda)
+  delta <- log(n_events) - log(mean_lambda)
+  rate_offset_adj <- rate_offset + delta
+
+  eta_true_fn_adj <- function(X) {
+    eta_true_fn(X) + delta
+  }
+
+  ## Inhomogeneous Poisson process by thinning on [0,1]^d
+  ## Expected events = integral of lambda(x) dx = mean(exp(eta)) over [0,1]^d
+  ## By calibration above, mean(exp(eta_adj)) = n_events.
+  ## lambda_max = exp(rate_offset_adj + rate_scale)  [eta is capped at this]
+  ## We draw a homogeneous PP with rate lambda_max, then thin.
+  ## E[N_homogeneous] = lambda_max; keep each with prob lambda(x)/lambda_max.
+  ## E[N_thinned] = integral lambda(x) dx = n_events.
+  set.seed(as.integer(seed))
+  lambda_max_est <- exp(rate_offset_adj + rate_scale)
+  ## Draw number of homogeneous proposals from Poisson(lambda_max)
+  n_propose <- stats::rpois(1L, lambda_max_est)
+  n_propose <- max(n_propose, ceiling(lambda_max_est * 0.5))
   X_prop <- matrix(stats::runif(n_propose * d), n_propose, d)
-  eta_prop <- eta_true_fn(X_prop)
+  eta_prop <- eta_true_fn_adj(X_prop)
   lambda_prop <- exp(eta_prop)
   accept <- stats::runif(n_propose) < lambda_prop / lambda_max_est
   X_pts <- X_prop[accept, , drop = FALSE]
@@ -393,11 +430,13 @@ simulate_dette <- function(n_events  = 500,
     cell_y_occ   = y_occ,
     train_idx    = train_idx,
     test_idx     = test_idx,
-    eta_true_fn  = eta_true_fn,
+    eta_true_fn  = eta_true_fn_adj,   # calibrated: integral = n_events
     d            = d,
     n_bins       = n_bins,
     n_events     = nrow(X_pts),
-    seed         = seed
+    seed         = seed,
+    rate_offset_adj = rate_offset_adj,
+    delta           = delta
   )
 }
 

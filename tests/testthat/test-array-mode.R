@@ -1,6 +1,23 @@
 ## Parity tests: ttps(array = TRUE) vs ttps(array = FALSE) on a complete grid.
 ## Criterion: fitted values must be identical (up to machine precision).
 
+test_that("tt_array_rhs_cpp matches R triple-mode contraction", {
+  skip_if_not(exists("tt_array_rhs_cpp", mode = "function"))
+  set.seed(1)
+  n_left <- 8L; n_k <- 7L; n_right <- 5L; rl <- 2L; p <- 4L; rr <- 3L
+  L <- matrix(rnorm(n_left * rl), n_left, rl)
+  B <- matrix(rnorm(n_k * p), n_k, p)
+  R <- matrix(rnorm(n_right * rr), n_right, rr)
+  Y <- array(rnorm(n_left * n_k * n_right), c(n_left, n_k, n_right))
+  b_cpp <- tt_array_rhs_cpp(L, B, R, as.numeric(Y), n_left, n_k, n_right)
+  Y1 <- crossprod(L, matrix(Y, n_left, n_k * n_right))
+  Y1p <- aperm(array(Y1, c(rl, n_k, n_right)), c(2L, 1L, 3L))
+  BtY <- crossprod(B, matrix(Y1p, n_k, rl * n_right))
+  BtYp <- aperm(array(BtY, c(p, rl, n_right)), c(2L, 1L, 3L))
+  b_r <- as.numeric(matrix(BtYp, rl * p, n_right) %*% R)
+  expect_equal(as.numeric(b_cpp), b_r, tolerance = 1e-10)
+})
+
 test_that("array mode parity 3D, rank=2, fixed lambda", {
   set.seed(42)
   n_grid <- c(8L, 7L, 6L)

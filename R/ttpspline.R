@@ -11,7 +11,8 @@
 #'     likelihood \code{GD} / \code{LBFGS} / \code{Adam}.
 #'     \code{auto} is a simple family-aware default (Gaussian \(\to\) ALS,
 #'     Poisson \(\to\) PIRLS-ALS, binomial \(\to\) LBFGS); always overridable.
-#'   \item \code{lambda}: fixed isotropic/anisotropic or automatic `"cGCV"`
+#'   \item \code{lambda}: fixed isotropic/anisotropic, `"cGCV"`, `"CV"`, or `"gGCV"`
+#'     (k-fold grid search; default first ALS/PIRLS sweep then frozen)
 #'   \item \code{backend}: `"R"` for ALS/PIRLS sweeps; `"Rcpp"` = kernel helpers
 #'     only (not a full C++ ALS fitter); `"keras"` reserved for Adam
 #' }
@@ -26,8 +27,11 @@
 #' @param k Number of B-spline basis functions per margin.
 #' @param degree B-spline degree.
 #' @param penalty_order Difference penalty order.
-#' @param lambda Numeric (isotropic / anisotropic fixed) or `"cGCV"`.
-#'   `"cFS"` / `"cREML"` are not implemented yet.
+#' @param lambda Numeric (isotropic / anisotropic fixed), `"cGCV"` (conditional
+#'   GCV, default), `"CV"` (k-fold CV of each \(\lambda_n\); by default on
+#'   the first ALS/PIRLS sweep then frozen — see `tt_control(cv_sweeps, cv_rule)`),
+#'   or `"gGCV"` (joint TT-gGCV via Monte Carlo GDF; Gaussian scattered only;
+#'   much slower — see [tt_ggcv()] and `tt_control(ggcv_*)`).
 #' @param optimizer One of:
 #'   \itemize{
 #'     \item `"auto"` — documented family default:
@@ -184,9 +188,6 @@ ttps <- function(y,
       stop("`array = TRUE` only supports null_space = 'joint'.", call. = FALSE)
     }
     fam_tmp <- normalize_family(family)
-    if (!identical(family_key(fam_tmp), "gaussian")) {
-      stop("`array = TRUE` is currently Gaussian-only.", call. = FALSE)
-    }
     if (is.null(axes)) {
       # Default: unit-interval grid for each margin
       axes <- lapply(n_grid, function(nk) seq(0, 1, length.out = nk))
@@ -210,9 +211,10 @@ ttps <- function(y,
     colnames(X) <- names(axes)
     y_sc <- as.numeric(y)  # dim1 fastest — matches expand.grid row order
     # Store array_data: will be attached after basis is built.
-    # unweighted_gaussian: TRUE when the user passed no weights, enabling the
-    # Kronecker Gram path in cgcv_outer / tt_gram_rhs (checked before
-    # normalize_weights converts NULL to ones).
+    # unweighted_gaussian: TRUE when the family is Gaussian and the user
+    # passed no weights, enabling the Kronecker Gram path in
+    # cgcv_outer / tt_gram_rhs (checked before normalize_weights converts
+    # NULL to ones). GLM families use the weighted row-tensor Gram instead.
     array_data_out <- list(
       Y                    = y,
       n_grid               = n_grid,
@@ -220,7 +222,8 @@ ttps <- function(y,
       k                    = NA_integer_,
       L_all                = NULL,
       R_all                = NULL,
-      unweighted_gaussian  = is.null(weights)
+      unweighted_gaussian  = is.null(weights) &&
+                             identical(family_key(fam_tmp), "gaussian")
     )
     y <- y_sc
   }
@@ -303,9 +306,48 @@ ttps <- function(y,
   backend <- resolve_backend(control, optimizer = optimizer)
   ranks <- tt_rank(rank, d = d)
   lambda_spec <- parse_lambda_spec(lambda, d = d, control = control)
+  if (identical(lambda_spec$method, "gGCV")) {
+    if (isTRUE(array)) {
+      stop("lambda = 'gGCV' is not supported with array = TRUE.", call. = FALSE)
+    }
+    if (!identical(key, "gaussian")) {
+      stop("lambda = 'gGCV' is Gaussian-only (joint TT-gGCV lab path).",
+           call. = FALSE)
+    }
+    if (!is.null(linear) || !is.null(smooth)) {
+      stop("lambda = 'gGCV' does not support linear= / smooth= yet.",
+           call. = FALSE)
+    }
+    if (!identical(null_space, "joint")) {
+      stop("lambda = 'gGCV' requires null_space = 'joint'.", call. = FALSE)
+    }
+    if (any(abs(as.numeric(weights) - 1) > 1e-12)) {
+      stop("lambda = 'gGCV' does not support non-uniform observation weights yet.",
+           call. = FALSE)
+    }
+    return(.ttps_dispatch_ggcv(
+      y = y, X = X, rank = max(ranks), k = k, degree = degree,
+      penalty_order = penalty_order, control = control, init = init, cl = cl
+    ))
+  }
+  if (identical(lambda_spec$method, "CV")) {
+    if (isTRUE(array)) {
+      stop("lambda = 'CV' is not supported with array = TRUE.", call. = FALSE)
+    }
+    if (!identical(null_space, "joint")) {
+      stop("lambda = 'CV' requires null_space = 'joint'.", call. = FALSE)
+    }
+    if (!optimizer_used %in% c("ALS", "PIRLS-ALS")) {
+      stop(
+        "lambda = 'CV' is defined for ALS / PIRLS-ALS only (k-fold grid search). ",
+        "Got optimizer = '", optimizer_used, "'.",
+        call. = FALSE
+      )
+    }
+  }
   if (isTRUE(control$trace)) {
-    lam_lab <- if (identical(lambda_spec$method, "cGCV")) {
-      "cGCV"
+    lam_lab <- if (lambda_spec$method %in% c("cGCV", "CV", "gGCV")) {
+      lambda_spec$method
     } else {
       paste(sprintf("%.3g", lambda_spec$values), collapse = ",")
     }
@@ -438,10 +480,7 @@ ttps <- function(y,
     parts <- tt_joint_edf_parts(
       raw$cores, basis, raw$penalties, as.numeric(raw$lambda),
       weight = w_edf, max_npar = control$edf_max_npar,
-      null_proj = null_proj, names = mnames,
-      penalty_order = as.integer(penalty_order),
-      cyclic = cyclic,
-      method = control$edf_method %||% "tedf"
+      null_proj = null_proj, names = mnames
     )
     edf_margin <- parts$edf_margin
     edf_margin_cond <- tt_margin_edf_cond(
@@ -559,6 +598,7 @@ ttps <- function(y,
       history = raw$history,
       q_descent = raw$q_descent,
       cgcv = raw$cgcv,
+      cv = raw$cv,
       backend = raw$backend %||% backend,
       sparse_backend = control$sparse,
       timing = raw$elapsed,
@@ -702,7 +742,7 @@ ttpspline <- ttps
   # ALS / PIRLS-ALS (default structure-aware path)
   if (identical(key, "gaussian")) {
     if (identical(backend, "Rcpp") && is.null(linear) && is.null(smooth) &&
-        is.null(array_data)) {
+        is.null(array_data) && !identical(lambda_spec$method, "CV")) {
       tt_als_fit_rcpp(y, basis, ranks, lambda_spec, control, penalty_order,
                       init_cores = init_cores, offset = offset, weights = weights,
                       linear = linear, smooth = smooth)
@@ -715,14 +755,17 @@ ttpspline <- ttps
       out
     }
   } else {
-    if (identical(backend, "Rcpp") && is.null(linear) && is.null(smooth)) {
+    if (identical(backend, "Rcpp") && is.null(linear) && is.null(smooth) &&
+        is.null(array_data) && !identical(lambda_spec$method, "CV")) {
       tt_pirls_fit_rcpp(y, basis, fam, ranks, lambda_spec, control, penalty_order,
                         init_cores = init_cores, offset = offset, weights = weights,
                         linear = linear, smooth = smooth)
     } else {
-      tt_pirls_fit(y, basis, fam, ranks, lambda_spec, control, penalty_order,
+      out <- tt_pirls_fit(y, basis, fam, ranks, lambda_spec, control, penalty_order,
                   init_cores = init_cores, offset = offset, weights = weights,
-                  linear = linear, smooth = smooth)
+                  linear = linear, smooth = smooth, array_data = array_data)
+      if (!is.null(array_data)) out$backend <- "R-array"
+      out
     }
   }
 }

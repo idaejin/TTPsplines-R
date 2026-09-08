@@ -18,7 +18,7 @@
 - Poisson / Bernoulli PIRLS (+ family-aware `optimizer="auto"`)  
 - Conditional experimental solvers (Damped-Newton-ALS, LBFGS-ALS, GD)  
 - Example surfaces: Ishigami / Sobol-g / Friedman (`simulate_*`, `data(...)`)  
-- Modular `update_lambda()` (`fixed`, `cGCV`; stubs for `cFS`/`cREML`)  
+- Modular `update_lambda()` (`fixed`, `cGCV`, `CV`)  
 - GLAM Gaussian grid helper  
 - testthat suite  
 - vignette + benchmark stubs  

@@ -6,10 +6,13 @@
 #' @keywords internal
 tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
                          penalty_order = 2, init_cores = NULL, offset = NULL,
-                         weights = NULL, linear = NULL, smooth = NULL) {
+                         weights = NULL, linear = NULL, smooth = NULL,
+                         array_data = NULL) {
   method <- lambda_spec$method
   if (identical(method, "cGCV") &&
       identical(.cgcv_update_mode(control), "outer_simultaneous")) {
+    # ponytail: outer_simultaneous keeps the scattered weighted Gram;
+    # array row-tensor Gram is wired for the sequential path only.
     return(tt_pirls_fit_cgcv_outer(
       y, basis, family, ranks, lambda_spec, control, penalty_order,
       init_cores = init_cores, offset = offset, weights = weights,
@@ -19,7 +22,7 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
   tt_pirls_fit_sequential(
     y, basis, family, ranks, lambda_spec, control, penalty_order,
     init_cores = init_cores, offset = offset, weights = weights,
-    linear = linear, smooth = smooth
+    linear = linear, smooth = smooth, array_data = array_data
   )
 }
 
@@ -29,7 +32,8 @@ tt_pirls_fit <- function(y, basis, family, ranks, lambda_spec, control,
 tt_pirls_fit_sequential <- function(y, basis, family, ranks, lambda_spec, control,
                                     penalty_order = 2, init_cores = NULL,
                                     offset = NULL, weights = NULL,
-                                    linear = NULL, smooth = NULL) {
+                                    linear = NULL, smooth = NULL,
+                                    array_data = NULL) {
   d <- length(basis)
   p <- ncol(basis[[1]])
   method <- lambda_spec$method
@@ -77,6 +81,14 @@ tt_pirls_fit_sequential <- function(y, basis, family, ranks, lambda_spec, contro
   n_als_sweeps_total <- 0L
   n_step_halvings_total <- 0L
   use_spec <- isTRUE(control$use_spectral_gcv)
+  cv_folds <- NULL
+  cv_grid <- NULL
+  cv_trace <- list()
+  if (identical(method, "CV")) {
+    cv_folds <- .cv_assign_folds(length(y), control$cv_folds %||% 5L,
+                                 seed = control$seed %||% 1L, weight = w_obs)
+    cv_grid <- .cv_lambda_grid(control)
+  }
   do_halving <- identical(key, "bernoulli") &&
     isTRUE(control$pirls_step_halving %||% control$damping %||% TRUE)
   step_factor <- control$step_factor %||% 0.5
@@ -135,20 +147,52 @@ tt_pirls_fit_sequential <- function(y, basis, family, ranks, lambda_spec, contro
           Left <- NULL
           Right <- NULL
         }
+        do_cv <- identical(method, "CV") &&
+          it <= as.integer(control$cv_sweeps %||% 1L) && sw == 1L
+        # Array mode: weighted row-tensor Gram (needs the scattered
+        # interfaces from the design cache; CV keeps the dense-design path).
+        ad_k <- if (!is.null(array_data) && !is.null(Left) &&
+                    !is.null(Right) && !do_cv) {
+          array_data$k              <- k
+          array_data$marginal_iface <- FALSE
+          array_data
+        } else NULL
         built <- .cgcv_core_workspace(
           cores, k, lambda, basis, zc, ranks, control,
           weight = w, penalty_order = penalty_order,
           use_spectral = identical(method, "cGCV") && isTRUE(control$use_spectral_gcv),
           compute_op_norms = do_trace,
           Left = Left,
-          Right = Right
+          Right = Right,
+          return_design = do_cv,
+          array_data = ad_k
         )
         Pk <- built$P_own
         penalties[[k]] <- Pk
         ws <- built$workspace
         lambda_old_k <- lambda[k]
         gcv_old <- if (do_trace) .cgcv_eval_at(ws, lambda_old_k) else NULL
-        upd <- update_lambda(method, ws)
+        if (isTRUE(do_cv)) {
+          if (is.null(built$Xk)) {
+            built$Xk <- tt_design_core(built$Left, built$Right, basis[[k]])
+          }
+          ws <- .cv_attach_design(ws, built$Xk, zc, w)
+          ws$family <- fam
+          ws$y_obs <- y
+          ws$w_obs <- w_obs
+          ws$eta_rest <- as.numeric(offset) + as.numeric(intercept) +
+            tt_linear_contrib(linear, beta) + tt_smooth_contrib(smooth)
+          upd <- update_lambda_cv(ws, folds = cv_folds, grid = cv_grid,
+                                 rule = control$cv_rule %||% "min")
+          cv_trace[[length(cv_trace) + 1L]] <- data.frame(
+            pirls = it, sweep = sw, margin = k, lambda = upd$lambda,
+            score = upd$value, n_folds = upd$cv_n_folds %||% NA_integer_,
+            stringsAsFactors = FALSE
+          )
+        } else {
+          core_method <- if (identical(method, "CV")) "fixed" else method
+          upd <- update_lambda(core_method, ws)
+        }
         n_eval <- n_eval + upd$n_eval
 
         if (identical(method, "cGCV") &&
@@ -411,7 +455,19 @@ tt_pirls_fit_sequential <- function(y, basis, family, ranks, lambda_spec, contro
     method_lambda = method,
     optimizer = "ALS",
     backend = "R",
-    objective = obj$value
+    objective = obj$value,
+    cv = if (identical(method, "CV")) {
+      list(
+        folds = length(unique(cv_folds[is.finite(cv_folds)])),
+        grid = cv_grid,
+        score = "deviance",
+        rule = control$cv_rule %||% "min",
+        sweeps = as.integer(control$cv_sweeps %||% 1L),
+        trace = if (length(cv_trace)) do.call(rbind, cv_trace) else NULL
+      )
+    } else {
+      NULL
+    }
   )
 }
 

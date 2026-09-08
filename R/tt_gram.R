@@ -5,8 +5,9 @@
 #'
 #' When `array_data` is supplied (a list with `k`, `Y_centered`, `n_grid`),
 #' the Gram and RHS are computed via the array
-#' Kronecker trick ([tt_gram_rhs_array()]) without forming the design matrix.
-#' This is only valid for unweighted Gaussian data on a complete grid.
+#' Kronecker trick ([tt_gram_rhs_array()]; unweighted Gaussian) or the GLAM
+#' row-tensor Gram ([tt_gram_rhs_array_weighted()]; GLM working weights)
+#' without forming the design matrix. Requires data on a complete grid.
 #'
 #' @param n_threads OpenMP threads for `fused_blocked` observation reduction.
 #' @param array_data Optional list for array mode; see above.
@@ -17,19 +18,33 @@ tt_gram_rhs <- function(Left, Right, Bk, z, weight = NULL,
                         block_size = 64L,
                         n_threads = 1L,
                         array_data = NULL) {
-  # Array mode: use Kronecker trick (unweighted Gaussian on complete grid).
-  # Check unweighted_gaussian flag (set before normalize_weights) or is.null(weight).
-  if (!is.null(array_data) &&
-      (isTRUE(array_data$unweighted_gaussian) || is.null(weight))) {
-    return(tt_gram_rhs_array(
-      k               = array_data$k,
-      Left            = Left,
-      Right           = Right,
-      Bk              = Bk,
-      Y_centered      = array_data$Y_centered,
-      n_grid          = array_data$n_grid,
-      marginal_iface  = isTRUE(array_data$marginal_iface)
-    ))
+  # Array mode: use Kronecker trick (unweighted Gaussian on complete grid),
+  # or the GLAM row-tensor weighted Gram when working weights are present
+  # (Poisson/GLM PIRLS on a complete grid).
+  if (!is.null(array_data)) {
+    if (isTRUE(array_data$unweighted_gaussian) || is.null(weight)) {
+      return(tt_gram_rhs_array(
+        k               = array_data$k,
+        Left            = Left,
+        Right           = Right,
+        Bk              = Bk,
+        Y_centered      = array_data$Y_centered,
+        n_grid          = array_data$n_grid,
+        marginal_iface  = isTRUE(array_data$marginal_iface)
+      ))
+    }
+    if (length(weight) == prod(array_data$n_grid)) {
+      return(tt_gram_rhs_array_weighted(
+        k              = array_data$k,
+        Left           = Left,
+        Right          = Right,
+        Bk             = Bk,
+        w              = weight,
+        z              = z,
+        n_grid         = array_data$n_grid,
+        marginal_iface = isTRUE(array_data$marginal_iface)
+      ))
+    }
   }
   method <- match.arg(method)
   if (exists("tt_gram_rhs_cpp", envir = asNamespace("TTPsplines"), inherits = FALSE)) {

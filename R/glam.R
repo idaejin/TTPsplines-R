@@ -120,6 +120,27 @@ glam_xtwx_d3 <- function(B1, B2, B3, W) {
   XtWX
 }
 
+#' Weighted Gram for d=4 without forming X (Currie).
+#'
+#' Dispatcher helper used by [glam_fit_poisson()].
+#' @keywords internal
+#' @noRd
+glam_xtwx_d4 <- function(B1, B2, B3, B4, W) {
+  p1 <- ncol(B1); p2 <- ncol(B2); p3 <- ncol(B3); p4 <- ncol(B4)
+  n4 <- nrow(B4)
+  stopifnot(dim(W)[1] == nrow(B1),
+            dim(W)[2] == nrow(B2),
+            dim(W)[3] == nrow(B3),
+            dim(W)[4] == n4)
+  XtWX <- matrix(0, p1 * p2 * p3 * p4, p1 * p2 * p3 * p4)
+  for (v in seq_len(n4)) {
+    G123 <- glam_xtwx_d3(B1, B2, B3, W[, , , v])
+    bv <- B4[v, ]
+    XtWX <- XtWX + kronecker(tcrossprod(bv), G123)
+  }
+  XtWX
+}
+
 #' Weighted Gram dispatcher (d = 1,2,3).
 #' @keywords internal
 #' @noRd
@@ -130,7 +151,8 @@ glam_xtwx <- function(B_list, W) {
   }
   if (d == 2L) return(glam_xtwx_d2(B_list[[1]], B_list[[2]], W))
   if (d == 3L) return(glam_xtwx_d3(B_list[[1]], B_list[[2]], B_list[[3]], W))
-  stop("glam_xtwx: only d = 1,2,3 implemented.", call. = FALSE)
+  if (d == 4L) return(glam_xtwx_d4(B_list[[1]], B_list[[2]], B_list[[3]], B_list[[4]], W))
+  stop("glam_xtwx: only d = 1,2,3,4 implemented.", call. = FALSE)
 }
 
 #' @keywords internal
@@ -231,7 +253,8 @@ glam_fit_gaussian <- function(Y, B_list, lambda = 1, penalty_order = 2L) {
 #' fit$deviance
 glam_fit_poisson <- function(Y, B_list, lambda = 1, offset = NULL,
                              penalty_order = 2L, pirls_maxit = 25L,
-                             tol = 1e-8, trace = FALSE) {
+                             tol = 1e-8, trace = FALSE,
+                             fit_weights = NULL) {
   d <- length(B_list)
   if (is.null(dim(Y)) || length(dim(Y)) != d) {
     stop("Y must be a d-way array matching length(B_list).", call. = FALSE)
@@ -241,8 +264,8 @@ glam_fit_poisson <- function(Y, B_list, lambda = 1, offset = NULL,
       stop("nrow(B_list[[", k, "]]) must equal dim(Y)[", k, "].", call. = FALSE)
     }
   }
-  if (d > 3L) {
-    stop("glam_fit_poisson currently supports d = 1,2,3 (Currie grid).", call. = FALSE)
+  if (d > 4L) {
+    stop("glam_fit_poisson currently supports d = 1,2,3,4 (Currie grid).", call. = FALSE)
   }
   p_vec <- vapply(B_list, ncol, integer(1))
   lambda <- rep(as.numeric(lambda), length.out = d)
@@ -259,8 +282,19 @@ glam_fit_poisson <- function(Y, B_list, lambda = 1, offset = NULL,
   }
   off_vec <- as.numeric(off)
 
+  if (is.null(fit_weights)) {
+    fit_w <- array(1, dim(Y))
+  } else {
+    fit_w <- as.array(fit_weights)
+    if (!identical(as.integer(dim(fit_w)), as.integer(dim(Y)))) {
+      stop("`fit_weights` must have the same dimensions as Y.", call. = FALSE)
+    }
+  }
+  fit_w_vec <- as.numeric(fit_w)
+
   # initialise at log(mean rate) on the offset-adjusted scale
-  rate0 <- mean(y_vec / pmax(exp(off_vec), 1e-12))
+  rate0 <- sum(fit_w_vec * (y_vec / pmax(exp(off_vec), 1e-12))) /
+    max(sum(fit_w_vec), 1e-12)
   intercept <- log(max(rate0, 1e-8))
   Theta <- array(0, p_vec)
   eta <- off + intercept
@@ -271,6 +305,7 @@ glam_fit_poisson <- function(Y, B_list, lambda = 1, offset = NULL,
   for (it in seq_len(as.integer(pirls_maxit))) {
     work <- glm_working(fam, y_vec, as.numeric(eta))
     W <- array(work$weight, dim(Y))
+    W <- W * fit_w
     z <- array(work$z, dim(Y))
     # η = offset + α + Xθ  ⇒  X'W X θ = X'W (z - offset - α)
     XtWX <- glam_xtwx(B_list, W)

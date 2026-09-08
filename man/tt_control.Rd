@@ -65,6 +65,11 @@ tt_control(
   cgcv_fit_sweeps = NULL,
   cgcv_lambda0_method = c("fixed_start", "log_grid"),
   cgcv_lambda0_grid = NULL,
+  cv_folds = 5L,
+  cv_ngrid = 13L,
+  cv_grid = NULL,
+  cv_sweeps = 1L,
+  cv_rule = c("min", "1se"),
   design_interface_cache = TRUE,
   gram_method = c("fused_blocked", "fused", "kron", "blas", "legacy"),
   gram_threads = 1L
@@ -216,6 +221,20 @@ updates (order-sensitivity diagnostics).}
 \code{"log_grid"} overall-scale search.}
 
 \item{cgcv_lambda0_grid}{Optional numeric grid for \code{"log_grid"}.}
+
+\item{cv_folds}{Number of folds for \code{lambda = "CV"} (default \code{5}).}
+
+\item{cv_ngrid}{Log-grid size over \code{lambda_bounds} when \code{cv_grid} is \code{NULL}
+(default \code{13}).}
+
+\item{cv_grid}{Optional explicit positive grid for \code{lambda = "CV"}.}
+
+\item{cv_sweeps}{How many ALS (Gaussian) or PIRLS (GLM) iterations run
+k-fold CV before freezing \(\lambda\). Default \code{1} (Rafa: first sweep only).
+Use a larger integer, or \code{Inf}, to re-tune as cores move.}
+
+\item{cv_rule}{\code{"min"} (default; grid argmin) or \code{"1se"} (largest \(\lambda\)
+whose CV score is within one SE of the minimum — less under-smoothing).}
 
 \item{design_interface_cache}{If \code{TRUE} (default), LTR/RTL ALS sweeps
 precompute the inactive-side design interfaces once and absorb the

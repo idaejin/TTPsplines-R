@@ -109,7 +109,7 @@ test_that("global J is gauge-invariant", {
   expect_equal(tt_full_theta(cores3), tt_full_theta(cores), tolerance = 1e-10)
 })
 
-test_that("fixed-λ ALS never increases Q after a core update (P6)", {
+test_that("fixed-λ ALS never increases Q after a sweep (P6)", {
   set.seed(13)
   n <- 80
   X <- matrix(runif(n * 3), n, 3)

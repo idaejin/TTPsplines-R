@@ -235,12 +235,12 @@
     ))
   }
   gram_method <- control$gram_method %||% "fused_blocked"
-  # Array mode overrides the Gram path (unweighted Gaussian, no null_proj).
-  # Use array_data$unweighted_gaussian flag (set before normalize_weights runs)
-  # rather than is.null(weight), which is always FALSE after normalization.
-  use_array_gram <- !is.null(array_data) &&
-    isTRUE(array_data$unweighted_gaussian) &&
-    is.null(null_proj)
+  # Array mode overrides the Gram path (no null_proj):
+  # - unweighted Gaussian: Kronecker Gram (array_data$unweighted_gaussian,
+  #   set before normalize_weights runs, since weight is never NULL after it);
+  # - weighted (GLM PIRLS working weights): GLAM row-tensor Gram.
+  use_array_gram <- !is.null(array_data) && is.null(null_proj) &&
+    (isTRUE(array_data$unweighted_gaussian) || !is.null(weight))
   use_gram <- !use_array_gram &&
     !identical(gram_method, "legacy") &&
     exists("tt_gram_rhs_cpp", envir = asNamespace("TTPsplines"), inherits = FALSE)
@@ -254,14 +254,17 @@
     }
     ad <- array_data
     ad$k <- k
+    # Weighted (PIRLS) path keeps the working weights; unweighted Gaussian
+    # path drops them (tt_gram_rhs uses the precomputed Y_centered array).
+    w_use <- if (isTRUE(array_data$unweighted_gaussian)) NULL else weight
     gr <- tt_gram_rhs(
       Left, Right, Bk_use, target,
-      weight = NULL, array_data = ad
+      weight = w_use, array_data = ad
     )
     ws <- make_core_workspace(
       target, X = NULL, pen_k$P_own, lambda[k],
       control$lambda_bounds, control$tol_lambda,
-      weight = NULL,
+      weight = w_use,
       use_spectral = use_spec,
       P0 = pen_k$P_other,
       S = gr$S, b = gr$b

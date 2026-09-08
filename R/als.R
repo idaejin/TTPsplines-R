@@ -95,6 +95,14 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
   prev_eta <- NULL
   t0 <- proc.time()[["elapsed"]]
   use_spec <- isTRUE(control$use_spectral_gcv)
+  cv_folds <- NULL
+  cv_grid <- NULL
+  cv_trace <- list()
+  if (identical(method, "CV")) {
+    cv_folds <- .cv_assign_folds(length(y), control$cv_folds %||% 5L,
+                                 seed = control$seed %||% 1L, weight = w)
+    cv_grid <- .cv_lambda_grid(control)
+  }
 
   use_array_mode <- !is.null(array_data)
   # In array mode with marginal bases available, build marginal (unique-row)
@@ -104,6 +112,18 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
   # given the same cores, so the Gram path is unchanged.
   use_marginal <- use_array_mode && !is.null(array_data$B_marginal)
   basis_marginal <- if (use_marginal) array_data$B_marginal else NULL
+
+  q_prev <- NULL
+  if (check_q_descent) {
+    f0 <- if (use_marginal) tt_contraction_marginal(cores, basis_marginal) else NULL
+    q_prev <- tt_gaussian_Q(
+      y, cores, intercept, basis, lambda,
+      offset = offset, weights = w,
+      penalty_order = penalty_order, cyclic = cyclic,
+      linear = linear, beta = beta, smooth = smooth,
+      f_precomputed = f0
+    )$value
+  }
 
   for (sw in seq_len(control$max_sweeps)) {
     use_cache <- isTRUE(control$design_interface_cache %||% TRUE)
@@ -131,16 +151,6 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
     }
 
     for (k in margin_order) {
-      if (check_q_descent) {
-        f_q <- if (use_marginal) tt_contraction_marginal(cores, basis_marginal) else NULL
-        q_old <- tt_gaussian_Q(
-          y, cores, intercept, basis, lambda,
-          offset = offset, weights = w,
-          penalty_order = penalty_order, cyclic = cyclic,
-          linear = linear, beta = beta, smooth = smooth,
-          f_precomputed = f_q
-        )$value
-      }
       if (use_marginal) {
         if (use_ltr) {
           Left  <- L_cur_m
@@ -169,6 +179,8 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
         array_data$marginal_iface <- use_marginal
         array_data
       } else NULL
+      do_cv <- identical(method, "CV") &&
+        sw <= as.integer(control$cv_sweeps %||% 1L)
       built <- .cgcv_core_workspace(
         cores, k, lambda, basis, yc, ranks, control,
         weight = w, penalty_order = penalty_order,
@@ -176,6 +188,7 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
         compute_op_norms = do_trace,
         Left = Left,
         Right = Right,
+        return_design = do_cv,
         array_data = ad_k
       )
       Pk <- built$P_own
@@ -187,7 +200,23 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
       } else {
         NULL
       }
-      upd <- update_lambda(method, ws)
+      if (isTRUE(do_cv)) {
+        if (is.null(built$Xk)) {
+          Bk <- if (use_marginal) basis_marginal[[k]] else basis[[k]]
+          built$Xk <- tt_design_core(built$Left, built$Right, Bk)
+        }
+        ws <- .cv_attach_design(ws, built$Xk, yc, w)
+        upd <- update_lambda_cv(ws, folds = cv_folds, grid = cv_grid,
+                               rule = control$cv_rule %||% "min")
+        cv_trace[[length(cv_trace) + 1L]] <- data.frame(
+          sweep = sw, margin = k, lambda = upd$lambda,
+          score = upd$value, n_folds = upd$cv_n_folds %||% NA_integer_,
+          stringsAsFactors = FALSE
+        )
+      } else {
+        core_method <- if (identical(method, "CV")) "fixed" else method
+        upd <- update_lambda(core_method, ws)
+      }
       n_eval <- n_eval + upd$n_eval
 
       # Optional damping / trust even in sequential mode (rho=1, Inf = no-op)
@@ -262,28 +291,27 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
           stringsAsFactors = FALSE
         )
       }
-
-      if (check_q_descent) {
-        f_qn <- if (use_marginal) tt_contraction_marginal(cores, basis_marginal) else NULL
-        q_new <- tt_gaussian_Q(
-          y, cores, intercept, basis, lambda,
-          offset = offset, weights = w,
-          penalty_order = penalty_order, cyclic = cyclic,
-          linear = linear, beta = beta, smooth = smooth,
-          f_precomputed = f_qn
-        )$value
-        dq <- q_new - q_old
-        if (is.finite(dq) && dq > q_max_increase) q_max_increase <- dq
-        if (is.finite(dq) && dq > q_tol * max(1, abs(q_old))) {
-          q_violations <- q_violations + 1L
-        }
-      }
     }
     # Refresh additive (smooth + α, β) given current TT surface; update residual
     f <- if (use_marginal) {
       tt_contraction_marginal(cores, basis_marginal)
     } else {
       tt_contraction(cores, basis)
+    }
+    if (check_q_descent) {
+      q_new <- tt_gaussian_Q(
+        y, cores, intercept, basis, lambda,
+        offset = offset, weights = w,
+        penalty_order = penalty_order, cyclic = cyclic,
+        linear = linear, beta = beta, smooth = smooth,
+        f_precomputed = f
+      )$value
+      dq <- q_new - q_prev
+      if (is.finite(dq) && dq > q_max_increase) q_max_increase <- dq
+      if (is.finite(dq) && dq > q_tol * max(1, abs(q_prev))) {
+        q_violations <- q_violations + 1L
+      }
+      q_prev <- q_new
     }
     add <- tt_refresh_additive(y, offset, f, linear = linear, smooth = smooth,
                                weights = w, control = control)
@@ -372,7 +400,19 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
     elapsed = proc.time()[["elapsed"]] - t0,
     converged = TRUE,
     method_lambda = method,
-    optimizer = "ALS"
+    optimizer = "ALS",
+    cv = if (identical(method, "CV")) {
+      list(
+        folds = length(unique(cv_folds[is.finite(cv_folds)])),
+        grid = cv_grid,
+        score = "mse",
+        rule = control$cv_rule %||% "min",
+        sweeps = as.integer(control$cv_sweeps %||% 1L),
+        trace = if (length(cv_trace)) do.call(rbind, cv_trace) else NULL
+      )
+    } else {
+      NULL
+    }
   )
 }
 

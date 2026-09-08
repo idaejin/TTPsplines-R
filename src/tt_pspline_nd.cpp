@@ -2232,3 +2232,55 @@ arma::mat contract_right_step_marginal_cpp(const arma::mat& right,
   }
   return out;
 }
+
+//' Array-mode RHS: b = X_k' y without forming X_k (unweighted).
+//'
+//' Y_flat is column-major with dims (n_left, n_k, n_right), matching R
+//' `array(..., c(n_left, n_k, n_right))`. Column order of b matches
+//' `kron(R, kron(B, L))` / `tt_design_core` (a fastest, then j, then b).
+//'
+//' @keywords internal
+//' @noRd
+// [[Rcpp::export]]
+arma::vec tt_array_rhs_cpp(const arma::mat& L_uniq,
+                           const arma::mat& Bk,
+                           const arma::mat& R_uniq,
+                           const arma::vec& Y_flat,
+                           const int n_left,
+                           const int n_k,
+                           const int n_right) {
+  const int rl = static_cast<int>(L_uniq.n_cols);
+  const int p  = static_cast<int>(Bk.n_cols);
+  if (static_cast<int>(L_uniq.n_rows) != n_left)
+    stop("tt_array_rhs_cpp: L_uniq nrow != n_left");
+  if (static_cast<int>(Bk.n_rows) != n_k)
+    stop("tt_array_rhs_cpp: Bk nrow != n_k");
+  if (static_cast<int>(R_uniq.n_rows) != n_right)
+    stop("tt_array_rhs_cpp: R_uniq nrow != n_right");
+  if (static_cast<int>(Y_flat.n_elem) != n_left * n_k * n_right)
+    stop("tt_array_rhs_cpp: Y_flat length mismatch");
+
+  arma::mat Ymat(const_cast<double*>(Y_flat.memptr()), n_left, n_k * n_right,
+                 false, true);
+  arma::mat Y1 = L_uniq.t() * Ymat;
+
+  arma::mat Y1_nk(n_k, rl * n_right);
+  for (int ir = 0; ir < n_right; ++ir) {
+    for (int a = 0; a < rl; ++a) {
+      for (int ik = 0; ik < n_k; ++ik) {
+        Y1_nk(ik, a + rl * ir) = Y1(a, ik + n_k * ir);
+      }
+    }
+  }
+  arma::mat BtY = Bk.t() * Y1_nk;
+
+  arma::mat M(rl * p, n_right);
+  for (int ir = 0; ir < n_right; ++ir) {
+    for (int j = 0; j < p; ++j) {
+      for (int a = 0; a < rl; ++a) {
+        M(a + rl * j, ir) = BtY(j, a + rl * ir);
+      }
+    }
+  }
+  return arma::vectorise(M * R_uniq);
+}

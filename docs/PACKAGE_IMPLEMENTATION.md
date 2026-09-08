@@ -32,7 +32,7 @@ Internal λ dispatch:
 parse_lambda_spec(lambda, d, control)
   → list(method, values, automatic)
 update_lambda(method, workspace)
-  → fixed | cGCV   (cFS / cREML not implemented yet)
+  → fixed | cGCV | CV
 ```
 
 Same statistical model for all optimizers: non-additive TT P-spline surface on scattered \(X \in \mathbb{R}^{n\times d}\).
@@ -85,7 +85,7 @@ tt_has_keras(); tt_keras_status()
 - Workspace caches `S`, `b`, `P`, weighted `Xw`/`yw`
 - Optional spectral cache (`use_spectral_gcv = TRUE`)
 - ALS: update λ on each core visit; LBFGS/Adam: outer freeze-cores then conditional update
-- **Not** global GCV; **not** cFS/cREML
+- **Not** global GCV on the dense coefficient tensor
 
 ## Rcpp / sparse
 
@@ -121,9 +121,8 @@ Lab + `inst/benchmarks/` remain the reference. Optimizer comparison benchmarks s
 4. Automated lab↔package parity suite  
 5. Bernoulli stability at high rank  
 
-## Not implemented yet (reserved API hooks)
+## Not implemented yet
 
-- `lambda = "cFS"`, `"cREML"`
 - TT-cSOP, Schall, DMRG, Riemannian, MALS  
 
 ---

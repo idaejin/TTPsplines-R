@@ -7,11 +7,11 @@
 parse_lambda_spec(lambda, d, control = NULL)
 }
 \arguments{
-\item{lambda}{Scalar, length-\code{d} vector, or \code{"cGCV"} (also reserved \code{"cFS"}/\code{"cREML"}).}
+\item{lambda}{Scalar, length-\code{d} vector, \code{"cGCV"}, or \code{"CV"}.}
 
 \item{d}{Number of margins.}
 
-\item{control}{Optional \code{\link[=tt_control]{tt_control()}} (uses \code{lambda_start} for cGCV init).}
+\item{control}{Optional \code{\link[=tt_control]{tt_control()}} (uses \code{lambda_start} for automatic init).}
 }
 \value{
 List with \code{method}, \code{values}, \code{automatic}.

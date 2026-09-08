@@ -194,7 +194,7 @@ summary(fit_p)
 |------|--------|
 | Predictive rank \(r\) | `tt_rank_select()` (CV + 1-SE) |
 | In-sample \(\lambda\) / model comparison with an EDF penalty | AIC / BIC as above |
-| Automatic anisotropic \(\lambda\) inside ALS | `vignette("cgcv")` now; coordinate AIC/BIC / TT-cFS later (Paper 2) |
+| Automatic anisotropic \(\lambda\) inside ALS | `vignette("cgcv")` |
 
 AIC/BIC here are **conditional on** the chosen TT rank and fixed
 \(\boldsymbol\lambda\). They do not fold in uncertainty from rank selection
@@ -211,7 +211,7 @@ reflect **local minima / under-iteration**, not structural need for \(r=3\)
 # What this is not
 
 - Not `AIC(fit)` / `BIC(fit)` methods (not implemented yet).
-- Not REML / cREML.
+- Not REML.
 - Not a substitute for hold-out or CV when the goal is prediction.
 - Not a claim that linearized TT EDF equals dense-tensor EDF.
 - Not evidence by itself that higher TT rank is required for Ishigami.

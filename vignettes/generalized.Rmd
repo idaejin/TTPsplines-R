@@ -56,8 +56,7 @@ predict(fit_b, X[1:5, ], type = "response")
 ```
 
 Automatic λ: `lambda = "cGCV"` (see `fit$lambda_boundary` if estimates hug
-the search bounds). Future versions may add `"cFS"` / `"cREML"` via the same
-argument.
+the search bounds), or `lambda = "CV"` for k-fold search (`tt_control(cv_sweeps, cv_rule)`).
 
 # Grid Poisson via GLAM
 

@@ -48,8 +48,9 @@ For data-driven choice use \code{\link[=tt_rank_select]{tt_rank_select()}} then 
 
 \item{penalty_order}{Difference penalty order.}
 
-\item{lambda}{Numeric (isotropic / anisotropic fixed) or \code{"cGCV"}.
-\code{"cFS"} / \code{"cREML"} are not implemented yet.}
+\item{lambda}{Numeric (isotropic / anisotropic fixed), \code{"cGCV"} (conditional
+GCV, default), or \code{"CV"} (k-fold CV of each \(\lambda_n\); by default on
+the first ALS/PIRLS sweep then frozen — see \code{tt_control(cv_sweeps, cv_rule)}).}
 
 \item{optimizer}{One of:
 \itemize{
@@ -140,7 +141,8 @@ structure-aware \code{ALS} / \code{PIRLS-ALS}, or direct penalized
 likelihood \code{GD} / \code{LBFGS} / \code{Adam}.
 \code{auto} is a simple family-aware default (Gaussian \(\to\) ALS,
 Poisson \(\to\) PIRLS-ALS, binomial \(\to\) LBFGS); always overridable.
-\item \code{lambda}: fixed isotropic/anisotropic or automatic \code{"cGCV"}
+\item \code{lambda}: fixed isotropic/anisotropic, \code{"cGCV"}, or \code{"CV"}
+(k-fold grid search; default first ALS/PIRLS sweep then frozen)
 \item \code{backend}: \code{"R"} for ALS/PIRLS sweeps; \code{"Rcpp"} = kernel helpers
 only (not a full C++ ALS fitter); \code{"keras"} reserved for Adam
 }

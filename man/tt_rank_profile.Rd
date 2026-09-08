@@ -25,8 +25,9 @@ tt_rank_profile(
 \item{family}{A \code{\link[stats:family]{stats::family()}} object or one of
 \code{"gaussian"}, \code{"poisson"}, \code{"binomial"}.}
 
-\item{lambda}{Numeric (isotropic / anisotropic fixed) or \code{"cGCV"}.
-\code{"cFS"} / \code{"cREML"} are not implemented yet.}
+\item{lambda}{Numeric (isotropic / anisotropic fixed), \code{"cGCV"} (conditional
+GCV, default), or \code{"CV"} (k-fold CV of each \(\lambda_n\) on the first ALS
+sweep, then frozen).}
 
 \item{k}{Number of B-spline basis functions per margin.}
 

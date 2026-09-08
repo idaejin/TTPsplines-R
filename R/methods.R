@@ -259,7 +259,7 @@ print.summary.ttpspline <- function(x, digits = max(3L, getOption("digits") - 3L
   cat(sprintf("Lambda:                 %s\n",
               paste(sprintf("%.6g", x$lambda), collapse = ", ")))
   if (!is.null(x$lambda_boundary) && length(x$lambda_boundary) &&
-      (identical(x$lambda_method, "cGCV") || isTRUE(x$lambda_at_boundary))) {
+      (x$lambda_method %in% c("cGCV", "CV") || isTRUE(x$lambda_at_boundary))) {
     cat(sprintf("Lambda boundary:        %s\n",
                 paste(x$lambda_boundary, collapse = ", ")))
     if (!is.null(x$lambda_bounds) && length(x$lambda_bounds) == 2L) {

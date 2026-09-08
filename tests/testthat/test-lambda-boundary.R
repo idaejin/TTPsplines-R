@@ -42,7 +42,7 @@ test_that("boundary hit emits soft warning when enabled", {
       c(9999, 1, 1e-4), "cGCV",
       list(lambda_bounds = c(1e-4, 1e4), warn_lambda_boundary = TRUE)
     ),
-    "near the cGCV search boundaries"
+    "near the search boundaries"
   )
   expect_silent(
     .tt_lambda_boundary_info(

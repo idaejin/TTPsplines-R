@@ -93,6 +93,21 @@
 #' @param cgcv_lambda0_method For scale–anisotropy: `"fixed_start"` or
 #'   `"log_grid"` overall-scale search.
 #' @param cgcv_lambda0_grid Optional numeric grid for `"log_grid"`.
+#' @param cv_folds Number of folds for `lambda = "CV"` (default `5`).
+#' @param cv_ngrid Log-grid size over `lambda_bounds` when `cv_grid` is `NULL`
+#'   (default `13`).
+#' @param cv_grid Optional explicit positive grid for `lambda = "CV"`.
+#' @param cv_sweeps How many ALS (Gaussian) or PIRLS (GLM) iterations run
+#'   k-fold CV before freezing \(\lambda\). Default `1` (Rafa: first sweep only).
+#'   Use a larger integer, or `Inf`, to re-tune as cores move.
+#' @param cv_rule `"min"` (default; grid argmin) or `"1se"` (largest \(\lambda\)
+#'   whose CV score is within one SE of the minimum — less under-smoothing).
+#' @param ggcv_n_global Sobol budget for `lambda = "gGCV"` / [tt_ggcv()]
+#'   (`NULL` → dimension default). Joint gGCV is much more expensive than cGCV.
+#' @param ggcv_n_refine Local `nlminb` refinements for gGCV (default `5`).
+#' @param ggcv_M_search,ggcv_M_final Monte Carlo GDF probe counts for search /
+#'   final re-evaluation (defaults `15` / `40`).
+#' @param ggcv_include_cgcv_anchor Seed gGCV with a cGCV solution (default `TRUE`).
 #' @param design_interface_cache If `TRUE` (default), LTR/RTL ALS sweeps
 #'   precompute the inactive-side design interfaces once and absorb the
 #'   updated core into the active side. Set `FALSE` only for equivalence
@@ -165,6 +180,16 @@ tt_control <- function(max_sweeps = 50,
                        cgcv_fit_sweeps = NULL,
                        cgcv_lambda0_method = c("fixed_start", "log_grid"),
                        cgcv_lambda0_grid = NULL,
+                       cv_folds = 5L,
+                       cv_ngrid = 13L,
+                       cv_grid = NULL,
+                       cv_sweeps = 1L,
+                       cv_rule = c("min", "1se"),
+                       ggcv_n_global = NULL,
+                       ggcv_n_refine = 5L,
+                       ggcv_M_search = 15L,
+                       ggcv_M_final = 40L,
+                       ggcv_include_cgcv_anchor = TRUE,
                        design_interface_cache = TRUE,
                        gram_method = c("fused_blocked", "fused", "kron",
                                         "blas", "legacy"),
@@ -174,6 +199,7 @@ tt_control <- function(max_sweeps = 50,
   cgcv_parameterization <- match.arg(cgcv_parameterization)
   cgcv_lambda0_method <- match.arg(cgcv_lambda0_method)
   gram_method <- match.arg(gram_method)
+  cv_rule <- match.arg(cv_rule)
   if (is.character(sparse) && length(sparse) == 1L) {
     sparse <- match.arg(sparse, c("auto", "TRUE", "FALSE", "true", "false"))
     if (sparse %in% c("TRUE", "true")) sparse <- TRUE
@@ -248,6 +274,25 @@ tt_control <- function(max_sweeps = 50,
       cgcv_fit_sweeps = if (is.null(cgcv_fit_sweeps)) NULL else as.integer(cgcv_fit_sweeps),
       cgcv_lambda0_method = cgcv_lambda0_method,
       cgcv_lambda0_grid = if (is.null(cgcv_lambda0_grid)) NULL else as.numeric(cgcv_lambda0_grid),
+      cv_folds = max(2L, as.integer(cv_folds)[1L]),
+      cv_ngrid = max(3L, as.integer(cv_ngrid)[1L]),
+      cv_grid = if (is.null(cv_grid)) NULL else as.numeric(cv_grid),
+      cv_sweeps = {
+        cs1 <- as.numeric(cv_sweeps)[1L]
+        if (length(cv_sweeps) < 1L || is.null(cs1) || is.na(cs1) || cs1 < 1) {
+          1L
+        } else if (is.infinite(cs1)) {
+          .Machine$integer.max
+        } else {
+          max(1L, as.integer(cs1))
+        }
+      },
+      cv_rule = cv_rule,
+      ggcv_n_global = if (is.null(ggcv_n_global)) NULL else as.integer(ggcv_n_global),
+      ggcv_n_refine = as.integer(ggcv_n_refine),
+      ggcv_M_search = as.integer(ggcv_M_search),
+      ggcv_M_final = as.integer(ggcv_M_final),
+      ggcv_include_cgcv_anchor = isTRUE(ggcv_include_cgcv_anchor),
       design_interface_cache = isTRUE(design_interface_cache),
       gram_method = gram_method,
       gram_threads = max(1L, as.integer(gram_threads)),

@@ -163,6 +163,10 @@ tt_als_fit_profiled_null <- function(y, basis, ranks, lambda_spec, control,
                                      offset = NULL, weights = NULL,
                                      max_npar = 4096L) {
   method <- lambda_spec$method
+  if (identical(method, "CV")) {
+    stop("lambda = 'CV' is not supported with null_space = 'profiled'.",
+         call. = FALSE)
+  }
   d <- length(basis)
   p <- ncol(basis[[1]])
   n <- length(y)

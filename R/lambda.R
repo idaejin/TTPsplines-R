@@ -1,10 +1,10 @@
-# Modular smoothing / lambda engines (fixed, cGCV; reserved hooks: cFS, cREML).
+# Modular smoothing / lambda engines (fixed, cGCV, first-sweep CV, gGCV).
 
 #' Parse public `lambda` into an internal specification.
 #'
-#' @param lambda Scalar, length-`d` vector, or `"cGCV"` (also reserved `"cFS"`/`"cREML"`).
+#' @param lambda Scalar, length-`d` vector, `"cGCV"`, `"CV"`, or `"gGCV"`.
 #' @param d Number of margins.
-#' @param control Optional [tt_control()] (uses `lambda_start` for cGCV init).
+#' @param control Optional [tt_control()] (uses `lambda_start` for automatic init).
 #' @return List with `method`, `values`, `automatic`.
 #' @keywords internal
 parse_lambda_spec <- function(lambda, d, control = NULL) {
@@ -15,21 +15,26 @@ parse_lambda_spec <- function(lambda, d, control = NULL) {
   }
 
   if (is.character(lambda)) {
-    method <- match.arg(lambda, c("cGCV", "cFS", "cREML", "fixed"))
-    if (method %in% c("cFS", "cREML")) {
+    if (length(lambda) != 1L) {
+      stop("Character lambda must be a single string.", call. = FALSE)
+    }
+    lam0 <- tolower(lambda)
+    if (identical(lam0, "cv")) {
+      lambda <- "CV"
+    } else if (lam0 %in% c("ggcv", "tt-ggcv", "tt_ggcv", "global_gcv")) {
+      lambda <- "gGCV"
+    }
+    method <- match.arg(lambda, c("cGCV", "CV", "gGCV", "fixed"))
+    if (identical(method, "fixed")) {
       stop(
-        "lambda = '", method,
-        "' is not implemented yet (planned: TT-cFS / cREML).",
+        "Use a numeric lambda for fixed smoothing, or lambda = ",
+        "\"cGCV\" / \"CV\" / \"gGCV\".",
         call. = FALSE
       )
     }
-    if (identical(method, "fixed")) {
-      stop("Use a numeric lambda for fixed smoothing, or lambda = \"cGCV\".",
-           call. = FALSE)
-    }
     values <- rep(as.numeric(start), length.out = d)
     .validate_lambda_values(values, d)
-    return(list(method = "cGCV", values = values, automatic = TRUE,
+    return(list(method = method, values = values, automatic = TRUE,
                 lambda0 = values)) # lambda0 alias for older callers
   }
 
@@ -50,7 +55,7 @@ parse_lambda_spec <- function(lambda, d, control = NULL) {
                 lambda0 = values))
   }
 
-  stop("lambda must be numeric or \"cGCV\".", call. = FALSE)
+  stop("lambda must be numeric, \"cGCV\", \"CV\", or \"gGCV\".", call. = FALSE)
 }
 
 .validate_lambda_values <- function(values, d) {
@@ -64,17 +69,15 @@ parse_lambda_spec <- function(lambda, d, control = NULL) {
 #' Update one core's λ and coefficients under a smoothing method.
 #'
 #' Workspace must cache `S`, `b`, `P` (and weighted `Xw`,`yw` for GCV RSS).
-#' Future releases may add `cFS` / `cREML` here without changing [ttps()].
 #'
 #' @keywords internal
 update_lambda <- function(method, workspace, ...) {
-  method <- match.arg(method, c("fixed", "cGCV", "cFS", "cREML"))
+  method <- match.arg(method, c("fixed", "cGCV", "CV"))
   switch(
     method,
     fixed = update_lambda_fixed(workspace, ...),
     cGCV = update_lambda_cgcv(workspace, ...),
-    cFS = stop("cFS not implemented yet.", call. = FALSE),
-    cREML = stop("cREML not implemented yet.", call. = FALSE)
+    CV = update_lambda_cv(workspace, ...)
   )
 }
 
@@ -95,7 +98,7 @@ update_lambda_fixed <- function(workspace, ...) {
   } else {
     g <- solve_spd_ridge(M, workspace$b)
   }
-  # n_eval counts smoothing-*criterion* evaluations (cGCV/cFS/…), not core solves
+  # n_eval counts smoothing-*criterion* evaluations (cGCV/CV), not core solves
   list(lambda = lam, g = g, value = NA_real_, ed = NA_real_, n_eval = 0L)
 }
 
@@ -277,6 +280,182 @@ update_lambda_cgcv <- function(workspace, ...) {
   )
 }
 
+#' Log-grid for first-sweep k-fold CV (Rafa / JCGS Algorithm 1).
+#' @keywords internal
+#' @noRd
+.cv_lambda_grid <- function(control) {
+  grid <- control$cv_grid
+  if (!is.null(grid)) {
+    grid <- as.numeric(grid)
+    grid <- grid[is.finite(grid) & grid > 0]
+    if (!length(grid)) {
+      stop("`cv_grid` must contain positive finite values.", call. = FALSE)
+    }
+    return(sort(unique(grid)))
+  }
+  bounds <- control$lambda_bounds %||% c(1e-4, 1e4)
+  ngrid <- as.integer(control$cv_ngrid %||% 13L)
+  if (ngrid < 3L) ngrid <- 3L
+  exp(seq(log(bounds[1]), log(bounds[2]), length.out = ngrid))
+}
+
+#' Assign k-fold ids (NA on non-positive weight). Isolated RNG.
+#' @keywords internal
+#' @noRd
+.cv_assign_folds <- function(n, nfolds, seed, weight = NULL) {
+  n <- as.integer(n)
+  nfolds <- as.integer(nfolds)[1L]
+  w <- if (is.null(weight)) rep(1, n) else as.numeric(weight)
+  if (length(w) != n) stop("CV weight length mismatch.", call. = FALSE)
+  active <- which(is.finite(w) & w > 0)
+  na <- length(active)
+  if (na < 4L) {
+    stop("lambda = 'CV' needs at least 4 observations with positive weight.",
+         call. = FALSE)
+  }
+  nfolds <- max(2L, min(nfolds, na))
+  if (!exists(".Random.seed", envir = .GlobalEnv)) stats::runif(1)
+  old <- get(".Random.seed", envir = .GlobalEnv)
+  on.exit(assign(".Random.seed", old, envir = .GlobalEnv), add = TRUE)
+  set.seed(as.integer(seed) + 7919L)
+  folds <- rep(NA_integer_, n)
+  folds[active] <- sample(rep_len(seq_len(nfolds), na))
+  folds
+}
+
+#' Attach site design so k-fold CV can predict on held-out rows.
+#' @keywords internal
+#' @noRd
+.cv_attach_design <- function(ws, Xk, target, weight) {
+  if (is.null(Xk)) {
+    stop("lambda = 'CV' could not form the site design A_n.", call. = FALSE)
+  }
+  n <- nrow(Xk)
+  w <- if (is.null(weight)) rep(1, n) else as.numeric(weight)
+  if (length(w) != n || length(target) != n) {
+    stop("CV design / target length mismatch.", call. = FALSE)
+  }
+  sw <- sqrt(pmax(w, 0))
+  ws$X <- Xk
+  ws$Xw <- Xk * sw
+  ws$yw <- as.numeric(target) * sw
+  ws
+}
+
+#' k-fold CV of one core's λ (grid search; then full-data solve).
+#'
+#' Scores held-out folds by weighted MSE of the core least-squares problem
+#' (Algorithm 1). If `workspace$family` is Poisson/Bernoulli, scores GLM
+#' deviance on the original `y` using `eta_rest + X g`.
+#' @keywords internal
+#' @noRd
+update_lambda_cv <- function(workspace, folds = NULL, grid = NULL, ...) {
+  extra <- list(...)
+  if (is.null(folds)) folds <- extra$folds
+  if (is.null(grid)) grid <- extra$grid
+  if (is.null(folds) || is.null(grid)) {
+    stop("update_lambda_cv requires folds and a lambda grid.", call. = FALSE)
+  }
+  Xw <- workspace$Xw
+  yw <- workspace$yw
+  P <- workspace$P
+  P0 <- workspace$P0
+  if (is.null(Xw) || is.null(yw)) {
+    stop("lambda = 'CV' needs the site design (Xk).", call. = FALSE)
+  }
+  n <- nrow(as.matrix(Xw))
+  if (length(folds) != n || length(yw) != n) {
+    stop("CV folds / design row mismatch.", call. = FALSE)
+  }
+  grid <- as.numeric(grid)
+  grid <- grid[is.finite(grid) & grid > 0]
+  if (!length(grid)) stop("Empty CV lambda grid.", call. = FALSE)
+
+  fam <- workspace$family
+  use_dev <- !is.null(fam) && !identical(family_key(fam), "gaussian") &&
+    !is.null(workspace$y_obs) && !is.null(workspace$eta_rest) &&
+    !is.null(workspace$X)
+  X_eta <- if (isTRUE(use_dev)) workspace$X else NULL
+
+  active_folds <- sort(unique(folds[is.finite(folds)]))
+  mse_sum <- rep(0, length(grid))
+  n_ok <- 0L
+  n_eval <- 0L
+  fold_rows <- list()
+
+  for (f in active_folds) {
+    val <- which(folds == f)
+    tr <- which(is.finite(folds) & folds != f)
+    if (length(val) < 1L || length(tr) < 2L) next
+    Xtr <- Xw[tr, , drop = FALSE]
+    ytr <- yw[tr]
+    S <- crossprod(Xtr)
+    b <- as.numeric(crossprod(Xtr, ytr))
+    fold_sc <- rep(Inf, length(grid))
+    for (j in seq_along(grid)) {
+      n_eval <- n_eval + 1L
+      M <- S + grid[j] * P
+      if (!is.null(P0)) M <- M + P0
+      g <- tryCatch(
+        as.numeric(solve_spd_ridge(M, b)),
+        error = function(e) NULL
+      )
+      if (is.null(g) || !all(is.finite(g))) next
+      if (isTRUE(use_dev)) {
+        eta_val <- workspace$eta_rest[val] + as.numeric(X_eta[val, , drop = FALSE] %*% g)
+        mu_val <- invlink_eta(fam, eta_val)
+        w_val <- if (is.null(workspace$w_obs)) {
+          NULL
+        } else {
+          workspace$w_obs[val]
+        }
+        sc <- glm_deviance(fam, workspace$y_obs[val], mu_val, weights = w_val)
+        fold_sc[j] <- sc / max(length(val), 1)
+      } else {
+        pred <- as.numeric(Xw[val, , drop = FALSE] %*% g)
+        fold_sc[j] <- mean((yw[val] - pred)^2)
+      }
+    }
+    if (any(is.finite(fold_sc))) {
+      mse_sum <- mse_sum + fold_sc
+      n_ok <- n_ok + 1L
+      fold_rows[[n_ok]] <- fold_sc
+    }
+  }
+
+  mean_scores <- if (n_ok > 0L) mse_sum / n_ok else rep(Inf, length(grid))
+  jmin <- which.min(mean_scores)
+  rule <- extra$rule %||% "min"
+  if (identical(rule, "1se") && n_ok >= 2L && length(jmin) &&
+      is.finite(mean_scores[[jmin]])) {
+    fold_mat <- do.call(rbind, fold_rows)
+    se <- apply(fold_mat, 2L, function(z) {
+      z <- z[is.finite(z)]
+      if (length(z) < 2L) return(0)
+      stats::sd(z) / sqrt(length(z))
+    })
+    thresh <- mean_scores[[jmin]] + se[[jmin]]
+    ok <- which(is.finite(mean_scores) & mean_scores <= thresh)
+    jbest <- if (length(ok)) ok[[which.max(grid[ok])]] else jmin
+  } else {
+    jbest <- jmin
+  }
+  lam <- if (!length(jbest) || !is.finite(mean_scores[jbest])) {
+    as.numeric(workspace$lambda0)
+  } else {
+    grid[[jbest]]
+  }
+  workspace$lambda0 <- lam
+  fit <- update_lambda_fixed(workspace)
+  fit$n_eval <- n_eval + 1L
+  fit$value <- if (length(jbest)) mean_scores[[jbest]] else NA_real_
+  fit$cv_scores <- mean_scores
+  fit$cv_grid <- grid
+  fit$cv_n_folds <- n_ok
+  fit$cv_rule <- rule
+  fit
+}
+
 #' Build cached conditional workspace for core k (Gaussian or weighted).
 #' @param P0 Optional fixed penalty offset (for exact P_k^full cross-margin terms).
 #' @param S,b Optional precomputed Gram / RHS (skips forming products from X).
@@ -357,14 +536,14 @@ make_core_workspace <- function(zc, X = NULL, P, lambda0, bounds, tol,
 .tt_lambda_boundary_info <- function(lambda, method, control) {
   bounds <- control$lambda_bounds %||% c(1e-4, 1e4)
   status <- .lambda_boundary_status(lambda, bounds)
-  at_bound <- isTRUE(identical(method, "cGCV")) &&
+  at_bound <- isTRUE(method %in% c("cGCV", "CV", "gGCV")) &&
     any(status %in% c("lower", "upper"), na.rm = TRUE)
   if (at_bound && isTRUE(control$warn_lambda_boundary %||% TRUE)) {
     idx <- which(status %in% c("lower", "upper"))
     parts <- sprintf("lambda[%d]->%s (%.6g)", idx, status[idx], lambda[idx])
     warning(
       "Note: ", paste(parts, collapse = "; "),
-      " near the cGCV search boundaries [",
+      " near the search boundaries [",
       format(bounds[1], digits = 4), ", ", format(bounds[2], digits = 4), "]. ",
       "Interpret directional lambda cautiously; consider widening lambda_bounds ",
       "or inspecting the surface.",

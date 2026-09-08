@@ -438,6 +438,23 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// tt_array_rhs_cpp
+arma::vec tt_array_rhs_cpp(const arma::mat& L_uniq, const arma::mat& Bk, const arma::mat& R_uniq, const arma::vec& Y_flat, const int n_left, const int n_k, const int n_right);
+RcppExport SEXP _TTPsplines_tt_array_rhs_cpp(SEXP L_uniqSEXP, SEXP BkSEXP, SEXP R_uniqSEXP, SEXP Y_flatSEXP, SEXP n_leftSEXP, SEXP n_kSEXP, SEXP n_rightSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type L_uniq(L_uniqSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Bk(BkSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type R_uniq(R_uniqSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type Y_flat(Y_flatSEXP);
+    Rcpp::traits::input_parameter< const int >::type n_left(n_leftSEXP);
+    Rcpp::traits::input_parameter< const int >::type n_k(n_kSEXP);
+    Rcpp::traits::input_parameter< const int >::type n_right(n_rightSEXP);
+    rcpp_result_gen = Rcpp::wrap(tt_array_rhs_cpp(L_uniq, Bk, R_uniq, Y_flat, n_left, n_k, n_right));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_TTPsplines_tt_design_core_d_cpp", (DL_FUNC) &_TTPsplines_tt_design_core_d_cpp, 3},
@@ -467,6 +484,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_TTPsplines_tt_als_fit_fixed_global_cpp", (DL_FUNC) &_TTPsplines_tt_als_fit_fixed_global_cpp, 10},
     {"_TTPsplines_contract_left_step_marginal_cpp", (DL_FUNC) &_TTPsplines_contract_left_step_marginal_cpp, 3},
     {"_TTPsplines_contract_right_step_marginal_cpp", (DL_FUNC) &_TTPsplines_contract_right_step_marginal_cpp, 3},
+    {"_TTPsplines_tt_array_rhs_cpp", (DL_FUNC) &_TTPsplines_tt_array_rhs_cpp, 7},
     {NULL, NULL, 0}
 };
 

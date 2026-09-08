@@ -215,8 +215,7 @@ sel <- tt_rank_select(
 
 # What this is not
 
-- Not REML / cREML (reserved: `lambda = "cREML"` errors for now).
-- Not TT-cFS / Fellner–Schall inside ALS (`lambda = "cFS"` not implemented).
+- Not REML.
 - Not coordinate AIC/BIC λ search (lab prototype; IC formulas in
   `vignette("aic-bic")`).
 - Not a substitute for choosing TT rank \(r\).

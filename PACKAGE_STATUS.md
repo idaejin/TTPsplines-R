@@ -14,7 +14,7 @@
 
 ```text
 optimizer ∈ {auto*, ALS, PIRLS-ALS, Damped-Newton-ALS*, LBFGS-ALS*, GD*, LBFGS, hybrid*, Adam*}
-lambda    ∈ {scalar, length-d, "cGCV"}   # cFS/cREML not implemented yet
+lambda    ∈ {scalar, length-d, "cGCV", "CV"}
 backend   ∈ {auto, R, Rcpp, keras*}
 * auto (v1, documented): Gaussian→ALS, Poisson→PIRLS-ALS, binomial→LBFGS
   Transparent: fit$optimizer_requested / optimizer_used / optimizer_reason
@@ -60,7 +60,7 @@ Lab scripts/docs/outputs **not moved or deleted**. As of 2026-08-10 the lab **in
 - `tt_control()`, `tt_rank()`, `tt_initialize()`, `tt_complexity()`, `tt_rank_profile()`
 - S3: `print`, `summary`, `predict`, `fitted`, `residuals`, `coef`, `deviance`, `plot`
 - `glam_fit_gaussian()` for grid compression benchmarks
-- Modular `update_lambda()` with `"fixed"` / `"cGCV"`; `"cFS"` / `"cREML"` reserved (not implemented)
+- Modular `update_lambda()` with `"fixed"` / `"cGCV"` / `"CV"`
 
 ## 4–8. Status by feature
 
@@ -91,14 +91,6 @@ Lab scripts/docs/outputs **not moved or deleted**. As of 2026-08-10 the lab **in
 4. `devtools::document()` for Rd pages  
 5. Full Adam/Keras backend (currently stub)  
 6. Split `src/tt_pspline_nd.cpp` into modules (cosmetic)
-
-## 10. Reserved λ hooks (not implemented)
-
-```r
-lambda = "cFS"   # stop with clear message
-lambda = "cREML"
-update_lambda(method = ...)  # extend switch
-```
 
 ## Minimal working examples
 
