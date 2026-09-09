@@ -1,0 +1,328 @@
+---
+title: "Array mode: product grids with array = TRUE"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Array mode: product grids with array = TRUE}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 6,
+  fig.height = 4
+)
+```
+
+# What this vignette is for
+
+Most of `TTPsplines` is about **scattered** covariates: an \(n\times d\) matrix
+`X` and a length-\(n\) response `y`. That is the default.
+
+Sometimes the response already lives on a **full product grid** — every
+combination of margin coordinates is observed once (or with a known weight).
+Classic examples: age × year mortality tables, temperature × lag surfaces on a
+regular mesh, or a simulated \(n_1\times n_2\times n_3\) array.
+
+For that layout, call
+
+```r
+ttps(Y, axes = list(...), array = TRUE, ...)
+```
+
+You pass the **array** `Y` and the **margin axes**, not a flattened
+`expand.grid` design. Statistically you still fit the same TT P-spline; the
+difference is **how the ALS Gram / RHS are formed** (Kronecker / mode
+contractions instead of an \(n\times q_k\) design matrix).
+
+```{r}
+library(TTPsplines)
+```
+
+# Three related tools (do not confuse them)
+
+| Tool | Data layout | Coefficient storage | Typical use |
+|------|-------------|---------------------|-------------|
+| `ttps(..., array = FALSE)` | Scattered \(X\) | TT cores | Irregular designs (default) |
+| `ttps(..., array = TRUE)` | Full product array `Y` | TT cores | Dense grids; faster Gram/RHS |
+| `glam_fit_poisson()` | Full product array | **Dense** \(\Theta\) | Classical Currie–Durbán–Eilers GLAM |
+
+So:
+
+- **GLAM** (`vignette("glam-poisson")`, `vignette("glam-vs-tt")`) = array
+  *data* + dense coefficient array.
+- **`array = TRUE`** = array *data* + **TT** coefficients (this vignette).
+- **Scattered `ttps()`** = no grid required + TT coefficients
+  (`vignette("getting-started")`).
+
+\[
+\boxed{\texttt{array = TRUE}\;\neq\;\text{GLAM}}
+\qquad
+\boxed{\texttt{array = TRUE}\;=\;\text{same TT model, grid algebra}}
+\]
+
+# Building the inputs
+
+You need two things:
+
+1. A numeric array `Y` of dimension \(n_1\times\cdots\times n_d\) (\(d\ge 2\)).
+2. A list `axes` of length \(d\): `axes[[j]]` is the length-\(n_j\) coordinate
+   vector for margin \(j\).
+
+## Memory layout (important)
+
+R stores arrays with **the first dimension varying fastest**. That is the same
+order as
+
+```r
+as.numeric(Y)                    # length prod(dim(Y))
+expand.grid(axes)                # row i matches as.numeric(Y)[i]
+```
+
+So if you build `Y` from a vector `y` and an `expand.grid` design, use
+
+```r
+Y <- array(y, dim = c(n1, n2, ..., nd))
+```
+
+not a transpose of that layout. Getting this wrong silently misaligns cells
+with axes.
+
+## A small 2D example
+
+```{r build-2d}
+set.seed(1)
+n1 <- 20L
+n2 <- 16L
+axes <- list(
+  x1 = seq(0, 1, length.out = n1),
+  x2 = seq(0, 1, length.out = n2)
+)
+
+# Truth on the product grid (outer = all pairs)
+mu <- outer(axes$x1, axes$x2, function(a, b) {
+  sin(2 * pi * a) * cos(pi * b) + 0.3 * a
+})
+Y <- mu + array(rnorm(n1 * n2, sd = 0.15), dim = c(n1, n2))
+
+dim(Y)
+str(axes, vec.len = 2)
+```
+
+If you omit `axes`, the package assumes a unit-interval grid
+`seq(0, 1, length.out = n_j)` on each margin. Prefer passing real axes when
+coordinates matter (age, year, temperature, …).
+
+# First fit
+
+```{r fit-array}
+fit <- ttps(
+  Y,
+  axes = axes,
+  array = TRUE,
+  rank = 3L,
+  k = 8L,
+  lambda = 1,                 # fixed isotropic penalty for a clear demo
+  family = gaussian(),
+  control = tt_control(
+    max_sweeps = 8L,
+    compute_edf = FALSE,
+    seed = 1L,
+    trace = FALSE
+  )
+)
+
+fit$backend          # should be "R-array"
+c(npar_tt = fit$npar_tt, npar_dense = fit$npar_dense)
+head(fit$lambda)
+```
+
+`backend = "R-array"` means the ALS sweeps used the array Gram/RHS path.
+Fitted values are still a **length-\(n\) vector** in dim1-fastest order — the
+same order as `as.numeric(Y)`. To reshape them back to the grid:
+
+```{r reshape}
+mu_hat <- array(fitted(fit), dim = dim(Y))
+rmse <- sqrt(mean((mu_hat - mu)^2))
+rmse
+```
+
+```{r plot-slice, fig.cap = "True vs fitted surface (2D grid)."}
+zlim <- range(mu, mu_hat)
+opar <- par(mfrow = c(1, 2), mar = c(4, 4, 2, 1))
+image(axes$x1, axes$x2, mu, zlim = zlim,
+      xlab = "x1", ylab = "x2", main = "Truth")
+image(axes$x1, axes$x2, mu_hat, zlim = zlim,
+      xlab = "x1", ylab = "x2", main = "Fitted (array = TRUE)")
+par(opar)
+```
+
+Predict at new (possibly non-grid) points with the usual API:
+
+```{r predict}
+X_new <- cbind(x1 = c(0.2, 0.5, 0.8), x2 = c(0.3, 0.5, 0.7))
+predict(fit, X_new, type = "link")
+```
+
+# Same model as scattered — different algebra
+
+If you flatten the same grid into `(y, X)`, `array = FALSE` estimates the
+**same** TT P-spline. With a shared random seed and one ALS sweep, fitted
+values agree to near machine precision (the package tests this).
+
+```{r parity}
+idx <- expand.grid(i1 = seq_len(n1), i2 = seq_len(n2), KEEP.OUT.ATTRS = FALSE)
+X_sc <- cbind(x1 = axes$x1[idx$i1], x2 = axes$x2[idx$i2])
+y_sc <- as.numeric(Y)
+
+ctrl1 <- tt_control(
+  max_sweeps = 1L, compute_edf = FALSE, seed = 1L, trace = FALSE
+)
+fit_sc <- ttps(y_sc, X_sc, rank = 3L, k = 8L, lambda = 1,
+               control = ctrl1)
+fit_ar <- ttps(Y, axes = axes, array = TRUE, rank = 3L, k = 8L, lambda = 1,
+               control = ctrl1)
+
+max_abs <- max(abs(fitted(fit_ar) - fitted(fit_sc)))
+c(max_abs_diff = max_abs, backend_array = fit_ar$backend,
+  backend_scattered = fit_sc$backend)
+```
+
+Use `array = TRUE` when the grid is **complete** (or almost complete with
+`weights`; see below) and you want the cheaper contractions. Use scattered
+when points are irregular, incomplete, or already stored as rows.
+
+# Choosing \(\lambda\) on a grid (cGCV)
+
+Fixed \(\lambda\) is fine for demos. For anisotropic directional penalties,
+the default selector `"cGCV"` works in array mode (same conditional GCV idea
+as scattered; see `vignette("cgcv")`).
+
+```{r cgcv}
+fit_cgcv <- ttps(
+  Y, axes = axes, array = TRUE,
+  rank = 3L, k = 8L, lambda = "cGCV",
+  control = tt_control(
+    max_sweeps = 6L, compute_edf = FALSE, seed = 1L,
+    cgcv_update = "sequential", trace = FALSE
+  )
+)
+round(fit_cgcv$lambda, 4)
+fit_cgcv$lambda_method
+```
+
+**Not** available with `array = TRUE` in this version: `lambda = "CV"` and
+`lambda = "gGCV"`. Use fixed \(\lambda\) or `"cGCV"`.
+
+# A 3D walkthrough (still small)
+
+```{r build-3d}
+set.seed(7)
+ng <- c(10L, 9L, 8L)
+axes3 <- list(
+  x1 = seq(0, 1, length.out = ng[1]),
+  x2 = seq(0, 1, length.out = ng[2]),
+  x3 = seq(0, 1, length.out = ng[3])
+)
+# Separable-ish truth: low TT rank is enough
+g <- expand.grid(axes3, KEEP.OUT.ATTRS = FALSE)
+mu3 <- with(g, sin(2 * pi * x1) * cos(2 * pi * x2) + 0.5 * x3)
+Y3 <- array(mu3 + rnorm(prod(ng), sd = 0.2), dim = ng)
+
+fit3 <- ttps(
+  Y3, axes = axes3, array = TRUE,
+  rank = 2L, k = 6L, lambda = 1,
+  control = tt_control(max_sweeps = 6L, compute_edf = FALSE, seed = 1L)
+)
+c(
+  n = prod(ng),
+  npar_tt = fit3$npar_tt,
+  npar_dense = fit3$npar_dense,
+  compression = round(fit3$compression_ratio, 2),
+  rmse = sqrt(mean((fitted(fit3) - mu3)^2))
+)
+```
+
+Compression here is about **coefficients** (\(N_{\mathrm{TT}}\) vs
+\(k^d\)), not about storing `Y`. The response array still has
+\(\prod_j n_j\) cells.
+
+# Poisson grids (short note)
+
+Array mode also accepts Poisson responses (PIRLS-ALS / weighted row-tensor
+Gram). For a **classical exposure-weighted mortality table** with dense
+\(\Theta\), prefer `glam_fit_poisson()` (`vignette("glam-poisson")`).
+
+```{r poisson, fig.cap = "Poisson array fit: log mean vs truth (diagonal = perfect)."}
+set.seed(21)
+eta <- outer(axes$x1, axes$x2, function(a, b) {
+  0.4 + sin(pi * a) + 0.5 * cos(pi * b)
+})
+Yp <- array(rpois(n1 * n2, exp(eta)), dim = c(n1, n2))
+
+fit_p <- ttps(
+  Yp, axes = axes, array = TRUE,
+  family = poisson(),
+  rank = 2L, k = 6L, lambda = 1,
+  control = tt_control(
+    max_sweeps = 4L, pirls_maxit = 8L,
+    compute_edf = FALSE, seed = 1L, trace = FALSE
+  )
+)
+plot(as.numeric(eta), log(pmax(fitted(fit_p), 1e-8)),
+     xlab = "True log mean", ylab = "Fitted log mean",
+     pch = 16, cex = 0.5)
+abline(0, 1, col = 2, lwd = 2)
+```
+
+Empty or unreliable cells can be down-weighted with `weights`
+(zeros drop them from the likelihood). Incomplete *designs* that are not
+product-shaped should stay in scattered mode.
+
+# Current restrictions (checklist)
+
+Keep this list in mind before teaching `array = TRUE` as a drop-in for every
+grid problem:
+
+- `y` must be a **d-way array** (\(d\ge 2\)); vectors error.
+- `axes` length and lengths of each vector must match `dim(y)`.
+- No `linear=` / `smooth=` terms.
+- `null_space = "joint"` only (not `"profiled"`).
+- No `lambda = "CV"` / `"gGCV"`.
+- Gaussian unweighted grids use the Kronecker Gram path; GLM / weighted grids
+  use the weighted array Gram (still without forming \(X_k\)).
+- Rank \(r\) is still **user-chosen** (see `vignette("rank-selection")`).
+
+# When to prefer which path
+
+- **Scattered points** → `ttps(y, X)` (default).
+- **Full rectangular Gaussian / Poisson grid, TT coefficients** →
+  `ttps(Y, axes = ..., array = TRUE)`.
+- **Dense GLAM Poisson with exposure, classical baseline** →
+  `glam_fit_poisson()` then optionally compare to TT
+  (`vignette("glam-vs-tt")`).
+- **Missing / irregular locations** → flatten only the observed cells and use
+  scattered `ttps()`, or mask with `weights` if the array shell is still
+  product-shaped.
+
+# See also
+
+- `vignette("getting-started")` — scattered workflow
+- `vignette("cgcv")` — \(\lambda\) selectors
+- `vignette("glam-poisson")` — Currie–Durbán–Eilers Poisson GLAM
+- `vignette("glam-vs-tt")` — dense full-tensor vs TT storage
+- `vignette("scalability")` — \(k^d\) vs \(O(dkr^2)\)
+
+# References
+
+Currie, I. D., Durbán, M. and Eilers, P. H. C. (2006).
+Generalized linear array models with applications to multidimensional
+smoothing. *Journal of the Royal Statistical Society: Series B*, **68**,
+259–280. <https://doi.org/10.1111/j.1467-9868.2006.00543.x>
+
+Eilers, P. H. C. and Marx, B. D. (1996).
+Flexible smoothing with \(B\)-splines and penalties.
+*Statistical Science*, **11**, 89–121.
+<https://doi.org/10.1214/ss/1038425655>

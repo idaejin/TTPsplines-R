@@ -181,9 +181,17 @@ predict(fit_b, X_i[1:5, ], type = "response")
 
 # Complete grids
 
-For Gaussian data on a full product grid, `ttps(..., array = TRUE)` uses
-Kronecker Gram structure (see the package README). Poisson arrays with
-exposure belong to `glam_fit_poisson()` (`vignette("glam-poisson")`).
+For a full product-grid response array, `ttps(..., array = TRUE)` uses the
+same TT P-spline model with Kronecker / mode-contraction Gram algebra
+instead of a scattered design matrix. Walkthrough:
+`vignette("array-mode", package = "TTPsplines")`. Dense Currie–Durbán–Eilers
+Poisson GLAM (exposure tables) remains `glam_fit_poisson()`
+(`vignette("glam-poisson")`).
+
+# Confounders beside the TT surface
+
+Unpenalized terms (`linear=`) and 1D additive smooths (`smooth=`) are
+documented with a short demo in `vignette("generalized")` (ALS / PIRLS only).
 
 # Regenerating the packaged samples
 
@@ -195,10 +203,11 @@ fit <- ttps(dat$y, dat$X, rank = 3, k = 10, lambda = "cGCV")
 
 # See also
 
-- `vignette("generalized", package = "TTPsplines")` — Poisson / Bernoulli
+- `vignette("generalized", package = "TTPsplines")` — Poisson / Bernoulli; `linear=` / `smooth=`
 - `vignette("cgcv", package = "TTPsplines")` — fixed / cGCV / CV / gGCV for \(\lambda\)
 - `vignette("rank-selection", package = "TTPsplines")` — CV + 1-SE for \(r\)
 - `vignette("aic-bic", package = "TTPsplines")` — AIC / BIC from linearized EDF
+- `vignette("array-mode", package = "TTPsplines")` — product grids (`array = TRUE`)
 - `vignette("glam-vs-tt", package = "TTPsplines")` — full tensor vs TT
 - `vignette("scalability", package = "TTPsplines")` — storage, timings, backends
 - `vignette("glam-poisson", package = "TTPsplines")` — Currie–Durbán–Eilers Poisson

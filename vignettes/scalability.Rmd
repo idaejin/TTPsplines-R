@@ -229,6 +229,7 @@ ALS still reports `backend = "R"` (canonical sweep) with matching \(\eta\).
 # See also
 
 - `vignette("glam-vs-tt", package = "TTPsplines")` — full-tensor vs TT demos
+- `vignette("array-mode", package = "TTPsplines")` — TT Gram on product grids
 - `vignette("rank-selection", package = "TTPsplines")` — CV + 1-SE for \(r\)
 - `vignette("getting-started", package = "TTPsplines")`
 - `tt_complexity()`, `compare_glam_tt_gaussian()`, `compare_glam_tt_scale()`

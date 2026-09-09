@@ -1,109 +1,70 @@
 # TTPsplines package — prototype status
 
-**Canonical status report:** [`docs/PACKAGE_IMPLEMENTATION.md`](docs/PACKAGE_IMPLEMENTATION.md)
+**Canonical implementation notes:** [`docs/PACKAGE_IMPLEMENTATION.md`](docs/PACKAGE_IMPLEMENTATION.md)
 
 **Folder:** `01_PROJECTS/ttpsplines-pkg/` (avoids macOS case-clash with lab `TTPsplines/`)  
 **Package name:** `TTPsplines`  
-**Version:** `0.0.0.9000`  
+**Version:** `0.0.0.9001`  
 **GitHub:** https://github.com/idaejin/TTPsplines-R  
-**Lab:** `01_PROJECTS/TTPsplines/` — consumes this package for the engine; retains Paper-2 prototypes (TT-cFS / SOP / SA-CAB) until ported.
+**Lab:** `01_PROJECTS/TTPsplines/` — consumes this package for the engine.
 
-**DECISION (2026-08-10):** package = sole home of engine unit tests; lab does not re-validate via `test_ttglam.R`.
+**DECISION (2026-08-10):** package = sole home of engine unit tests.
+
+This file is a **living snapshot** (last refresh 2026-09-09). Prefer NEWS +
+vignettes for user-facing truth; prefer `docs/PACKAGE_IMPLEMENTATION.md` for
+deep engine notes.
 
 ## API axes
 
 ```text
 optimizer ∈ {auto*, ALS, PIRLS-ALS, Damped-Newton-ALS*, LBFGS-ALS*, GD*, LBFGS, hybrid*}
-lambda    ∈ {scalar, length-d, "cGCV", "CV"}
+lambda    ∈ {scalar, length-d, "cGCV", "CV", "gGCV"*}
 backend   ∈ {auto, R, Rcpp}
-* auto (v1, documented): Gaussian→ALS, Poisson→PIRLS-ALS, binomial→LBFGS
-  Transparent: fit$optimizer_requested / optimizer_used / optimizer_reason
-  ALS / PIRLS-ALS = structure-aware conditional solves
-  GD / LBFGS = direct penalized likelihood (same objective)
-  Damped-Newton-ALS / LBFGS-ALS = experimental conditional solvers
-  hybrid = experimental ALS→LBFGS polish
+array     ∈ {FALSE (scattered), TRUE (product grid Y + axes)}
+* auto: Gaussian→ALS, Poisson→PIRLS-ALS, binomial→LBFGS
+* gGCV: experimental, Gaussian scattered only
 ```
 
-Public entry: `ttps(..., optimizer=, backend=, init=)` plus `tt_initialize()`.
+Public entry: `ttps(...)` (+ `ttps_dlnm()` for exposure×lag; vignette deferred).
 
-## 1. Files created (high level)
+## Vignettes (all knit `ok` in `vignettes/_build_check.csv`)
 
-```text
-DESCRIPTION, NAMESPACE, LICENSE, README.md, PORTING.md
-R/  TTPsplines-package, linalg, basis, penalties, rank, control,
-    initialization, families, tt_geometry, lambda, als, pirls,
-    optimizer_lbfgs, ttpspline,
-    complexity, methods, rank_profile, glam, RcppExports
-src/ tt_pspline_nd.cpp (+ Makevars, RcppExports.cpp)
-tests/testthat/test-ttpspline.R, test-api.R, test-complexity-layers.R
-docs/PACKAGE_IMPLEMENTATION.md
-vignettes/ getting-started, generalized, cgcv, rank-selection, aic-bic,
-           glam-vs-tt, glam-poisson, uncertainty, scalability
-inst/benchmarks/ *.R
-```
+| Vignette | Topic |
+|----------|--------|
+| `getting-started` | Scattered TT, datasets |
+| `array-mode` | Product grids `array = TRUE` |
+| `generalized` | GLM families; `linear=` / `smooth=` |
+| `cgcv` | λ selectors |
+| `rank-selection` | CV + 1-SE for \(r\) |
+| `aic-bic` | `tt_ic()` AIC/BIC from EDF |
+| `margin-activity-path` | Margin screening |
+| `glam-vs-tt` / `glam-poisson` | Dense GLAM baselines |
+| `scalability` | Storage / timings / backends |
+| `uncertainty` | Conditional SE / bands |
 
-## 2. Existing lab code reused
+Manual smoke: `tests/manual/smoke_test_apis.Rmd`.
 
-| Lab | Package use |
-|---|---|
-| `src/tt_pspline_nd.cpp` | copied → package Rcpp backend |
-| TT ALS / interfaces / designs | reimplemented cleanly in `R/tt_geometry.R`, `R/als.R` |
-| GLM PIRLS + cGCV ideas | `R/pirls.R`, `R/lambda.R` |
-| GLAM RH | `R/glam.R` (`glam_fit_gaussian`, `glam_fit_poisson`) |
-| Bases / difference penalties | `R/basis.R`, `R/penalties.R` |
-
-Lab scripts/docs/outputs **not moved or deleted**. As of 2026-08-10 the lab **installs this package** for engine use; superseded lab cores are marked in-file.
-
-## 3. API implemented
-
-- `ttps(y, X, family, rank, k, lambda, control, …)` — preferred; `ttpspline()` identical alias
-- `tt_control()`, `tt_rank()`, `tt_initialize()`, `tt_complexity()`, `tt_rank_profile()`
-- S3: `print`, `summary`, `predict`, `fitted`, `residuals`, `coef`, `deviance`, `plot`
-- `glam_fit_gaussian()` for grid compression benchmarks
-- Modular `update_lambda()` with `"fixed"` / `"cGCV"` / `"CV"`
-
-## 4–8. Status by feature
+## Status by feature (short)
 
 | Feature | Status |
 |---|---|
-| Gaussian ALS fixed λ | **working** (R sweeps; Rcpp Gram / \(P^{\mathrm{full}}\) helpers) |
-| Gaussian cGCV | **working** (R outer / sequential; same helpers) |
-| Poisson PIRLS | **working** (R; own-margin C++ fitter is **legacy**, unused by `ttps`) |
-| Bernoulli (default) | **LBFGS via `auto`** (`optimizer_reason`: binomial family default); ALS/PIRLS overridable |
-| Bernoulli ALS/PIRLS | **working with caveats** (FIX1+FIX2; predictive gap vs LBFGS remains) |
-| cGCV for GLM | **working** via modular λ on R path |
-| Joint EDF | **working** (linearized; size-guarded) |
-| cGCV vignette | **`vignettes/cgcv.Rmd`** (fixed vs cGCV; bounds) |
-| Scalability vignette | **`vignettes/scalability.Rmd`** (storage, GLAM skip, timings, backends) |
-| AIC / BIC helpers | **vignette only** (`vignettes/aic-bic.Rmd`; no `AIC()` method yet) |
-| Complexity layers | **working** (`tt_complexity`; covered in `rank-selection`) |
-| Rcpp backend | **kernels only** for ALS/PIRLS (`backend = "Rcpp"` warns and keeps R sweeps); no full C++ ALS yet |
-| Sparse Matrix path | **hook only** (`sparse` in control; dense v0) |
-| Benchmarks | **runnable** — `inst/benchmarks/` |
-| Tests | **testthat** |
-| Vignettes | **scaffolded** (`eval: false`) |
+| Gaussian ALS / cGCV | working |
+| Poisson PIRLS / Bernoulli LBFGS (`auto`) | working |
+| `array = TRUE` (Gaussian Kronecker; Poisson weighted) | working; no linear/smooth/CV/gGCV |
+| `tt_ic()` AIC/BIC | working (`AIC()` S3 not yet) |
+| Rank helpers `tt_rank_select` / `tt_rank_refit` | working |
+| `linear=` / `smooth=` (ALS/PIRLS) | working; vignette section in `generalized` |
+| Dense GLAM Gaussian / Poisson | working |
+| `ttps_dlnm` / `predict_dlnm` | working API; **no vignette yet** (deferred) |
+| Rcpp | kernels only; ALS sweeps stay in R |
+| Joint gGCV | experimental; Gaussian scattered |
 
-## 9. Remaining blockers
-
-1. Bernoulli cGCV under default LBFGS path; document λ bounds for separation  
-2. Optional: sparse B-spline storage; matrix-free \(S_k\)  
-3. Parity suite: lab scripts vs package on shared seeds  
-4. `devtools::document()` for Rd pages  
-5. Split `src/tt_pspline_nd.cpp` into modules (cosmetic)
-
-## Minimal working examples
+## Minimal examples
 
 ```r
 devtools::load_all("01_PROJECTS/ttpsplines-pkg")
 
-# Gaussian  -> auto selects ALS
 fit <- ttps(y, X, family = gaussian(), rank = 3, k = 8, lambda = "cGCV")
-
-# Poisson   -> auto selects PIRLS-ALS
-fit <- ttps(y, X, family = poisson(),  rank = 3, k = 8, lambda = 1)
-
-# Bernoulli -> auto selects LBFGS
-fit <- ttps(y, X, family = binomial(), rank = 3, k = 8, lambda = 1)
-
-summary(fit)  # shows Requested / Selected / Reason
+fit <- ttps(Y, axes = list(...), array = TRUE, rank = 2, k = 8, lambda = 1)
+tt_ic(fit, "AIC")
 ```

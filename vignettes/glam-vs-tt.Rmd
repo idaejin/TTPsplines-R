@@ -25,10 +25,15 @@ algebra avoids the full tensor-product design matrix. The coefficient array
 GLAM, not “GLAM with Tensor-Train cores.”
 
 \[
-\boxed{\text{GLAM: grid/array data + array coefficients}}
+\boxed{\text{GLAM: grid/array data + dense }\Theta}
 \qquad
-\boxed{\text{TTPsplines: scattered OK + TT coefficients}}
+\boxed{\text{TTPsplines: TT }\Theta\text{ (scattered or }array=TRUE\text{)}}
 \]
+
+Scattered covariates need no grid. When responses **do** fill a product
+array, `ttps(..., array = TRUE)` keeps TT coefficients but uses grid Gram
+algebra — see `vignette("array-mode")`. That is still not classical GLAM
+(dense \(\Theta\)).
 
 A tensor-product P-spline stores \(N_{\mathrm{full}}=\prod_j k_j\)
 coefficients. For uniform interior rank \(r\) and \(k_j=k\),
@@ -115,13 +120,15 @@ fit <- tt_rank_refit(sel)
 ```
 
 See also `vignette("rank-selection")` for CV + 1-SE and compression layers,
-`vignette("cgcv")` for automatic \(\lambda\), and
+`vignette("cgcv")` for automatic \(\lambda\),
+`vignette("array-mode")` for TT on product grids, and
 `vignette("glam-poisson")` for Currie–Durbán–Eilers Poisson grids.
 
 # See also
 
 - `vignette("rank-selection", package = "TTPsplines")`
 - `vignette("cgcv", package = "TTPsplines")`
+- `vignette("array-mode", package = "TTPsplines")` — TT on product grids
 - `vignette("scalability", package = "TTPsplines")` — storage / timings / backends
 - `vignette("glam-poisson", package = "TTPsplines")`
 - `vignette("getting-started", package = "TTPsplines")`

@@ -113,8 +113,10 @@ tt_complexity(fit_tt)
 
 GLAM uses the full \(k\times k\) coefficient array; TT stores fewer parameters
 at modest rank while staying close to the GLAM mean surface on this example.
-For scattered Poisson / Bernoulli (no grid), prefer `ttps()` directly —
-see `vignette("generalized")`. For Gaussian GLAM vs TT with CV ranks and
+For scattered Poisson / Bernoulli (no grid), prefer `ttps()` —
+see `vignette("generalized")`. For a full grid with **TT** coefficients
+(not dense GLAM), use `ttps(..., array = TRUE)` —
+`vignette("array-mode")`. For Gaussian GLAM vs TT with CV ranks and
 separated timings, see `vignette("glam-vs-tt")`.
 
 Redraw a smaller grid on the fly with `simulate_glam_poisson()`.
@@ -122,6 +124,7 @@ Redraw a smaller grid on the fly with `simulate_glam_poisson()`.
 # See also
 
 - `vignette("generalized", package = "TTPsplines")` — scattered Poisson / Bernoulli
+- `vignette("array-mode", package = "TTPsplines")` — TT on product grids
 - `vignette("glam-vs-tt", package = "TTPsplines")` — full tensor vs TT
 - `vignette("cgcv", package = "TTPsplines")` — automatic \(\lambda\)
 - `vignette("rank-selection", package = "TTPsplines")`

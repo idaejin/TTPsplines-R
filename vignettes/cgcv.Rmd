@@ -328,6 +328,7 @@ Knobs: `ggcv_n_global`, `ggcv_n_refine`, `ggcv_M_search`, `ggcv_M_final`,
 
 - `vignette("rank-selection", package = "TTPsplines")` — CV + 1-SE for \(r\)
 - `vignette("aic-bic", package = "TTPsplines")` — AIC / BIC from EDF
+- `vignette("array-mode", package = "TTPsplines")` — cGCV on product grids
 - `vignette("getting-started", package = "TTPsplines")`
 - `vignette("generalized", package = "TTPsplines")`
 

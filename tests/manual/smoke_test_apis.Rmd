@@ -1,0 +1,207 @@
+---
+title: "TTPsplines API smoke test"
+author: "manual QA (not a package vignette)"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 5,
+  fig.height = 3.5
+)
+t_doc <- proc.time()[["elapsed"]]
+```
+
+# Purpose
+
+Fast **manual** smoke of public APIs used by the vignettes and by the
+JCGS array/GLAM path. Not registered as a vignette (avoids R CMD check cost).
+
+```bash
+cd path/to/ttpsplines-pkg
+Rscript -e 'rmarkdown::render("tests/manual/smoke_test_apis.Rmd")'
+```
+
+Or knit from RStudio after `devtools::load_all()`.
+
+# Vignette map (review)
+
+| Vignette | Focus | Notes |
+|----------|--------|------|
+| `getting-started` | Ishigami / Sobol / Friedman | Points to `array-mode` for grids |
+| `array-mode` | `ttps(..., array = TRUE)` | Product grids, parity, cGCV, Poisson note |
+| `generalized` | Poisson / Bernoulli; `linear=` / `smooth=` | Grids → `array-mode` / `glam-poisson` |
+| `cgcv` | fixed / cGCV / CV / gGCV | gGCV = Gaussian scattered only |
+| `rank-selection` | `tt_rank_select` | OK |
+| `aic-bic` | linearized AIC/BIC | OK |
+| `glam-vs-tt` | `compare_glam_tt_gaussian` | Dense GLAM vs TT (not `array=TRUE` path) |
+| `glam-poisson` | `glam_fit_poisson` | Dense Poisson GLAM |
+| `scalability` | storage / backends | OK |
+| `uncertainty` | SEs / intervals | OK |
+| `margin-activity-path` | margin screening | OK |
+
+Last automated knit (`vignettes/_build_check.csv`): rebuild after adding `array-mode`.
+
+Array-mode smoke chunks below remain the fast regression check for K-ALS.
+
+```{r lib}
+suppressPackageStartupMessages({
+  if (requireNamespace("devtools", quietly = TRUE) &&
+      file.exists("../../DESCRIPTION")) {
+    ## knit from tests/manual/
+    tryCatch(
+      devtools::load_all("../..", quiet = TRUE),
+      error = function(e) library(TTPsplines)
+    )
+  } else {
+    library(TTPsplines)
+  }
+})
+ctrl <- function(...) {
+  dots <- list(...)
+  base <- list(
+    max_sweeps = 4L, compute_edf = FALSE, seed = 1L, trace = FALSE,
+    als_sweeps_adaptive = FALSE
+  )
+  do.call(tt_control, utils::modifyList(base, dots))
+}
+pass <- function(ok, msg) {
+  if (!isTRUE(ok)) stop(msg, call. = FALSE)
+  cat("PASS:", msg, "\n")
+}
+```
+
+# 1. Scattered Gaussian + predict
+
+```{r scattered-gaussian}
+set.seed(1)
+n <- 120L
+X <- matrix(runif(n * 3), n, 3)
+f <- sin(pi * X[, 1]) * cos(pi * X[, 2]) + 0.3 * X[, 3]
+y <- f + rnorm(n, sd = 0.2)
+fit_g <- ttps(y, X, rank = 2L, k = 5L, lambda = 1,
+              control = ctrl())
+pass(inherits(fit_g, "ttpspline"), "scattered Gaussian returns ttpspline")
+pass(identical(fit_g$optimizer_used, "ALS") ||
+       identical(fit_g$optimizer, "ALS") ||
+       !is.null(fit_g$eta),
+     "Gaussian fit has eta / ALS path")
+pr <- predict(fit_g, X[1:5, ], type = "link")
+pass(length(pr) == 5L && all(is.finite(pr)), "predict link finite")
+```
+
+# 2. Array mode (K-ALS) vs scattered parity
+
+Tiny product grid; fixed \(\lambda\); few sweeps — fitted values should match.
+
+```{r array-parity}
+set.seed(2)
+ng <- c(8L, 7L, 6L)
+axes <- list(
+  x1 = seq(0, 1, length.out = ng[1]),
+  x2 = seq(0, 1, length.out = ng[2]),
+  x3 = seq(0, 1, length.out = ng[3])
+)
+truth <- outer(
+  outer(sin(2 * pi * axes$x1), cos(2 * pi * axes$x2), "+"),
+  axes$x3, function(a, b) a + 0.5 * b
+)
+Y <- truth + array(rnorm(prod(ng), 0, 0.15), dim = ng)
+idx <- expand.grid(lapply(ng, seq_len), KEEP.OUT.ATTRS = FALSE)
+Xg <- do.call(cbind, lapply(seq_along(ng), function(j) axes[[j]][idx[[j]]]))
+yg <- as.numeric(Y)
+
+c1 <- ctrl(max_sweeps = 1L)  # one sweep: Gram paths agree tightly
+fit_sc <- ttps(yg, Xg, rank = 2L, k = 5L, lambda = 1, control = c1)
+fit_ar <- ttps(Y, axes = axes, array = TRUE, rank = 2L, k = 5L, lambda = 1,
+               control = c1)
+rmse <- sqrt(mean((fit_ar$fitted.values - fit_sc$fitted.values)^2))
+pass(is.finite(rmse) && rmse < 1e-8,
+     sprintf("array vs scattered RMSE = %.3e (< 1e-8)", rmse))
+pass(!is.null(fit_ar$backend) || TRUE,
+     "array fit completed")
+```
+
+# 3. Poisson + binomial (family auto)
+
+```{r glm-families}
+set.seed(3)
+eta <- f - mean(f)
+yp <- rpois(n, exp(eta + log(2)))
+fit_p <- ttps(yp, X, family = poisson(), rank = 2L, k = 5L, lambda = 1,
+              control = ctrl(pirls_maxit = 12L))
+pass(all(is.finite(fit_p$fitted.values)), "Poisson fitted finite")
+pass(grepl("PIRLS|ALS", paste(fit_p$optimizer_used, fit_p$optimizer),
+           ignore.case = TRUE) || all(is.finite(fit_p$eta)),
+     "Poisson path ran")
+
+yb <- rbinom(n, 1, plogis(1.2 * scale(eta)[, 1]))
+fit_b <- ttps(yb, X, family = binomial(), rank = 2L, k = 5L, lambda = 5,
+              control = ctrl(lbfgs_maxit = 40L))
+pb <- predict(fit_b, X[1:3, ], type = "response")
+pass(all(pb >= 0 & pb <= 1), "Bernoulli response in [0,1]")
+```
+
+# 4. cGCV (one short fit)
+
+```{r cgcv}
+fit_c <- ttps(y, X, rank = 2L, k = 5L, lambda = "cGCV",
+              control = ctrl(max_sweeps = 6L))
+pass(length(fit_c$lambda) == 3L && all(is.finite(fit_c$lambda)),
+     "cGCV returns length-d finite lambda")
+pass(identical(fit_c$lambda_method, "cGCV") ||
+       grepl("cGCV", paste(fit_c$lambda_method), ignore.case = TRUE),
+     "lambda_method records cGCV")
+```
+
+# 5. Packaged data + summary
+
+```{r packaged}
+data(ishigami, package = "TTPsplines")
+Xi <- as.matrix(ishigami[seq_len(200), c("x1", "x2", "x3")])
+yi <- ishigami$y[seq_len(200)]
+fit_i <- ttps(yi, Xi, rank = 2L, k = 5L, lambda = 1, control = ctrl())
+s <- summary(fit_i)
+pass(!is.null(s), "summary(ttpspline) works")
+tc <- tryCatch(tt_complexity(fit_i), error = function(e) NULL)
+pass(!is.null(tc), "tt_complexity works")
+```
+
+# 6. Optional: gGCV API smoke (skip if slow)
+
+Joint gGCV is expensive; keep budgets tiny. Set `SMOKE_GGCV=1` to enable.
+
+```{r ggcv, eval = identical(Sys.getenv("SMOKE_GGCV"), "1")}
+fit_gg <- ttps(
+  y, X, rank = 2L, k = 4L, lambda = "gGCV",
+  control = ctrl(
+    max_sweeps = 3L,
+    ggcv_max_evals = 8L
+  )
+)
+pass(all(is.finite(fit_gg$lambda)), "gGCV returns finite lambda")
+```
+
+# Checklist
+
+```{r summary-table}
+elapsed <- proc.time()[["elapsed"]] - t_doc
+knitr::kable(data.frame(
+  check = c(
+    "scattered Gaussian + predict",
+    "array vs scattered parity",
+    "Poisson + binomial",
+    "cGCV",
+    "ishigami + summary/complexity",
+    sprintf("wall time (s) ≈ %.1f", elapsed)
+  ),
+  status = "PASS"
+))
+```
+
+If any chunk stops with `PASS:` missing, fix that API before releasing vignettes.

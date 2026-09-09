@@ -23,8 +23,10 @@
     - `S_k = kron(R'R, kron(Bk'Bk, L'L))` (Gaussian, unweighted)
     - `b_k` via triple-mode contraction of `Y_centered` over `(L_uniq, Bk, R_uniq)`
 * `axes` can be omitted; defaults to a unit-interval grid for each margin.
-* Restrictions (first version): Gaussian only; `optimizer = "ALS"`; no
-  `linear=`, `smooth=`, or `null_space = "profiled"`.
+* Gaussian unweighted grids use the Kronecker Gram path; Poisson / weighted
+  grids use the weighted array Gram (still without forming \(X_k\)).
+* Restrictions: no `linear=` / `smooth=`; `null_space = "joint"` only;
+  no `lambda = "CV"` / `"gGCV"`. Walkthrough: `vignette("array-mode")`.
 * Result is numerically identical to `array = FALSE` on the same grid data
   (fitted values differ by ≤ machine epsilon in all tests).
 * New internal functions: `tt_gram_rhs_array()`, `.tt_array_extract_interfaces()`,

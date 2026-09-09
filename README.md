@@ -52,10 +52,11 @@ vignette("getting-started", package = "TTPsplines")
 | Vignette | Topic |
 |----------|--------|
 | `getting-started` | Scattered TT fit, families, datasets |
+| `array-mode` | Product grids with `array = TRUE` |
 | `cgcv` | λ: fixed / cGCV / CV / gGCV |
 | `rank-selection` | TT rank via CV + 1-SE |
 | `margin-activity-path` | Margin screening |
-| `generalized` | Poisson / Bernoulli |
+| `generalized` | Poisson / Bernoulli; `linear=` / `smooth=` |
 | `aic-bic` | In-sample AIC / BIC from EDF |
 | `glam-vs-tt` | Full tensor vs TT |
 | `glam-poisson` | GLAM Poisson + exposure |
@@ -250,9 +251,13 @@ fit_a <- ttps(
 summary(fit_a)
 ```
 
-Restrictions in this version: Gaussian + ALS; no `linear=` / `smooth=` /
-`null_space = "profiled"`. Numerically matches scattered `ttps()` on the same
-grid. For exposure-weighted Poisson grids prefer `glam_fit_poisson()`.
+Restrictions in this version: no `linear=` / `smooth=` /
+`null_space = "profiled"`; no `lambda = "CV"` / `"gGCV"`. Numerically matches
+scattered `ttps()` on the same grid. Gaussian unweighted grids use Kronecker
+Gram; Poisson / weighted grids use the weighted array path. For
+exposure-weighted Poisson with **dense** \(\Theta\) prefer
+`glam_fit_poisson()`. Full walkthrough:
+`vignette("array-mode", package = "TTPsplines")`.
 
 ## Choosing the TT rank (CV + 1-SE)
 
@@ -376,8 +381,8 @@ fit <- glam_fit_poisson(
 Also: `glam_fit_gaussian()`, `simulate_glam_poisson()`,
 `compare_glam_tt_gaussian()` / `compare_glam_tt_scale()` (Gaussian GLAM vs TT
 on \(d=3,5,7\) grids, including \(n\times k\) scale at \(d=7\)).
-Vignettes: `vignette("glam-vs-tt")`, `vignette("glam-poisson")`,
-`vignette("scalability")`.
+Vignettes: `vignette("array-mode")`, `vignette("glam-vs-tt")`,
+`vignette("glam-poisson")`, `vignette("scalability")`.
 Scripts: `inst/examples/example_glam_poisson.R`,
 `inst/examples/example_glam_gaussian_vs_tt.R`.
 
@@ -390,7 +395,7 @@ Scripts: `inst/examples/example_glam_poisson.R`,
 | `tt_rank_select()` + `tt_rank_refit()` | LRT / bootstrap rank tests |
 | `tt_margin_activity_path()` (margin screening) | group-lasso on TT cores |
 | Experimental: `GD`, `Damped-Newton-ALS`, `LBFGS-ALS` | mixed effects / TMB |
-| `array = TRUE` Gaussian grids + GLAM Poisson (fixed λ, d≤3) | higher-d GLAM / REML |
+| `array = TRUE` (Gaussian / Poisson grids) + GLAM Poisson | higher-d GLAM / REML; DLNM vignette |
 
 ## License
 

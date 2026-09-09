@@ -60,15 +60,63 @@ the search bounds), or `lambda = "CV"` for k-fold search under ALS / PIRLS
 (`tt_control(cv_folds, cv_sweeps, cv_rule)`). Joint `"gGCV"` is Gaussian-only
 — see `vignette("cgcv")`.
 
-# Grid Poisson via GLAM
+# Parametric and additive confounders (`linear=`, `smooth=`)
 
-For **regular arrays** (e.g. age × year counts with exposure), use
-`glam_fit_poisson()` instead of scattering the grid into `ttps()` —
-see `vignette("glam-poisson")` and `data(glam_poisson)`.
+The joint TT surface on \(X\) can sit next to **unpenalized** covariates
+(`linear=`) and **1D additive** smooths (`smooth=`), updated by
+block-coordinate ALS / PIRLS. Typical use: day-of-week dummies, a time trend,
+or a cyclic month effect — calendar structure that should **not** be folded
+into the TT interaction surface.
+
+Do **not** put an intercept column in `linear=` (`ttps` already estimates one).
+`predict()` must receive matching `linear=` / `smooth=` newdata when those
+terms were used at fit time. Unsupported for global LBFGS / GD / hybrids
+(use ALS / PIRLS).
+
+```{r linear-smooth}
+set.seed(10)
+n <- 150
+X2 <- matrix(runif(n * 2), n, 2)
+colnames(X2) <- c("x1", "x2")
+z <- rnorm(n)
+t <- seq(0, 1, length.out = n)
+f_tt <- 0.4 * sin(2 * pi * X2[, 1]) * cos(2 * pi * X2[, 2])
+f_sm <- sin(2 * pi * t)
+y <- 1 + 1.5 * z + f_tt + f_sm + rnorm(n, 0, 0.2)
+
+fit_ls <- ttps(
+  y, X2,
+  rank = 2, k = 6, lambda = 1,
+  linear = cbind(z = z),
+  smooth = list(
+    time = list(x = t, bs = "ps", k = 12, m = 2, lambda = "cGCV")
+  ),
+  control = tt_control(max_sweeps = 8, compute_edf = FALSE, outer_maxit = 4)
+)
+c(beta_z = unname(fit_ls$beta), smooth_edf = fit_ls$smooth$time$edf)
+head(predict(fit_ls, X2, linear = cbind(z = z), smooth = list(time = t)))
+```
+
+Cyclic margins use `bs = "cc"` with `period = c(xl, xr)` (e.g. hour of day).
+Per-term `target_edf` is an alternative to `lambda` / `"cGCV"` on a smooth.
+
+# Product grids: TT array vs dense GLAM
+
+For a **full rectangular** response array there are two package paths:
+
+| Path | Coefficients | When |
+|------|--------------|------|
+| `ttps(Y, axes = ..., array = TRUE)` | TT cores | Same TT model as scattered; faster Gram/RHS on the grid |
+| `glam_fit_poisson()` | Dense \(\Theta\) | Classical Currie–Durbán–Eilers baseline (exposure tables) |
+
+Walkthrough of `array = TRUE` (Gaussian and Poisson):
+`vignette("array-mode")`. Dense GLAM Poisson:
+`vignette("glam-poisson")` and `data(glam_poisson)`.
 
 # See also
 
 - `vignette("getting-started", package = "TTPsplines")`
+- `vignette("array-mode", package = "TTPsplines")` — product grids (`array = TRUE`)
 - `vignette("cgcv", package = "TTPsplines")` — cGCV / CV / gGCV for \(\lambda\)
 - `vignette("rank-selection", package = "TTPsplines")`
 - `vignette("glam-poisson", package = "TTPsplines")`
