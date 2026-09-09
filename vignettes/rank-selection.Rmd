@@ -71,6 +71,10 @@ ranks, a family-aware validation loss (RMSE for Gaussian), then:
 - **1-SE** rank: the *smallest* \(r\) whose mean CV error is within one
   fold-SE of the minimum.
 
+In an interactive session a text progress bar advances over each
+fold×rank fit (`progress = TRUE` by default there; set `progress = FALSE`
+to silence, e.g. in scripts or knitr).
+
 Optional **`n_starts`**: several random TT initializations per fold×rank;
 the fold keeps the start with best training objective (preferring
 converged fits). Use this when low-rank ALS is init-sensitive — Ishigami at

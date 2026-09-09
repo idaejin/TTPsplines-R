@@ -20,6 +20,27 @@ test_that("n_starts multi-init records stability and is reproducible", {
   expect_equal(a$selected_rank, b$selected_rank)
 })
 
+test_that("tt_rank_select progress bar can be forced on/off", {
+  set.seed(3)
+  n <- 60
+  X <- matrix(runif(n * 2), n, 2)
+  y <- rnorm(n)
+  ctrl <- tt_control(max_sweeps = 2L, compute_edf = FALSE)
+  quiet <- tt_rank_select(
+    y, X, ranks = 1, k = 4, lambda = 1, folds = 2,
+    seed = 1, progress = FALSE, control = ctrl
+  )
+  expect_s3_class(quiet, "tt_rank_selection")
+  out <- capture.output(
+    sel <- tt_rank_select(
+      y, X, ranks = 1, k = 4, lambda = 1, folds = 2,
+      seed = 1, progress = TRUE, control = ctrl
+    )
+  )
+  expect_s3_class(sel, "tt_rank_selection")
+  expect_true(any(grepl("=", out)) || any(nzchar(out)))
+})
+
 test_that("tt_rank_select is reproducible with seed and shares folds", {
   set.seed(10)
   n <- 120

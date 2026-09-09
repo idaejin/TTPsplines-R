@@ -38,6 +38,9 @@
 #'   when ALS at low rank is init-sensitive (e.g. Ishigami at `r=2`).
 #' @param seed Optional RNG seed for fold assignment (when `foldid` is `NULL`)
 #'   and multi-start inits.
+#' @param progress Show a text progress bar over fold×rank fits. Default
+#'   `interactive()` (on in an interactive session; off in knitr / batch /
+#'   `R CMD check`). Set `TRUE`/`FALSE` to force.
 #' @param keep_fits If `TRUE`, store fold fits (large); default `FALSE`.
 #' @param rank_chain Reserved for future non-uniform rank search; must be `NULL`
 #'   in this version.
@@ -70,7 +73,8 @@
 #' y <- friedman$y[1:200]
 #' sel <- tt_rank_select(
 #'   y, X, ranks = 1:3, k = 5, lambda = 1, folds = 3, rule = "1se",
-#'   seed = 1, control = tt_control(max_sweeps = 4, compute_edf = FALSE)
+#'   seed = 1, progress = FALSE,
+#'   control = tt_control(max_sweeps = 4, compute_edf = FALSE)
 #' )
 #' sel
 #' fit <- tt_rank_refit(sel)
@@ -95,6 +99,7 @@ tt_rank_select <- function(y,
                                       "logloss"),
                            n_starts = 1L,
                            seed = NULL,
+                           progress = interactive(),
                            keep_fits = FALSE,
                            knots = NULL,
                            fold_knots = FALSE,
@@ -219,6 +224,15 @@ tt_rank_select <- function(y,
   }
   if (isTRUE(keep_fits)) names(fold_fits) <- as.character(ranks)
 
+  n_jobs <- length(ranks) * folds
+  pb <- NULL
+  pb_done <- 0L
+  show_pb <- isTRUE(progress) && n_jobs > 0L
+  if (show_pb) {
+    pb <- utils::txtProgressBar(min = 0, max = n_jobs, style = 3)
+    on.exit(try(close(pb), silent = TRUE), add = TRUE)
+  }
+
   for (i in seq_along(ranks)) {
     r <- ranks[i]
     lambda_list[[i]] <- vector("list", folds)
@@ -313,26 +327,31 @@ tt_rank_select <- function(y,
         loss_mat[i, f] <- Inf
         conv_mat[i, f] <- FALSE
         lambda_list[[i]][[f]] <- NA_real_
-        next
+      } else {
+        mu <- tryCatch(
+          predict(best_fit, newdata = X_te, type = "response",
+                  offset = off_te, linear = lin_te, smooth = sm_te),
+          error = function(e) NULL
+        )
+        if (is.null(mu) || anyNA(mu) || !all(is.finite(mu))) {
+          loss_mat[i, f] <- Inf
+          conv_mat[i, f] <- FALSE
+          lambda_list[[i]][[f]] <- best_lam
+        } else {
+          loss_mat[i, f] <- .tt_cv_loss(y[test], mu, metric = metric, family = fam,
+                                       weights = w_te)
+          conv_mat[i, f] <- best_conv
+          lambda_list[[i]][[f]] <- best_lam
+          if (isTRUE(keep_fits)) fold_fits[[i]][[f]] <- best_fit
+        }
       }
-      mu <- tryCatch(
-        predict(best_fit, newdata = X_te, type = "response",
-                offset = off_te, linear = lin_te, smooth = sm_te),
-        error = function(e) NULL
-      )
-      if (is.null(mu) || anyNA(mu) || !all(is.finite(mu))) {
-        loss_mat[i, f] <- Inf
-        conv_mat[i, f] <- FALSE
-        lambda_list[[i]][[f]] <- best_lam
-        next
+      if (!is.null(pb)) {
+        pb_done <- pb_done + 1L
+        utils::setTxtProgressBar(pb, pb_done)
       }
-      loss_mat[i, f] <- .tt_cv_loss(y[test], mu, metric = metric, family = fam,
-                                   weights = w_te)
-      conv_mat[i, f] <- best_conv
-      lambda_list[[i]][[f]] <- best_lam
-      if (isTRUE(keep_fits)) fold_fits[[i]][[f]] <- best_fit
     }
   }
+  if (show_pb) cat("\n")
 
   cv_results <- .tt_summarize_rank_cv(
     ranks = ranks,

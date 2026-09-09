@@ -23,6 +23,7 @@ tt_rank_select(
     "logloss"),
   n_starts = 1L,
   seed = NULL,
+  progress = interactive(),
   keep_fits = FALSE,
   knots = NULL,
   fold_knots = FALSE,
@@ -62,6 +63,10 @@ when ALS at low rank is init-sensitive (e.g. Ishigami at \code{r=2}).}
 
 \item{seed}{Optional RNG seed for fold assignment (when \code{foldid} is \code{NULL})
 and multi-start inits.}
+
+\item{progress}{Show a text progress bar over fold×rank fits. Default
+\code{interactive()} (on in an interactive session; off in knitr / batch /
+\verb{R CMD check}). Set \code{TRUE}/\code{FALSE} to force.}
 
 \item{keep_fits}{If \code{TRUE}, store fold fits (large); default \code{FALSE}.}
 
@@ -122,7 +127,8 @@ X <- as.matrix(friedman[1:200, paste0("x", 1:5)])
 y <- friedman$y[1:200]
 sel <- tt_rank_select(
   y, X, ranks = 1:3, k = 5, lambda = 1, folds = 3, rule = "1se",
-  seed = 1, control = tt_control(max_sweeps = 4, compute_edf = FALSE)
+  seed = 1, progress = FALSE,
+  control = tt_control(max_sweeps = 4, compute_edf = FALSE)
 )
 sel
 fit <- tt_rank_refit(sel)
