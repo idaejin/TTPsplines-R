@@ -66,9 +66,9 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
   }
   yc <- y - offset - intercept - tt_linear_contrib(linear, beta) -
     tt_smooth_contrib(smooth)
-  # Array mode: update Y_centered now that intercept is known.
+  # Array mode: keep Y_centered = reshape(yc) so Kronecker RHS matches scattered.
   if (!is.null(array_data)) {
-    array_data$Y_centered <- array_data$Y - intercept
+    array_data$Y_centered <- array(yc, dim = array_data$n_grid)
   }
   if (is.null(init_cores)) {
     cores <- initialize_tt_cores(p, ranks, seed = control$seed, sd = control$init_sd)
@@ -320,6 +320,12 @@ tt_als_fit_sequential <- function(y, basis, ranks, lambda_spec, control,
     smooth <- add$smooth
     yc <- y - offset - intercept - tt_linear_contrib(linear, beta) -
       tt_smooth_contrib(smooth)
+    # Must refresh after every intercept/additive update; otherwise array
+    # Kronecker RHS keeps the initial centering and diverges from scattered
+    # (visible at r=1 where many sweeps change the intercept).
+    if (!is.null(array_data)) {
+      array_data$Y_centered <- array(yc, dim = array_data$n_grid)
+    }
 
     n_sweeps <- sw
     # f is already the TT contraction; use it directly to build eta

@@ -52,6 +52,30 @@ test_that("array mode parity 3D, rank=2, fixed lambda", {
                label = "array vs scattered fitted values (3D, rank=2, fixed λ)")
 })
 
+test_that("array mode multi-sweep parity at rank=1 (Y_centered refresh)", {
+  # Regression: Y_centered must be refreshed after each intercept update.
+  # Single-sweep tests miss this; r=1 needs many sweeps so intercept moves.
+  set.seed(1)
+  n_grid <- c(8L, 8L, 8L)
+  axes <- lapply(n_grid, function(n) seq(0, 1, length.out = n))
+  names(axes) <- paste0("x", seq_along(axes))
+  g <- expand.grid(axes, KEEP.OUT.ATTRS = FALSE)
+  X <- as.matrix(g)
+  f <- sin(pi * X[, 1]) * sin(pi * X[, 2]) * sin(pi * X[, 3])
+  Y <- array(f, dim = n_grid)
+  y <- as.numeric(Y)
+  ctrl <- tt_control(max_sweeps = 20L, compute_edf = FALSE, seed = 12L,
+                     trace = FALSE)
+  fit_sc <- ttps(y, X, rank = 1L, k = 6L, lambda = 1,
+                 optimizer = "ALS", control = ctrl)
+  fit_ar <- ttps(Y, axes = axes, array = TRUE, rank = 1L, k = 6L, lambda = 1,
+                 optimizer = "ALS", control = ctrl)
+  expect_equal(fit_ar$fitted.values, fit_sc$fitted.values,
+               tolerance = 1e-10,
+               label = "array vs scattered multi-sweep r=1")
+  expect_equal(fit_ar$intercept, fit_sc$intercept, tolerance = 1e-10)
+})
+
 test_that("array mode parity 2D, rank=3, cGCV lambda (sequential)", {
   set.seed(123)
   n_grid <- c(12L, 10L)
