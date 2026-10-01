@@ -13,7 +13,8 @@
 #' @param y,X Gaussian response and covariates.
 #' @param formula,data Optional formula interface; ignored if `y`/`X` supplied.
 #' @param rank Fixed TT rank (scalar).
-#' @param family Currently only [stats::gaussian()].
+#' @param family [stats::gaussian()] (default lab path) or [stats::poisson()]
+#'   (dispatches to [tt_ggcv_poisson()]).
 #' @param theta_lower,theta_upper Box in \(\log_{10}\lambda\) (default from
 #'   `control$lambda_bounds`).
 #' @param n_global Sobol sample size (`NULL` → dimension default).
@@ -85,6 +86,16 @@ tt_ggcv <- function(y = NULL,
   if (length(list(...))) {
     stop("Unused arguments in tt_ggcv(): ",
          paste(names(list(...)), collapse = ", "), call. = FALSE)
+  }
+  fam0 <- normalize_family(family)
+  if (identical(family_key(fam0), "poisson")) {
+    return(tt_ggcv_poisson(
+      y = y, X = X, rank = rank, family = fam0,
+      k = k, degree = degree, penalty_order = penalty_order,
+      control = control, n_global = n_global, n_refine = n_refine,
+      M_search = M_search, M_final = M_final, seed = seed,
+      include_cgcv_anchor = include_cgcv_anchor, verbose = verbose
+    ))
   }
   # Map lambda_bounds -> log10 box when caller omits theta_* .
   bounds <- control$lambda_bounds %||% c(1e-4, 1e4)

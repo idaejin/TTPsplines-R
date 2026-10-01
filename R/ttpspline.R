@@ -30,8 +30,11 @@
 #' @param lambda Numeric (isotropic / anisotropic fixed), `"cGCV"` (conditional
 #'   GCV, default), `"CV"` (k-fold CV of each \(\lambda_n\); by default on
 #'   the first ALS/PIRLS sweep then frozen — see `tt_control(cv_sweeps, cv_rule)`),
-#'   or `"gGCV"` (joint TT-gGCV via Monte Carlo GDF; Gaussian scattered only;
-#'   much slower — see [tt_ggcv()] and `tt_control(ggcv_*)`).
+#'   or `"gGCV"` (joint TT-gGCV via Monte Carlo GDF; Gaussian scattered, or
+#'   Poisson via [tt_ggcv_poisson()] — `tt_control(ggcv_glm_mode)` =
+#'   `"working"` / `"algorithmic"`; much slower — see [tt_ggcv()]). With
+#'   `array = TRUE`, `"gGCV"` uses the full-grid K-ALS selector
+#'   [tt_ggcv_array()] (Gaussian or Poisson; knobs `control$ggcv_array_*`).
 #' @param optimizer One of:
 #'   \itemize{
 #'     \item `"auto"` — documented family default:
@@ -307,10 +310,20 @@ ttps <- function(y,
   lambda_spec <- parse_lambda_spec(lambda, d = d, control = control)
   if (identical(lambda_spec$method, "gGCV")) {
     if (isTRUE(array)) {
-      stop("lambda = 'gGCV' is not supported with array = TRUE.", call. = FALSE)
+      # Full-grid K-ALS / TT-GLAM: non-negative Monte Carlo GDF (ggcv_array.R).
+      if (!identical(key, "gaussian") && !identical(key, "poisson")) {
+        stop("lambda = 'gGCV' with array = TRUE supports gaussian() and poisson() only.",
+             call. = FALSE)
+      }
+      return(.ttps_dispatch_ggcv_array(
+        Y = array_data_out$Y, axes = array_data_out$axes, family = fam,
+        rank = rank, k = k, degree = degree, penalty_order = penalty_order,
+        cyclic = cyclic, period = period, knots = knots, weights = weights,
+        offset = offset, control = control, cl = cl
+      ))
     }
-    if (!identical(key, "gaussian")) {
-      stop("lambda = 'gGCV' is Gaussian-only (joint TT-gGCV lab path).",
+    if (!identical(key, "gaussian") && !identical(key, "poisson")) {
+      stop("lambda = 'gGCV' supports gaussian() and poisson() only.",
            call. = FALSE)
     }
     if (!is.null(linear) || !is.null(smooth)) {
@@ -323,6 +336,13 @@ ttps <- function(y,
     if (any(abs(as.numeric(weights) - 1) > 1e-12)) {
       stop("lambda = 'gGCV' does not support non-uniform observation weights yet.",
            call. = FALSE)
+    }
+    if (identical(key, "poisson")) {
+      return(.ttps_dispatch_ggcv_poisson(
+        y = y, X = X, rank = max(ranks), k = k, degree = degree,
+        penalty_order = penalty_order, control = control, init = init, cl = cl,
+        offset = offset, cyclic = cyclic, period = period, knots = knots
+      ))
     }
     return(.ttps_dispatch_ggcv(
       y = y, X = X, rank = max(ranks), k = k, degree = degree,

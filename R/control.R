@@ -105,6 +105,12 @@
 #' @param ggcv_M_search,ggcv_M_final Monte Carlo GDF probe counts for search /
 #'   final re-evaluation (defaults `15` / `40`).
 #' @param ggcv_include_cgcv_anchor Seed gGCV with a cGCV solution (default `TRUE`).
+#' @param ggcv_glm_mode For Poisson `lambda = "gGCV"`: `"working"` (default;
+#'   WLS proxy via Gaussian TT-gGCV) or `"algorithmic"` (Hutchinson GDF of
+#'   the PIRLS map; expensive).
+#' @param ggcv_poisson_anisotropic If `TRUE`, algorithmic Poisson gGCV searches
+#'   anisotropic \(\lambda\) (Sobol). Default `NULL` → anisotropic only when
+#'   \(d\le 2\); otherwise isotropic shared \(\lambda\).
 #' @param design_interface_cache If `TRUE` (default), LTR/RTL ALS sweeps
 #'   precompute the inactive-side design interfaces once and absorb the
 #'   updated core into the active side. Set `FALSE` only for equivalence
@@ -183,6 +189,8 @@ tt_control <- function(max_sweeps = 50,
                        ggcv_M_search = 15L,
                        ggcv_M_final = 40L,
                        ggcv_include_cgcv_anchor = TRUE,
+                       ggcv_glm_mode = c("working", "algorithmic"),
+                       ggcv_poisson_anisotropic = NULL,
                        design_interface_cache = TRUE,
                        gram_method = c("fused_blocked", "fused", "kron",
                                         "blas", "legacy"),
@@ -193,6 +201,7 @@ tt_control <- function(max_sweeps = 50,
   cgcv_lambda0_method <- match.arg(cgcv_lambda0_method)
   gram_method <- match.arg(gram_method)
   cv_rule <- match.arg(cv_rule)
+  ggcv_glm_mode <- match.arg(ggcv_glm_mode)
   if (is.character(sparse) && length(sparse) == 1L) {
     sparse <- match.arg(sparse, c("auto", "TRUE", "FALSE", "true", "false"))
     if (sparse %in% c("TRUE", "true")) sparse <- TRUE
@@ -282,6 +291,12 @@ tt_control <- function(max_sweeps = 50,
       ggcv_M_search = as.integer(ggcv_M_search),
       ggcv_M_final = as.integer(ggcv_M_final),
       ggcv_include_cgcv_anchor = isTRUE(ggcv_include_cgcv_anchor),
+      ggcv_glm_mode = ggcv_glm_mode,
+      ggcv_poisson_anisotropic = if (is.null(ggcv_poisson_anisotropic)) {
+        NULL
+      } else {
+        isTRUE(ggcv_poisson_anisotropic)
+      },
       design_interface_cache = isTRUE(design_interface_cache),
       gram_method = gram_method,
       gram_threads = max(1L, as.integer(gram_threads)),
