@@ -2,6 +2,31 @@
 
 ## Development (0.0.0.9001)
 
+### gGCV for array data (`array = TRUE`)
+
+* New exported `tt_ggcv_array()` (smoothing selection) and `tt_gdf_array()`
+  (GDF and score at a fixed lambda); `ttps(array = TRUE, lambda = "gGCV")`
+  dispatches there (knobs `control$ggcv_array_*`).
+* GDF by Monte Carlo finite differences with non-negative perturbations
+  against a shared reference (no clipping of Poisson counts at 0), fixed
+  iteration budget and common cold initialization; optional exact
+  unit-vector trace for small arrays.
+* `criterion = "auto"` (default): UBRE with scale 1 for Poisson, GCV for
+  Gaussian (as `mgcv` `"GCV.Cp"`).
+* `budget_check = TRUE`: re-estimates the winner's GDF at twice the iteration
+  budget and warns if it moves by more than 1%.
+* Validation: `inst/benchmarks/ggcv_array/validate_gdf.R` (low rank, d = 3 and 5).
+
+### Fixes
+
+* `glam_fit_poisson(fit_weights = )`: the intercept update and the deviance now
+  use the fit weights. Before, cells with weight 0 (e.g. held-out test cells)
+  still entered the intercept, so the fit was not the weighted MLE.
+* `ttps()` no longer reseeds the caller's global RNG stream; the core
+  initialization is unchanged for a given `control$seed`. Scripts that drew
+  random numbers after a `ttps()` call without their own `set.seed()` now get
+  different draws than before.
+
 ### Removed Adam/Keras stub
 
 * Dropped unused `optimizer = "Adam"` / `backend = "keras"` stub, `tt_has_keras()`,

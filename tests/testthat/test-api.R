@@ -76,3 +76,17 @@ test_that("anisotropic fixed lambda accepted", {
   )
   expect_equal(fit$lambda, c(0.5, 2, 1), tolerance = 1e-12)
 })
+
+test_that("ttps() does not reseed the caller's RNG stream", {
+  set.seed(7)
+  X <- matrix(runif(200), 100, 2)
+  y <- sin(2 * pi * X[, 1]) + X[, 2] + rnorm(100, sd = 0.1)
+  ctrl <- tt_control(max_sweeps = 3L, compute_edf = FALSE, seed = 1L)
+  set.seed(42); u_ref <- runif(3)
+  set.seed(42)
+  f1 <- ttps(y, X, rank = 2L, k = 5L, lambda = 1, control = ctrl)
+  u_after <- runif(3)
+  expect_identical(u_after, u_ref)
+  f2 <- ttps(y, X, rank = 2L, k = 5L, lambda = 1, control = ctrl)
+  expect_equal(fitted(f1), fitted(f2))   # init still fixed by control$seed
+})

@@ -1,16 +1,21 @@
 # TT geometry: contractions, interfaces, conditional designs.
 
 initialize_tt_cores <- function(p, ranks, seed = 1, sd = 0.15) {
-  set.seed(seed)
   d <- length(ranks) - 1L
   p <- rep(as.integer(p), length.out = d)
   cores <- vector("list", d)
-  for (k in seq_len(d)) {
-    cores[[k]] <- array(
-      stats::rnorm(ranks[k] * p[k] * ranks[k + 1L], 0, sd),
-      c(ranks[k], p[k], ranks[k + 1L])
-    )
-  }
+  # Same draws as before (set.seed(seed), then rnorm per core), but the
+  # caller's global RNG stream is restored afterwards: fitting must not
+  # reseed the user's session.
+  .tt_with_preserved_seed({
+    set.seed(seed)
+    for (k in seq_len(d)) {
+      cores[[k]] <- array(
+        stats::rnorm(ranks[k] * p[k] * ranks[k + 1L], 0, sd),
+        c(ranks[k], p[k], ranks[k + 1L])
+      )
+    }
+  })
   cores
 }
 

@@ -119,3 +119,63 @@ test_that("ubre needs a known scale for Gaussian", {
     "known `scale`"
   )
 })
+
+test_that("criterion = 'auto' uses UBRE for Poisson and lands near exact dense UBRE", {
+  s <- .ga_setup()
+  set.seed(15)
+  eta <- outer(s$axes$x1, s$axes$x2,
+               function(a, b) log(0.8) + sin(2 * pi * a) + cos(2 * pi * b))
+  Y <- array(rpois(prod(s$ng), exp(eta)), s$ng)
+  y <- as.numeric(Y)
+  n <- length(y)
+  grid <- seq(-3, 3, by = 0.1)
+  ubre <- vapply(grid, function(t) {
+    P <- glam_penalty(c(s$K, s$K), rep(10^t, 2))
+    mu <- .ga_dense_poisson(y, s$B, P, rep(1, n))
+    WB <- crossprod(s$B, mu * s$B)
+    edf <- sum(diag(solve(WB + P, WB)))
+    glm_deviance(poisson(), y, mu) / n + 2 * edf / n - 1
+  }, numeric(1))
+  sel <- tt_ggcv_array(Y, axes = s$axes, family = poisson(), rank = s$K, k = s$K,
+                       theta_lower = -3, theta_upper = 3, M_search = 8L,
+                       M_final = 24L, control = s$ctrl)
+  expect_identical(sel$criterion, "ubre")
+  expect_lt(abs(sel$theta - grid[which.min(ubre)]), 0.4)
+  expect_true(is.finite(sel$gcv))
+})
+
+test_that("low-rank d = 3 Hutchinson GDF agrees with the exact finite-difference trace", {
+  ng <- c(5L, 4L, 4L)
+  axes <- lapply(ng, function(m) seq(0, 1, length.out = m))
+  names(axes) <- paste0("x", 1:3)
+  g <- as.matrix(expand.grid(axes))
+  set.seed(16)
+  Y <- array(rpois(nrow(g), exp(log(0.4) + sin(2 * pi * g[, 1]) + g[, 2] * g[, 3])), ng)
+  ctrl <- tt_control(pirls_maxit = 10L, seed = 1L, compute_edf = FALSE)
+  u <- tt_gdf_array(Y, lambda = c(0.5, 1, 2), axes = axes, family = poisson(),
+                    rank = 2L, k = 4L, probes = "unit", control = ctrl)
+  h <- tt_gdf_array(Y, lambda = c(0.5, 1, 2), axes = axes, family = poisson(),
+                    rank = 2L, k = 4L, M = 40L, control = ctrl)
+  expect_lt(abs(h$gdf - u$gdf), 4 * h$gdf_se)
+  expect_gt(u$gdf, 1)
+})
+
+test_that("budget check reports the GDF change at twice the iteration budget", {
+  ng <- c(5L, 4L, 4L)
+  axes <- lapply(ng, function(m) seq(0, 1, length.out = m))
+  names(axes) <- paste0("x", 1:3)
+  g <- as.matrix(expand.grid(axes))
+  set.seed(16)
+  Y <- array(rpois(nrow(g), exp(log(0.4) + sin(2 * pi * g[, 1]) + g[, 2] * g[, 3])), ng)
+  ctl <- tt_control(pirls_maxit = 2L, seed = 1L, compute_edf = FALSE,
+                    warn_lambda_boundary = FALSE)
+  expect_warning(
+    sel <- tt_ggcv_array(Y, axes = axes, family = poisson(), rank = 2L, k = 4L,
+                         n_grid = 5L, n_refine = 0L, M_search = 4L, M_final = 8L,
+                         budget_tol = 0.005, control = ctl),
+    "not converged"
+  )
+  expect_true(sel$budget$checked)
+  expect_true(is.finite(sel$budget$gdf_2x))
+  expect_identical(sel$fit$ggcv$budget$checked, TRUE)
+})

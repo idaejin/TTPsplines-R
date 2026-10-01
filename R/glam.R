@@ -299,7 +299,9 @@ glam_fit_poisson <- function(Y, B_list, lambda = 1, offset = NULL,
   Theta <- array(0, p_vec)
   eta <- off + intercept
   mu <- array(exp(pmin(pmax(as.numeric(eta), -20), 20)), dim(Y))
-  dev <- glm_deviance(fam, y_vec, as.numeric(mu))
+  # Deviance and intercept use the fit weights: cells with fit_weights = 0
+  # (e.g. held-out test cells) must not enter the fit at all.
+  dev <- glm_deviance(fam, y_vec, as.numeric(mu), weights = fit_w_vec)
   hist <- list()
 
   for (it in seq_len(as.integer(pirls_maxit))) {
@@ -313,11 +315,11 @@ glam_fit_poisson <- function(Y, B_list, lambda = 1, offset = NULL,
     coef <- .glam_solve(XtWX + P, rhs)
     Theta <- array(coef, p_vec)
     f <- as.numeric(glam_linear_predictor(Theta, B_list))
-    intercept <- sum(work$weight * (work$z - off_vec - f)) /
-      max(sum(work$weight), 1e-12)
+    w_vec <- as.numeric(W)
+    intercept <- sum(w_vec * (work$z - off_vec - f)) / max(sum(w_vec), 1e-12)
     eta <- off + intercept + glam_linear_predictor(Theta, B_list)
     mu <- array(exp(pmin(pmax(as.numeric(eta), -20), 20)), dim(Y))
-    dev_new <- glm_deviance(fam, y_vec, as.numeric(mu))
+    dev_new <- glm_deviance(fam, y_vec, as.numeric(mu), weights = fit_w_vec)
     hist[[it]] <- list(pirls = it, deviance = dev_new)
     if (isTRUE(trace)) {
       cat(sprintf("  GLAM-Poisson PIRLS %2d | dev=%.6g\n", it, dev_new))

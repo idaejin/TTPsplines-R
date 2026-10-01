@@ -9,6 +9,10 @@
 #         y |-> ttps(Y, array = TRUE, lambda = lambda),
 # with n = number of cells carrying positive weight. Optional UBRE form
 # D / n + 2 * scale * GDF / n - scale (Poisson: scale = 1 known).
+# criterion = "auto" (default) follows mgcv's GCV.Cp rule: UBRE when the
+# scale is known (Poisson), GCV when it is estimated (Gaussian). GCV on a
+# Poisson deviance estimates the scale from D / n, which goes wrong when the
+# response is under- or near-degenerate (STATS19 occupied-only pilot).
 #
 # GDF is estimated by Hutchinson / Monte Carlo finite differences with
 # NON-NEGATIVE perturbations, so Poisson responses stay valid on zero-heavy
@@ -73,8 +77,12 @@
 #' @param n_final Number of distinct best candidates re-scored with `M_final`
 #'   probes; the winner is chosen at final fidelity only.
 #' @param M_search,M_final Rademacher probes in the search / final stages.
-#' @param criterion `"gcv"` (default) or `"ubre"`.
-#' @param scale Known scale for `criterion = "ubre"` (Poisson default `1`).
+#' @param criterion `"auto"` (default): UBRE with known scale for Poisson
+#'   and GCV for Gaussian, as `mgcv`'s `"GCV.Cp"`; or force `"gcv"` /
+#'   `"ubre"`. For overdispersed counts use `"gcv"` or pass an estimated
+#'   `scale` with `"ubre"`.
+#' @param scale Scale for UBRE. Poisson default `1`; required for Gaussian
+#'   UBRE.
 #' @param probe_init `"cold"` (default) or `"warm"`.
 #' @param probe_budget Iteration budget for warm probes (PIRLS iterations for
 #'   Poisson, ALS sweeps for Gaussian); ignored when `probe_init = "cold"`.
@@ -84,10 +92,20 @@
 #'   processes, so `1` on Windows).
 #' @param seed Probe seed.
 #' @param control [tt_control()] for every fixed-\eqn{\lambda} fit.
+#' @param budget_check If `TRUE` (default), re-estimate the winner's GDF with
+#'   twice the iteration budget and the same probes. A relative change above
+#'   `budget_tol` means the fixed-\eqn{\lambda} map is not converged at the
+#'   current budget (seen for low-rank Poisson fits at 10 PIRLS iterations);
+#'   a warning suggests raising `control$pirls_maxit` / `control$max_sweeps`.
+#'   The doubling change is a lower bound on the distance to the converged
+#'   map when ALS converges slowly (2 to 4 PIRLS iterations moved GDF by 1.5%
+#'   while the converged value was 10% away), hence the tight default.
+#' @param budget_tol Relative GDF change that triggers the warning (`0.01`).
 #' @param verbose Print one line per evaluation.
 #' @return A list with `lambda` (length d), `theta` (group scale), `score`,
 #'   `gcv`, `ubre`, `gdf`, `gdf_se`, `deviance`, `n_eff`, `criterion`,
-#'   `boundary`, `fit` (the [ttps()] fit at the winner, with `$ggcv`), `search`
+#'   `boundary`, `budget` (GDF at twice the budget and its relative change),
+#'   `fit` (the [ttps()] fit at the winner, with `$ggcv`), `search`
 #'   (all evaluations), `n_fits` and `elapsed`.
 #' @seealso [tt_gdf_array()] to score a given \eqn{\lambda}.
 #' @export
@@ -113,17 +131,19 @@ tt_ggcv_array <- function(Y,
                           n_final = 3L,
                           M_search = 4L,
                           M_final = 16L,
-                          criterion = c("gcv", "ubre"),
+                          criterion = c("auto", "gcv", "ubre"),
                           scale = NULL,
                           probe_init = c("cold", "warm"),
                           probe_budget = NULL,
                           epsilon_rel = 1e-3,
                           n_cores = 1L,
                           seed = 1L,
-                          control = tt_control(max_sweeps = 8L,
-                                               pirls_maxit = 10L,
+                          control = tt_control(max_sweeps = 10L,
+                                               pirls_maxit = 20L,
                                                compute_edf = FALSE,
                                                seed = 1L),
+                          budget_check = TRUE,
+                          budget_tol = 0.01,
                           verbose = FALSE) {
   t0 <- proc.time()[["elapsed"]]
   criterion <- match.arg(criterion)
@@ -136,6 +156,7 @@ tt_ggcv_array <- function(Y,
     probe_budget = probe_budget, epsilon_rel = epsilon_rel,
     n_cores = n_cores, seed = seed, control = control
   )
+  criterion <- st$criterion
   G <- st$n_groups
   bounds <- control$lambda_bounds %||% c(1e-4, 1e4)
   lo <- rep(as.numeric(theta_lower %||% log10(bounds[1L])), length.out = G)
@@ -249,8 +270,31 @@ tt_ggcv_array <- function(Y,
     warning("tt_ggcv_array: selected log10(lambda) is at the search boundary ",
             "(", paste(sprintf("%.2f", theta), collapse = ","), ").", call. = FALSE)
   }
+  budget <- list(checked = FALSE, gdf_2x = NA_real_, rel_change = NA_real_)
+  if (isTRUE(budget_check)) {
+    st2 <- st
+    for (nm in c("control", "control_probe")) {
+      st2[[nm]]$pirls_maxit <- 2L * as.integer(st[[nm]]$pirls_maxit)
+      st2[[nm]]$max_sweeps <- 2L * as.integer(st[[nm]]$max_sweeps)
+    }
+    ev2 <- .ggcv_arr_eval(theta, M = M_final, st = st2)  # same probes (CRN)
+    rel <- (ev$gdf - ev2$gdf) / ev2$gdf
+    budget <- list(checked = TRUE, gdf_2x = ev2$gdf, rel_change = rel,
+                   score_2x = ev2$score, time_s = ev2$time_s)
+    if (isTRUE(verbose)) {
+      message(sprintf("gGCV-array budget check: GDF %.3f at budget, %.3f at 2x (%+.1f%%)",
+                      ev$gdf, ev2$gdf, 100 * rel))
+    }
+    if (is.finite(rel) && abs(rel) > budget_tol) {
+      warning(sprintf(paste0(
+        "tt_ggcv_array: GDF changes by %+.1f%% when the iteration budget doubles; ",
+        "the fixed-lambda fit is not converged. Increase control$pirls_maxit ",
+        "(Poisson) or control$max_sweeps (Gaussian)."), 100 * rel), call. = FALSE)
+    }
+  }
   search <- do.call(rbind, evals)
   n_fits <- sum(search$M + 2L)  # estimator + reference + M probes per evaluation
+  if (isTRUE(budget$checked)) n_fits <- n_fits + M_final + 2L
   fit <- ev$fit
   fit$lambda_method <- "gGCV"
   fit$ggcv <- list(
@@ -258,14 +302,15 @@ tt_ggcv_array <- function(Y,
     ubre = ev$ubre, gdf = ev$gdf, gdf_se = ev$gdf_se, gdf_mc_se = ev$gdf_se,
     deviance = ev$deviance, n_eff = st$n_eff, theta = theta,
     groups = st$groups, boundary = boundary, M = M_final,
-    probe_init = probe_init, epsilon = st$eps,
+    probe_init = probe_init, epsilon = st$eps, budget = budget,
     last_rel_change = .ggcv_arr_last_rel_change(fit), search = search
   )
   list(
     lambda = lambda, theta = theta, score = ev$score, gcv = ev$gcv,
     ubre = ev$ubre, gdf = ev$gdf, gdf_se = ev$gdf_se, deviance = ev$deviance,
     n_eff = st$n_eff, criterion = criterion, groups = st$groups,
-    boundary = boundary, fit = fit, search = search, n_fits = n_fits,
+    boundary = boundary, budget = budget, fit = fit, search = search,
+    n_fits = n_fits,
     method = "gGCV", elapsed = proc.time()[["elapsed"]] - t0
   )
 }
@@ -307,8 +352,8 @@ tt_gdf_array <- function(Y,
                          epsilon_rel = 1e-3,
                          n_cores = 1L,
                          seed = 1L,
-                         control = tt_control(max_sweeps = 8L,
-                                              pirls_maxit = 10L,
+                         control = tt_control(max_sweeps = 10L,
+                                              pirls_maxit = 20L,
                                               compute_edf = FALSE,
                                               seed = 1L)) {
   probes <- match.arg(probes)
@@ -375,10 +420,12 @@ tt_gdf_array <- function(Y,
     stop("`groups` must be an integer vector of length d.", call. = FALSE)
   }
   groups <- match(groups, sort(unique(groups)))
+  if (identical(criterion, "auto")) {
+    criterion <- if (identical(key, "poisson")) "ubre" else "gcv"
+  }
+  if (is.null(scale) && identical(key, "poisson")) scale <- 1
   if (identical(criterion, "ubre") && is.null(scale)) {
-    if (identical(key, "poisson")) scale <- 1 else {
-      stop("criterion = 'ubre' needs a known `scale` for gaussian().", call. = FALSE)
-    }
+    stop("criterion = 'ubre' needs a known `scale` for gaussian().", call. = FALSE)
   }
   ctrl <- control
   if (!inherits(ctrl, "tt_control")) ctrl <- do.call(tt_control, as.list(ctrl))
@@ -544,7 +591,8 @@ tt_gdf_array <- function(Y,
 #' scattered `ggcv_M_*` defaults of [tt_control()] are far too expensive on a
 #' full grid): `ggcv_array_groups`, `ggcv_array_n_global`,
 #' `ggcv_array_n_refine`, `ggcv_array_M_search`, `ggcv_array_M_final`,
-#' `ggcv_array_criterion`, `ggcv_array_probe_init`, `ggcv_array_n_cores`.
+#' `ggcv_array_criterion`, `ggcv_array_probe_init`, `ggcv_array_n_cores`,
+#' `ggcv_array_budget_check`.
 #' Set them on a [tt_control()] object with `$<-`.
 #' @keywords internal
 #' @noRd
@@ -566,11 +614,12 @@ tt_gdf_array <- function(Y,
     n_refine = as.integer(control$ggcv_array_n_refine %||% 2L),
     M_search = as.integer(control$ggcv_array_M_search %||% 4L),
     M_final = as.integer(control$ggcv_array_M_final %||% 16L),
-    criterion = control$ggcv_array_criterion %||% "gcv",
+    criterion = control$ggcv_array_criterion %||% "auto",
     probe_init = control$ggcv_array_probe_init %||% "cold",
     n_cores = as.integer(control$ggcv_array_n_cores %||% 1L),
     seed = as.integer(control$seed %||% 1L),
     control = control,
+    budget_check = !isFALSE(control$ggcv_array_budget_check),
     verbose = isTRUE(control$trace)
   )
   fit <- opt$fit
