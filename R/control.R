@@ -99,18 +99,75 @@
 #'   Use a larger integer, or `Inf`, to re-tune as cores move.
 #' @param cv_rule `"min"` (default; grid argmin) or `"1se"` (largest \(\lambda\)
 #'   whose CV score is within one SE of the minimum — less under-smoothing).
-#' @param ggcv_n_global Sobol budget for `lambda = "gGCV"` / [tt_ggcv()]
-#'   (`NULL` → dimension default). Joint gGCV is much more expensive than cGCV.
-#' @param ggcv_n_refine Local `nlminb` refinements for gGCV (default `5`).
-#' @param ggcv_M_search,ggcv_M_final Monte Carlo GDF probe counts for search /
-#'   final re-evaluation (defaults `15` / `40`).
-#' @param ggcv_include_cgcv_anchor Seed gGCV with a cGCV solution (default `TRUE`).
-#' @param ggcv_glm_mode For Poisson `lambda = "gGCV"`: `"working"` (default;
-#'   WLS proxy via Gaussian TT-gGCV) or `"algorithmic"` (Hutchinson GDF of
-#'   the PIRLS map; expensive).
-#' @param ggcv_poisson_anisotropic If `TRUE`, algorithmic Poisson gGCV searches
-#'   anisotropic \(\lambda\) (Sobol). Default `NULL` → anisotropic only when
-#'   \(d\le 2\); otherwise isotropic shared \(\lambda\).
+#' @param ggcv_groups Smoothing groups for `lambda = "gGCV"`: integer vector
+#'   of length `d` mapping margins to groups that share one \eqn{\lambda}.
+#'   `NULL` (default) = isotropic; `seq_len(d)` = fully anisotropic. See
+#'   [tt_ggcv()] and [tt_ggcv_array()] for the search.
+#' @param ggcv_n_grid Grid size of the isotropic gGCV stage (default `9`).
+#' @param ggcv_n_global Sobol starts of the grouped gGCV stage (`NULL`, the
+#'   default, = none: the grouped stage starts from the isotropic optimum).
+#'   gGCV is much more expensive than cGCV.
+#' @param ggcv_n_refine Halvings of the isotropic grid step around the best
+#'   point, followed by one parabolic step (default `2`).
+#' @param ggcv_n_final Candidates re-scored at `ggcv_M_final` probes
+#'   (default `3`).
+#' @param ggcv_M_search,ggcv_M_final Monte Carlo GDF probes in the search /
+#'   final stages (defaults `4` / `16`; the final bank extends the search
+#'   bank).
+#' @param ggcv_tol Minimum improvement of the gGCV comparison score
+#'   (UBRE: \eqn{D / \phi + 2\,\mathrm{GDF}}, the AIC scale; GCV:
+#'   \eqn{n \log \mathrm{GCV}}; free of the units of the response) for a
+#'   move to be accepted or for the minimum to beat a more regular final
+#'   candidate (default `1`); twice the paired Monte Carlo SE applies when
+#'   larger.
+#' @param ggcv_criterion `"auto"` (default: UBRE with scale 1 for Poisson,
+#'   GCV for Gaussian), `"gcv"` or `"ubre"`.
+#' @param ggcv_probe_init `"cold"` (default) or `"warm"` probe fits.
+#' @param ggcv_n_cores Forked workers over the fits of one gGCV batch
+#'   (default `1`; `1` on Windows).
+#' @param ggcv_budget_check If `TRUE` (default), re-estimate the selected
+#'   GDF at twice its iteration budget and check that it moves by at most 1%.
+#' @param ggcv_budget_fallback If `TRUE` (default), a converged and stable
+#'   winner that fails the budget check is rescored with the less favourable
+#'   of its scores at B and 2B and the choice is redone; a candidate that
+#'   still wins is kept (with a warning), otherwise the new winner is checked
+#'   (at most three checks).
+#' @param ggcv_budget Iteration budget of the gGCV selection fits:
+#'   `"adaptive"` (default; a pilot finds the iteration n where the penalized
+#'   objective settles under the caps `ggcv_max_sweeps` / `ggcv_pirls_maxit`,
+#'   and the estimator, reference and probe fits run
+#'   `min(cap, ceiling(1.5 n) + 2)` iterations) or `"fixed"` (every fit runs
+#'   the caps as a fixed budget). See [tt_ggcv_array()], section *Iteration
+#'   budget*.
+#' @param ggcv_fit_tol Convergence tolerance of the adaptive budget (default
+#'   `1e-7`): the relative change of the penalized objective must be at most
+#'   `ggcv_fit_tol` at two consecutive iterations (no floor).
+#' @param ggcv_gdf_method GDF of the gGCV criterion: `"mc"` (default, Monte
+#'   Carlo), `"exact"` ([tt_edf_exact()]: one fit per lambda polished to a
+#'   stationary point by trust-region Newton, then implicit differentiation
+#'   with the full analytic Hessian; no Monte Carlo noise; a lambda whose fit
+#'   does not reach a local minimum is unconverged and ineligible), or
+#'   `"auto"` (exact when the model has at most 2000 TT parameters and rows x
+#'   parameters is at most 5e7, otherwise Monte Carlo).
+#' @param ggcv_max_sweeps,ggcv_pirls_maxit Iteration cap (adaptive budget)
+#'   or fixed budget of every selection fit when `lambda = "gGCV"` runs
+#'   inside [ttps()] (defaults `400` ALS sweeps / `60` PIRLS iterations);
+#'   `tol` is not used for selection fits. The returned fit uses
+#'   `max_sweeps`, `pirls_maxit` and `tol` as usual (see `ggcv_refit`).
+#' @param ggcv_refit If `TRUE` (default), [ttps()] refits the model at the
+#'   selected \eqn{\lambda} with the caller's own arguments and control (so
+#'   `compute_edf`, `tol`, `init`, `optimizer` apply) and attaches the
+#'   selection diagnostics as `fit$ggcv`. `FALSE` returns the selection fit
+#'   at the winner (the estimator of the selection: `tol = 0` and the
+#'   winner's iteration budget, no EDF).
+#' @param ggcv_glm_mode Kept for compatibility. Poisson gGCV always uses the
+#'   exact fixed-\eqn{\lambda} PIRLS map (`"algorithmic"`, the default);
+#'   `"working"` (the removed working-response proxy) gives a deprecation
+#'   warning and is ignored.
+#' @param ggcv_poisson_anisotropic If `TRUE`, Poisson gGCV uses one smoothing
+#'   group per margin when `ggcv_groups` is `NULL` (scattered rows and arrays
+#'   alike, in `ttps(lambda = "gGCV")` and [tt_ggcv_poisson()]; in array mode
+#'   a `ggcv_array_groups` field comes first). Default `NULL` = isotropic.
 #' @param design_interface_cache If `TRUE` (default), LTR/RTL ALS sweeps
 #'   precompute the inactive-side design interfaces once and absorb the
 #'   updated core into the active side. Set `FALSE` only for equivalence
@@ -184,12 +241,26 @@ tt_control <- function(max_sweeps = 50,
                        cv_grid = NULL,
                        cv_sweeps = 1L,
                        cv_rule = c("min", "1se"),
+                       ggcv_groups = NULL,
+                       ggcv_n_grid = 9L,
                        ggcv_n_global = NULL,
-                       ggcv_n_refine = 5L,
-                       ggcv_M_search = 15L,
-                       ggcv_M_final = 40L,
-                       ggcv_include_cgcv_anchor = TRUE,
-                       ggcv_glm_mode = c("working", "algorithmic"),
+                       ggcv_n_refine = 2L,
+                       ggcv_n_final = 3L,
+                       ggcv_M_search = 4L,
+                       ggcv_M_final = 16L,
+                       ggcv_tol = 1,
+                       ggcv_criterion = c("auto", "gcv", "ubre"),
+                       ggcv_probe_init = c("cold", "warm"),
+                       ggcv_n_cores = 1L,
+                       ggcv_budget_check = TRUE,
+                       ggcv_budget_fallback = TRUE,
+                       ggcv_budget = c("adaptive", "fixed"),
+                       ggcv_fit_tol = 1e-7,
+                       ggcv_gdf_method = c("mc", "exact", "auto"),
+                       ggcv_max_sweeps = 400L,
+                       ggcv_pirls_maxit = 60L,
+                       ggcv_refit = TRUE,
+                       ggcv_glm_mode = c("algorithmic", "working"),
                        ggcv_poisson_anisotropic = NULL,
                        design_interface_cache = TRUE,
                        gram_method = c("fused_blocked", "fused", "kron",
@@ -201,6 +272,9 @@ tt_control <- function(max_sweeps = 50,
   cgcv_lambda0_method <- match.arg(cgcv_lambda0_method)
   gram_method <- match.arg(gram_method)
   cv_rule <- match.arg(cv_rule)
+  ggcv_criterion <- match.arg(ggcv_criterion)
+  ggcv_probe_init <- match.arg(ggcv_probe_init)
+  ggcv_budget <- match.arg(ggcv_budget)
   ggcv_glm_mode <- match.arg(ggcv_glm_mode)
   if (is.character(sparse) && length(sparse) == 1L) {
     sparse <- match.arg(sparse, c("auto", "TRUE", "FALSE", "true", "false"))
@@ -286,11 +360,25 @@ tt_control <- function(max_sweeps = 50,
         }
       },
       cv_rule = cv_rule,
+      ggcv_groups = if (is.null(ggcv_groups)) NULL else as.integer(ggcv_groups),
+      ggcv_n_grid = as.integer(ggcv_n_grid),
       ggcv_n_global = if (is.null(ggcv_n_global)) NULL else as.integer(ggcv_n_global),
       ggcv_n_refine = as.integer(ggcv_n_refine),
+      ggcv_n_final = as.integer(ggcv_n_final),
       ggcv_M_search = as.integer(ggcv_M_search),
       ggcv_M_final = as.integer(ggcv_M_final),
-      ggcv_include_cgcv_anchor = isTRUE(ggcv_include_cgcv_anchor),
+      ggcv_tol = as.numeric(ggcv_tol),
+      ggcv_criterion = ggcv_criterion,
+      ggcv_probe_init = ggcv_probe_init,
+      ggcv_n_cores = max(1L, as.integer(ggcv_n_cores)),
+      ggcv_budget_check = isTRUE(ggcv_budget_check),
+      ggcv_budget_fallback = isTRUE(ggcv_budget_fallback),
+      ggcv_budget = ggcv_budget,
+      ggcv_fit_tol = as.numeric(ggcv_fit_tol),
+      ggcv_gdf_method = match.arg(ggcv_gdf_method),
+      ggcv_max_sweeps = as.integer(ggcv_max_sweeps),
+      ggcv_pirls_maxit = as.integer(ggcv_pirls_maxit),
+      ggcv_refit = isTRUE(ggcv_refit),
       ggcv_glm_mode = ggcv_glm_mode,
       ggcv_poisson_anisotropic = if (is.null(ggcv_poisson_anisotropic)) {
         NULL

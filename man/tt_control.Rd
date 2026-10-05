@@ -66,11 +66,26 @@ tt_control(
   cv_grid = NULL,
   cv_sweeps = 1L,
   cv_rule = c("min", "1se"),
+  ggcv_groups = NULL,
+  ggcv_n_grid = 9L,
   ggcv_n_global = NULL,
-  ggcv_n_refine = 5L,
-  ggcv_M_search = 15L,
-  ggcv_M_final = 40L,
-  ggcv_include_cgcv_anchor = TRUE,
+  ggcv_n_refine = 2L,
+  ggcv_n_final = 3L,
+  ggcv_M_search = 4L,
+  ggcv_M_final = 16L,
+  ggcv_tol = 1,
+  ggcv_criterion = c("auto", "gcv", "ubre"),
+  ggcv_probe_init = c("cold", "warm"),
+  ggcv_n_cores = 1L,
+  ggcv_budget_check = TRUE,
+  ggcv_budget_fallback = TRUE,
+  ggcv_budget = c("adaptive", "fixed"),
+  ggcv_fit_tol = 1e-07,
+  ggcv_max_sweeps = 400L,
+  ggcv_pirls_maxit = 60L,
+  ggcv_refit = TRUE,
+  ggcv_glm_mode = c("algorithmic", "working"),
+  ggcv_poisson_anisotropic = NULL,
   design_interface_cache = TRUE,
   gram_method = c("fused_blocked", "fused", "kron", "blas", "legacy"),
   gram_threads = 1L
@@ -234,15 +249,85 @@ Use a larger integer, or \code{Inf}, to re-tune as cores move.}
 \item{cv_rule}{\code{"min"} (default; grid argmin) or \code{"1se"} (largest \(\lambda\)
 whose CV score is within one SE of the minimum — less under-smoothing).}
 
-\item{ggcv_n_global}{Sobol budget for \code{lambda = "gGCV"} / \code{\link[=tt_ggcv]{tt_ggcv()}}
-(\code{NULL} → dimension default). Joint gGCV is much more expensive than cGCV.}
+\item{ggcv_groups}{Smoothing groups for \code{lambda = "gGCV"}: integer vector
+of length \code{d} mapping margins to groups that share one \eqn{\lambda}.
+\code{NULL} (default) = isotropic; \code{seq_len(d)} = fully anisotropic. See
+\code{\link[=tt_ggcv]{tt_ggcv()}} and \code{\link[=tt_ggcv_array]{tt_ggcv_array()}} for the search.}
 
-\item{ggcv_n_refine}{Local \code{nlminb} refinements for gGCV (default \code{5}).}
+\item{ggcv_n_grid}{Grid size of the isotropic gGCV stage (default \code{9}).}
 
-\item{ggcv_M_search, ggcv_M_final}{Monte Carlo GDF probe counts for search /
-final re-evaluation (defaults \code{15} / \code{40}).}
+\item{ggcv_n_global}{Sobol starts of the grouped gGCV stage (\code{NULL}, the
+default, = none: the grouped stage starts from the isotropic optimum).
+gGCV is much more expensive than cGCV.}
 
-\item{ggcv_include_cgcv_anchor}{Seed gGCV with a cGCV solution (default \code{TRUE}).}
+\item{ggcv_n_refine}{Halvings of the isotropic grid step around the best
+point, followed by one parabolic step (default \code{2}).}
+
+\item{ggcv_n_final}{Candidates re-scored at \code{ggcv_M_final} probes
+(default \code{3}).}
+
+\item{ggcv_M_search, ggcv_M_final}{Monte Carlo GDF probes in the search /
+final stages (defaults \code{4} / \code{16}; the final bank extends the search
+bank).}
+
+\item{ggcv_tol}{Minimum improvement of the gGCV comparison score
+(UBRE: \eqn{D / \phi + 2\,\mathrm{GDF}}, the AIC scale; GCV:
+\eqn{n \log \mathrm{GCV}}; free of the units of the response) for a
+move to be accepted or for the minimum to beat a more regular final
+candidate (default \code{1}); twice the paired Monte Carlo SE applies when
+larger.}
+
+\item{ggcv_criterion}{\code{"auto"} (default: UBRE with scale 1 for Poisson,
+GCV for Gaussian), \code{"gcv"} or \code{"ubre"}.}
+
+\item{ggcv_probe_init}{\code{"cold"} (default) or \code{"warm"} probe fits.}
+
+\item{ggcv_n_cores}{Forked workers over the fits of one gGCV batch
+(default \code{1}; \code{1} on Windows).}
+
+\item{ggcv_budget_check}{If \code{TRUE} (default), re-estimate the selected
+GDF at twice its iteration budget and check that it moves by at most 1\%.}
+
+\item{ggcv_budget_fallback}{If \code{TRUE} (default), a converged and stable
+winner that fails the budget check is rescored with the less favourable
+of its scores at B and 2B and the choice is redone; a candidate that
+still wins is kept (with a warning), otherwise the new winner is checked
+(at most three checks).}
+
+\item{ggcv_budget}{Iteration budget of the gGCV selection fits:
+\code{"adaptive"} (default; a pilot finds the iteration n where the penalized
+objective settles under the caps \code{ggcv_max_sweeps} / \code{ggcv_pirls_maxit},
+and the estimator, reference and probe fits run
+\verb{min(cap, ceiling(1.5 n) + 2)} iterations) or \code{"fixed"} (every fit runs
+the caps as a fixed budget). See \code{\link[=tt_ggcv_array]{tt_ggcv_array()}}, section \emph{Iteration
+budget}.}
+
+\item{ggcv_fit_tol}{Convergence tolerance of the adaptive budget (default
+\code{1e-7}): the relative change of the penalized objective must be at most
+\code{ggcv_fit_tol} at two consecutive iterations (no floor).}
+
+\item{ggcv_max_sweeps, ggcv_pirls_maxit}{Iteration cap (adaptive budget)
+or fixed budget of every selection fit when \code{lambda = "gGCV"} runs
+inside \code{\link[=ttps]{ttps()}} (defaults \code{400} ALS sweeps / \code{60} PIRLS iterations);
+\code{tol} is not used for selection fits. The returned fit uses
+\code{max_sweeps}, \code{pirls_maxit} and \code{tol} as usual (see \code{ggcv_refit}).}
+
+\item{ggcv_refit}{If \code{TRUE} (default), \code{\link[=ttps]{ttps()}} refits the model at the
+selected \eqn{\lambda} with the caller's own arguments and control (so
+\code{compute_edf}, \code{tol}, \code{init}, \code{optimizer} apply) and attaches the
+selection diagnostics as \code{fit$ggcv}. \code{FALSE} returns the selection fit
+at the winner (the estimator of the selection: \code{tol = 0} and the
+winner's iteration budget, no EDF).}
+
+\item{ggcv_glm_mode}{Kept for compatibility. Poisson gGCV always uses the
+exact fixed-\eqn{\lambda} PIRLS map (\code{"algorithmic"}, the default);
+\code{"working"} (the removed working-response proxy) gives a deprecation
+warning and is ignored.}
+
+\item{ggcv_poisson_anisotropic}{If \code{TRUE}, Poisson gGCV uses one smoothing
+group per margin when \code{ggcv_groups} is \code{NULL} (scattered rows and arrays
+alike, in \code{ttps(lambda = "gGCV")} and \code{\link[=tt_ggcv_poisson]{tt_ggcv_poisson()}}; in array mode
+a \code{ggcv_array_groups} field comes first). Default \code{NULL} = isotropic.}
 
 \item{design_interface_cache}{If \code{TRUE} (default), LTR/RTL ALS sweeps
 precompute the inactive-side design interfaces once and absorb the

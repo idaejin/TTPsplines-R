@@ -28,8 +28,15 @@ tt_rank_profile(
 \item{lambda}{Numeric (isotropic / anisotropic fixed), \code{"cGCV"} (conditional
 GCV, default), \code{"CV"} (k-fold CV of each \(\lambda_n\); by default on
 the first ALS/PIRLS sweep then frozen — see \code{tt_control(cv_sweeps, cv_rule)}),
-or \code{"gGCV"} (joint TT-gGCV via Monte Carlo GDF; Gaussian scattered only;
-much slower — see \code{\link[=tt_ggcv]{tt_ggcv()}} and \verb{tt_control(ggcv_*)}).}
+or \code{"gGCV"} (global GCV / UBRE of the fixed-\eqn{\lambda} fit with a Monte
+Carlo GDF; Gaussian or Poisson, scattered rows or \code{array = TRUE}; much
+slower than cGCV). gGCV selects with the engine of \code{\link[=tt_ggcv]{tt_ggcv()}} /
+\code{\link[=tt_ggcv_array]{tt_ggcv_array()}} (knobs \verb{ggcv_*} of \code{\link[=tt_control]{tt_control()}}; in array mode
+\verb{control$ggcv_array_*} take precedence), with the iteration budget
+\code{ggcv_budget} (adaptive by default, capped by \code{ggcv_max_sweeps} /
+\code{ggcv_pirls_maxit}), then refits at the selected \eqn{\lambda} with
+these arguments and \code{control}; the selection diagnostics are in
+\code{fit$ggcv}.}
 
 \item{k}{Number of B-spline basis functions per margin.}
 

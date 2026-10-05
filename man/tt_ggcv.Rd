@@ -2,7 +2,7 @@
 % Please edit documentation in R/ggcv.R
 \name{tt_ggcv}
 \alias{tt_ggcv}
-\title{Joint TT-gGCV smoothing-parameter search}
+\title{Joint TT-gGCV smoothing-parameter search for scattered data}
 \usage{
 tt_ggcv(
   y = NULL,
@@ -11,87 +11,194 @@ tt_ggcv(
   data = NULL,
   rank,
   family = stats::gaussian(),
-  theta_lower = NULL,
-  theta_upper = NULL,
-  n_global = NULL,
-  n_refine = 5L,
-  n_diverse = 10L,
-  M_search = 15L,
-  M_final = 40L,
-  core_starts_search = 1L,
-  core_starts_final = 3L,
-  min_dist = 0.75,
-  boundary_tol = 0.05,
-  seed = 1L,
+  offset = NULL,
+  cyclic = NULL,
+  period = NULL,
+  knots = NULL,
   k = 8L,
   degree = 3L,
   penalty_order = 2L,
-  control = tt_control(max_sweeps = 40L, compute_edf = FALSE, seed = 1L),
-  include_cgcv_anchor = TRUE,
+  groups = NULL,
+  theta_lower = NULL,
+  theta_upper = NULL,
   extra_theta = NULL,
+  n_grid = 9L,
+  n_global = 0L,
+  n_refine = 2L,
+  n_final = 3L,
+  M_search = 4L,
+  M_final = 16L,
+  tol = 1,
+  criterion = c("auto", "gcv", "ubre"),
+  scale = NULL,
+  probe_init = c("cold", "warm"),
+  probe_budget = NULL,
   epsilon_rel = 0.001,
-  scheme = c("forward", "central"),
-  fit_backend = c("R", "Rcpp_fixed"),
-  adaptive_fidelity = TRUE,
-  fidelity = NULL,
-  gdf_init = c("probe_warm", "cold"),
+  n_cores = 1L,
+  seed = 1L,
+  control = tt_control(max_sweeps = 400L, pirls_maxit = 60L, compute_edf = FALSE, seed =
+    1L),
+  budget_check = TRUE,
+  budget_tol = 0.01,
+  budget_fallback = TRUE,
+  budget = c("adaptive", "fixed"),
+  fit_tol = 1e-07,
   verbose = FALSE,
   ...
 )
 }
 \arguments{
-\item{y, X}{Gaussian response and covariates.}
+\item{y, X}{Response and covariates (\verb{n x d}, \code{d >= 2}).}
 
-\item{formula, data}{Optional formula interface; ignored if \code{y}/\code{X} supplied.}
+\item{formula, data}{Optional formula interface (\code{y ~ x1 + x2}); used when
+\code{y} or \code{X} is \code{NULL}. The intercept column is dropped.}
 
-\item{rank}{Fixed TT rank (scalar).}
+\item{rank}{TT rank, scalar or vector as in \code{\link[=ttps]{ttps()}} (not collapsed).}
 
-\item{family}{Currently only \code{\link[stats:gaussian]{stats::gaussian()}}.}
+\item{family}{\code{\link[stats:gaussian]{stats::gaussian()}} (default) or \code{\link[stats:poisson]{stats::poisson()}}.}
 
-\item{theta_lower, theta_upper}{Box in \(\log_{10}\lambda\) (default from
-\code{control$lambda_bounds}).}
+\item{offset}{Optional offset (length \code{n} or scalar, linear-predictor
+scale), e.g. \code{log(exposure)} or Berman-Turner quadrature log-weights.}
 
-\item{n_global}{Sobol sample size (\code{NULL} → dimension default).}
+\item{cyclic, period, knots}{Passed to \code{\link[=ttps]{ttps()}}.}
 
-\item{n_refine}{Number of local \code{nlminb} refinements.}
+\item{k, degree, penalty_order}{Basis / penalty, passed to \code{\link[=ttps]{ttps()}}.}
 
-\item{n_diverse}{Diverse Sobol elites before refine.}
+\item{groups}{Integer vector of length d mapping margins to smoothing
+groups that share one \eqn{\lambda}. \code{NULL} = isotropic (one group);
+\code{seq_len(d)} = fully anisotropic.}
 
-\item{M_search, M_final}{Monte Carlo GDF probe counts (search / final).}
+\item{theta_lower, theta_upper}{Search box in \eqn{\log_{10}\lambda}
+(scalar or one value per group; default from \code{control$lambda_bounds}).
+The isotropic stage searches the common range
+\verb{[max(theta_lower), min(theta_upper)]}.}
 
-\item{core_starts_search, core_starts_final}{ALS inits per evaluation.}
+\item{extra_theta}{Optional extra starts in \eqn{\log_{10}\lambda}: a
+vector is one start; a matrix has one row per start and one column per
+group or per margin (margins are averaged within groups). Evaluated with
+the isotropic grid when there is one group, as starts of the grouped
+stage otherwise.}
 
-\item{min_dist, boundary_tol}{Diversity / boundary diagnostics.}
+\item{n_grid}{Grid size of the isotropic stage (at least 3).}
 
-\item{seed}{Master seed.}
+\item{n_global}{Sobol starts for the grouped stage (default \code{0}; \code{NULL}
+is \code{0}). Ignored with one group.}
 
-\item{k, degree, penalty_order}{Basis / penalty.}
+\item{n_refine}{Halvings of the isotropic grid step around the best point,
+followed by one parabolic step. \code{0} = grid only.}
 
-\item{control}{\code{\link[=tt_control]{tt_control()}} for ALS budgets.}
+\item{n_final}{Number of candidates re-scored with \code{M_final} probes (with
+several groups, at least the isotropic and the grouped optima and the
+smoother isotropic neighbour; with one group the smoother neighbour is
+added on top of \code{n_final}).}
 
-\item{include_cgcv_anchor}{Seed with a cGCV fit.}
+\item{M_search, M_final}{Rademacher probes in the search / final stages.}
 
-\item{extra_theta}{Optional extra \(\theta=\log_{10}\lambda\) starts.}
+\item{tol}{Minimum improvement of \code{score_dev} (default \code{1}; UBRE:
+\eqn{D / \phi + 2\,\mathrm{GDF}}, the AIC scale; GCV:
+\eqn{n \log \mathrm{GCV}}) for a move to be accepted, or for the minimum
+to beat a more regular final candidate; the paired threshold \code{2 * SE}
+applies when larger.}
 
-\item{epsilon_rel, scheme}{Forwarded to Monte Carlo GDF.}
+\item{criterion}{\code{"auto"} (default): UBRE with known scale for Poisson
+and GCV for Gaussian, as \code{mgcv}'s \code{"GCV.Cp"}; or force \code{"gcv"} /
+\code{"ubre"}. For overdispersed counts use \code{"gcv"} or pass an estimated
+\code{scale} with \code{"ubre"}.}
 
-\item{fit_backend}{Lab ALS backend (\code{"R"} / \code{"Rcpp_fixed"}).}
+\item{scale}{Scale for UBRE. Poisson default \code{1}; required for Gaussian
+UBRE.}
 
-\item{adaptive_fidelity, fidelity, gdf_init}{Lab fidelity / GDF init knobs.}
+\item{probe_init}{\code{"cold"} (default) or \code{"warm"}.}
 
-\item{verbose}{Print stage progress.}
+\item{probe_budget}{Iteration budget for warm probes (PIRLS iterations for
+Poisson, ALS sweeps for Gaussian); ignored when \code{probe_init = "cold"}.}
 
-\item{...}{Unused (error if supplied).}
+\item{epsilon_rel}{Finite-difference step relative to the RMS of the
+response on the cells (rows) with positive weight: \code{epsilon_rel * RMS}
+for Gaussian data (\code{epsilon_rel} when the RMS is 0), so the GDF does not
+depend on the units of the response; \code{epsilon_rel * max(RMS, 1)} for
+Poisson counts.}
+
+\item{n_cores}{Parallel workers over the fits of a batch
+(\code{parallel::mclapply}; forked processes, so \code{1} on Windows).}
+
+\item{seed}{Probe seed (any finite number; probe \code{j} uses
+\code{seed * 100003 + j}, wrapped into the integer range when it leaves it).
+The TT cores of every fit start from \code{control$seed}.}
+
+\item{control}{\code{\link[=tt_control]{tt_control()}} for every fixed-\eqn{\lambda} fit; its
+\code{max_sweeps} (Gaussian) / \code{pirls_maxit} (Poisson) is the cap of the
+adaptive budget, or the fixed budget with \code{budget = "fixed"} (default
+caps: 400 sweeps / 60 PIRLS iterations). Its \code{tol} is not used (see
+\code{fit_tol}).}
+
+\item{budget_check}{If \code{TRUE} (default), re-estimate the winner's GDF with
+twice its iteration budget and the same probes. A relative change above
+\code{budget_tol} means the fixed-\eqn{\lambda} map is not converged at that
+budget (seen for low-rank Poisson fits at 10 PIRLS iterations). The
+doubling change is a lower bound on the distance to the converged map
+when ALS converges slowly (2 to 4 PIRLS iterations moved GDF by 1.5\%
+while the converged value was 10\% away), hence the tight default.}
+
+\item{budget_tol}{Relative GDF change that fails the check (\code{0.01}).}
+
+\item{budget_fallback}{If \code{TRUE} (default), a converged and stable winner
+that fails the budget check is rescored with the less favourable of its
+scores at B and 2B and the choice is redone; the new winner, if any, is
+checked in turn (at most three checks). The first winner is kept when
+the redone choice would return an unconverged or unstable candidate, or
+one left unchecked by the limit of checks. \code{FALSE} only warns.}
+
+\item{budget}{\code{"adaptive"} (default) or \code{"fixed"} iteration budget; see
+section \emph{Iteration budget}.}
+
+\item{fit_tol}{Convergence tolerance of the adaptive budget (default
+\code{1e-7}): the pilot at \eqn{y} has converged at the first iteration after
+which the relative change of the penalized objective has been at most
+\code{fit_tol} at two consecutive iterations (ALS sweeps or PIRLS
+iterations; no floor, so free of the units of the response).}
+
+\item{verbose}{Print one line per computed evaluation and per stage.}
+
+\item{...}{Not used (error if supplied).}
 }
 \value{
-A list with \code{lambda}, \code{theta}, \code{gcv}, \code{gdf}, \code{fit}, \code{boundary}, and
-search diagnostics. The embedded \code{fit} is a \code{\link[=ttps]{ttps()}} object.
+The list returned by \code{\link[=tt_ggcv_array]{tt_ggcv_array()}} (\code{lambda}, \code{theta},
+\code{score}, \code{score_dev}, \code{gcv}, \code{ubre}, \code{gdf}, \code{gdf_se}, \code{gdf_cv},
+\code{stable}, \code{deviance}, \code{n_eff}, \code{criterion}, \code{groups}, \code{decision},
+\code{rule}, \code{best_theta}, \code{boundary}, \code{budget}, \code{budget_checks},
+\code{budget_verified}, \code{paired}, \code{fit} with \verb{$ggcv}, \code{search}, \code{n_evals},
+\code{n_fits}, \code{method}, \code{elapsed}) plus \code{gdf_mc_se} (alias of \code{gdf_se}).
 }
 \description{
-Optimizes all directional \(\boldsymbol\lambda\) jointly by a Monte Carlo
-estimate of global GCV (Hutchinson-style GDF of the fixed-rank TT ALS map).
-This is the experimental \strong{TT-gGCV} oracle; it does \strong{not} replace the
-default conditional selector \code{lambda = "cGCV"}.
+Selects the smoothing vector \eqn{\lambda} of a scattered-data TT
+P-spline (\code{\link[=ttps]{ttps()}}, Gaussian or Poisson) by minimising a global criterion
+of the fixed-\eqn{\lambda} fit: GCV \eqn{n D / (n - \mathrm{GDF})^2} or
+UBRE \eqn{D / n + 2 \phi\,\mathrm{GDF} / n - \phi}, where \eqn{D} is the
+deviance and GDF the Monte Carlo trace of the derivative of the fitting
+map \eqn{y \mapsto \hat\mu(y; \lambda)}. \code{criterion = "auto"} takes GCV
+for Gaussian data and UBRE with \eqn{\phi = 1} (deviance + 2 GDF) for
+Poisson data. Offsets (e.g. Berman-Turner quadrature rows) are
+supported; observation weights are not.
+}
+\details{
+The evaluator and the search are those of \code{\link[=tt_ggcv_array]{tt_ggcv_array()}} (see its
+sections \emph{Search}, \emph{Perturbations} and \emph{Iteration budget}): an isotropic
+grid with halvings and one parabolic step, an optional grouped pattern
+search (\code{groups}), and a final stage at \code{M_final} probes. There the
+winner is the most regular converged candidate with a stable GDF
+(isotropic before grouped, then the largest \eqn{\lambda}) that the
+minimum does not beat by more than \code{max(tol, 2 * SE)} (paired SE over the
+common probes). Its GDF is then re-estimated at twice its iteration
+budget; when it moves by more than \code{budget_tol}, the candidate is
+rescored with the less favourable of its two scores and kept if it still
+wins, or when no other converged candidate with a stable GDF is left to
+check (\code{budget_fallback}). On the Dette d = 8 example with
+Berman-Turner rows the plain argmin sat on the grid boundary, where the
+Monte Carlo GDF was 432 \eqn{\pm} 334, against 145 \eqn{\pm} 10 at the
+\eqn{\lambda} chosen by thinning CV. Iteration budgets are adaptive by
+default (\code{budget}). This is not a replacement for the default selector
+\code{lambda = "cGCV"}.
 }
 \examples{
 \dontrun{
@@ -99,12 +206,22 @@ set.seed(1)
 n <- 200
 X <- cbind(runif(n), runif(n))
 y <- sin(2 * pi * X[, 1]) + 0.3 * sin(pi * X[, 2]) + rnorm(n, sd = 0.25)
-opt <- tt_ggcv(y, X, rank = 2, k = 6,
-               n_global = 16, M_search = 4, M_final = 8,
-               control = tt_control(max_sweeps = 8))
+opt <- tt_ggcv(y, X, rank = 2, k = 6, M_search = 4, M_final = 8)
 opt$lambda
+opt$paired   # final candidates and the choice
+head(opt$search)
+
+## Poisson counts with an exposure offset, one smoothing group per margin
+expo <- runif(n, 0.5, 2)
+yp <- rpois(n, expo * exp(sin(2 * pi * X[, 1])))
+opt_p <- tt_ggcv(yp, X, rank = 2, k = 6, family = poisson(),
+                 offset = log(expo), groups = 1:2)
+opt_p$decision
+opt_p$budget_verified
 }
 }
 \seealso{
-\code{\link[=ttps]{ttps()}} with \code{lambda = "gGCV"}, \code{\link[=tt_control]{tt_control()}} (\verb{ggcv_*} knobs).
+\code{\link[=ttps]{ttps()}} with \code{lambda = "gGCV"} (knobs \verb{ggcv_*} of
+\code{\link[=tt_control]{tt_control()}}), \code{\link[=tt_gdf]{tt_gdf()}} to score a given \eqn{\lambda},
+\code{\link[=tt_ggcv_array]{tt_ggcv_array()}} for product grids, \code{\link[=tt_ggcv_poisson]{tt_ggcv_poisson()}}.
 }

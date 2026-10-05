@@ -13,7 +13,8 @@ set.seed(1); Y <- array(rnorm(prod(ng)), ng)
 ce <- tt_control(max_sweeps = 30L, seed = 1L, compute_edf = TRUE, tol = 0)
 rows <- lapply(list(c(1e-3, 1e-3), c(0.3, 1), c(1, 1), c(10, 10), c(1e3, 1e3)), function(lam) {
   f <- ttps(Y, axes = ax, array = TRUE, rank = K, k = K, lambda = lam, optimizer = "ALS", control = ce)
-  u <- tt_gdf_array(Y, lambda = lam, axes = ax, rank = K, k = K, probes = "unit", control = ce)
+  u <- tt_gdf_array(Y, lambda = lam, axes = ax, rank = K, k = K, probes = "unit",
+                    budget = "fixed", control = ce)  # the fit's own 30-sweep budget
   data.frame(lambda1 = lam[1], lambda2 = lam[2], edf_exact = exact_edf(lam),
              gdf_unit = u$gdf, tedf = as.numeric(f$edf)[1])
 })

@@ -24,37 +24,142 @@
 # difference, so each probe costs one fit and the base fit's own
 # convergence error cancels.
 #
-# Determinism: every fit (estimator, reference, probes) runs the SAME fixed
-# iteration budget (control$tol is forced to 0, so neither PIRLS nor ALS stops
-# early) from the SAME initialization ("cold", default). The GDF is then the
-# derivative of one smooth map, which is the regime in which Hutchinson GDF
-# tracks the joint EDF (manuscript appendix on cGCV versus gGCV).
-# probe_init = "warm" restarts probes from the estimator's cores with a
-# shorter budget; cheaper, but it under-responds when ALS mixes slowly.
+# Determinism: the estimator, the reference and the probes of a point run the
+# SAME fixed iteration budget B (control$tol is forced to 0, so neither PIRLS
+# nor ALS stops early) from the SAME initialization ("cold", default). The
+# GDF is then the derivative of one smooth map, which is the regime in which
+# Hutchinson GDF tracks the joint EDF (manuscript appendix on cGCV versus
+# gGCV). With budget = "adaptive" (default) B follows lambda: a pilot at y
+# finds the first iteration n_star after which the penalized objective has
+# settled (relative change <= fit_tol at two consecutive iterations) under
+# the cap control$pirls_maxit / control$max_sweeps, and
+# B = min(cap, ceiling(1.5 * n_star) + 2); budget = "fixed" runs every fit at
+# the control budget. probe_init = "warm" restarts probes from the
+# estimator's cores with a shorter budget; cheaper, but it under-responds
+# when ALS mixes slowly.
+#
+# The evaluator, the cache and the search live in ggcv_engine.R (shared with
+# the scattered routes); this file builds the array map and the public API.
 
 #' Global TT-gGCV smoothing selection for array data (TT-GLAM, `array = TRUE`)
 #'
 #' Selects \eqn{\lambda} for a product-grid TT P-spline fitted with
-#' [ttps()]`(array = TRUE)` by minimising the global GCV score
-#' \eqn{n D(\lambda) / (n - \mathrm{GDF}(\lambda))^2}, where GDF is the
-#' Monte Carlo trace of the derivative of the fixed-\eqn{\lambda} array fit:
-#' K-ALS for unweighted Gaussian data, weighted GLAM row-tensor PIRLS for
-#' Poisson responses or observation weights. Offset arrays are supported.
+#' [ttps()]`(array = TRUE)` by minimising a global criterion of the
+#' fixed-\eqn{\lambda} array fit (K-ALS for unweighted Gaussian data,
+#' weighted GLAM row-tensor PIRLS for Poisson responses or observation
+#' weights): GCV \eqn{n D / (n - \mathrm{GDF})^2} or UBRE
+#' \eqn{D / n + 2 \phi\,\mathrm{GDF} / n - \phi}, where GDF is the Monte Carlo
+#' trace of the derivative of the fitting map. Offset arrays are supported.
+#'
+#' @section Search:
+#' 1. *Isotropic stage* (always, also with several groups): `n_grid` points
+#'    on the shared \eqn{\log_{10}\lambda}, `n_refine` halvings of the grid
+#'    step around the best point and one parabolic step.
+#' 2. *Grouped stage* (several groups only): optional starts (`theta_start`,
+#'    `n_global` Sobol points), then a coordinate pattern search from the
+#'    isotropic optimum with steps 0.5 and 0.25 in \eqn{\log_{10}\lambda},
+#'    extending accepted moves with doubling steps.
+#' 3. *Final stage*: the isotropic and grouped optima, the nearest isotropic
+#'    evaluation with a stable GDF on the smoother side (larger
+#'    \eqn{\lambda}) and the next best distinct stable points (`n_final` in
+#'    all, plus the smoother neighbour with one group) are re-scored with
+#'    `M_final` probes.
+#'
+#' Comparisons are made on the scale of `score_dev`:
+#' \eqn{D / \phi + 2\,\mathrm{GDF}} for UBRE (scaled deviance plus twice the
+#' GDF, the AIC scale) or \eqn{n \log \mathrm{GCV}} for GCV, neither of which
+#' depends on the units of the response: a move or a candidate improves
+#' on another only if it lowers this score by more than `max(tol, 2 * SE)`,
+#' where SE is the standard error of the paired difference over the common
+#' probes. The winner is the most regular converged final candidate with a
+#' stable GDF that the minimum does not improve on by this rule: isotropic
+#' before grouped (`decision`), then the largest \eqn{\lambda}, in the spirit
+#' of the one-standard-error rule (`tol = 0` gives a purely Monte Carlo
+#' rule). On the Dette d = 8 example with Berman-Turner rows the plain argmin
+#' sat on the grid boundary, where the Monte Carlo GDF was 432 \eqn{\pm} 334,
+#' against 145 \eqn{\pm} 10 at the \eqn{\lambda} chosen by thinning CV.
+#'
+#' The winner's GDF is then re-estimated at twice its iteration budget with
+#' the same probes (`budget_check`). If it moves by more than `budget_tol`,
+#' the fixed-\eqn{\lambda} map is not converged there. With
+#' `budget_fallback = TRUE` the candidate is rescored with the less
+#' favourable of its scores at B and 2B and the choice is redone with that
+#' conservative score: if it still wins it is kept, with a warning that gives
+#' the GDF change and the margin, and `budget_verified = FALSE`; otherwise
+#' the new winner gets its own check (at most three checks). The GDF change
+#' thus matters only when it could reverse the choice: dropping such a
+#' candidate outright once returned a model about 19 score units worse by
+#' the exact criterion over a GDF change worth about 1 unit. An unconverged
+#' or unstable winner gets one diagnostic check and no fallback, and no
+#' fallback check is spent on such a candidate. The returned candidate is
+#' always one whose GDF was checked: when the redone choice would return an
+#' unconverged or unstable candidate (e.g. the failing winner's score at 2B
+#' is not finite and no other converged candidate with a stable GDF is
+#' left), or a candidate that the limit of three checks leaves unchecked,
+#' the first winner is kept, with `budget_verified = FALSE` and a warning.
 #'
 #' @section Perturbations:
 #' Probes are non-negative (\eqn{y + \epsilon (r+1)/2} against a shared
 #' reference \eqn{y + \epsilon/2}), so Poisson counts are never clipped at
-#' zero and each probe costs one refit. Probes are drawn on cells with
+#' zero and each probe costs one refit. The step \eqn{\epsilon} is
+#' `epsilon_rel` times the RMS of the response (Gaussian) or times
+#' \eqn{\max(\mathrm{RMS}, 1)} (Poisson). Probes are drawn on cells with
 #' positive weight only and are identical across \eqn{\lambda} (common random
 #' numbers); the first `M_search` probes of the final bank equal the search
-#' bank.
+#' bank, so a final-stage evaluation only fits the estimator, the reference
+#' and the `M_final - M_search` new probes. With `budget = "fixed"` and cold
+#' probes, all fits of all points of a search step form one parallel batch.
+#' With the adaptive budget (default), the pilots of the step's new points
+#' run first as one batch, because they fix B, and the estimators,
+#' references and probes form a second batch; warm probes also run the
+#' estimators first.
+#'
+#' Probe validation: a probe response can need more iterations than the
+#' response itself from the same cold start, so an evaluation whose probe
+#' contributions contain a non-finite value or an outlier (a contribution
+#' above `n_eff` in absolute value, a GDF \eqn{\le 0}, or a per-probe
+#' coefficient of variation `gdf_cv` above
+#' \eqn{\max(1, 3\sqrt{2 / \max(\mathrm{GDF}, 1)})}) is re-evaluated whole,
+#' with the same probes, at 2B and then 4B (one more parallel batch each).
+#' If it stays so, it is flagged unstable (`stable = FALSE`) and treated
+#' like an unconverged one: it is never an accepted pattern-search move, the
+#' isotropic optimum (unless no stable isotropic point exists) or an
+#' eligible final candidate (unless nothing else is eligible, with a
+#' warning). The CV limit depends on the GDF because the per-probe CV of a
+#' symmetric smoother with eigenvalues in \eqn{[0, 1]} is at most
+#' \eqn{\sqrt{2 / \mathrm{GDF}}}: a limit of 1 flagged heavily smoothed,
+#' converged evaluations (GDF of about 4) with four probes by chance. The
+#' limit is 1 from GDF 18 up.
 #'
 #' @section Iteration budget:
-#' `control$tol` is set to `0`, so every fit runs exactly
-#' `control$max_sweeps` ALS sweeps (Gaussian) or `control$pirls_maxit` PIRLS
-#' iterations (Poisson). Choose a budget at which the fixed-\eqn{\lambda} fit
-#' has converged; the returned `fit$ggcv$last_rel_change` reports the relative
-#' deviance change of the last iteration when available.
+#' The estimator, reference and probe fits of one \eqn{\lambda} run a fixed
+#' budget B (`control$tol` is set to `0`, so ALS / PIRLS never stop early)
+#' from the same cold initialization, so that all probes differentiate the
+#' same deterministic map and the deviance and the returned fit come from it
+#' too. With `budget = "adaptive"` (default), `control$max_sweeps` (ALS
+#' sweeps, Gaussian) or `control$pirls_maxit` (PIRLS iterations, Poisson) is
+#' a cap. A pilot at \eqn{y} runs cold for 20 ALS sweeps (10 PIRLS
+#' iterations), then twice as many, and so on up to the cap, until the
+#' penalized objective has changed by at most `fit_tol` relative to its
+#' previous value at two consecutive iterations; the first iteration where
+#' that holds is `n_iter`, the evaluation is converged when it exists, and
+#' \eqn{B = \min(\mathrm{cap}, \lceil 1.5\, n_{iter} \rceil + 2)} (the cap
+#' when not converged), because the GDF settles more slowly than the
+#' objective. The rule reads the fit history and has no floor, so B does not
+#' depend on the units of the response (the stopping rule of [ttps()] tests
+#' the RSS, which can stall at a turning point while the fit still moves,
+#' against \eqn{\max(1, \mathrm{RSS})}). A per-iteration rule cannot see a
+#' fit that drifts very slowly: the budget check below is the safeguard. A
+#' fixed budget that suits one \eqn{\lambda} need not suit another: for
+#' low-rank Gaussian ALS on scattered rows (n = 400, d = 2, rank 2, k = 8) a
+#' 20-sweep budget gave GDF 14.4 against 21.5 to 21.9 at 80 to 320 sweeps,
+#' and a GDF that was not monotone in \eqn{\lambda}. `budget = "fixed"` runs
+#' every fit at the control budget and flags an evaluation as converged when
+#' the relative change of its estimator's last iteration is at most `1e-5`.
+#' The search log records B (`budget`), `n_iter`, `converged`, `stable` and
+#' `reevals` (probe-validation rounds); the winner is chosen among converged
+#' and stable final candidates, and a warning is issued when the selected
+#' fit is not converged.
 #'
 #' @param Y d-way response array (d >= 2).
 #' @param axes List of grid coordinates, one per margin (default: unit grids).
@@ -67,16 +172,27 @@
 #'   `seq_len(d)` = fully anisotropic.
 #' @param theta_lower,theta_upper Search box in \eqn{\log_{10}\lambda}
 #'   (scalar or one value per group; default from `control$lambda_bounds`).
+#'   The isotropic stage searches the common range
+#'   `[max(theta_lower), min(theta_upper)]`.
 #' @param theta_start Optional matrix (or vector) of extra starting points in
-#'   group space (\eqn{\log_{10}\lambda}), evaluated in the global stage.
-#' @param n_grid Coarse grid size for the isotropic (one-group) search.
-#' @param n_global Sobol points for the multi-group search
-#'   (default `8 * n_groups`).
-#' @param n_refine Brent refinement (one group) or coordinate-descent passes
-#'   (several groups). `0` disables refinement.
-#' @param n_final Number of distinct best candidates re-scored with `M_final`
-#'   probes; the winner is chosen at final fidelity only.
+#'   group space (\eqn{\log_{10}\lambda}): evaluated with the grid when there
+#'   is one group, as starts of the grouped stage otherwise.
+#' @param n_grid Grid size of the isotropic stage (at least 3).
+#' @param n_global Sobol starts for the grouped stage (default `0`: the
+#'   grouped stage starts from the isotropic optimum). Ignored with one
+#'   group.
+#' @param n_refine Halvings of the isotropic grid step around the best point,
+#'   followed by one parabolic step. `0` = grid only.
+#' @param n_final Number of candidates re-scored with `M_final` probes (with
+#'   several groups, at least the isotropic and the grouped optima and the
+#'   smoother isotropic neighbour; with one group the smoother neighbour is
+#'   added on top of `n_final`).
 #' @param M_search,M_final Rademacher probes in the search / final stages.
+#' @param tol Minimum improvement of `score_dev` (default `1`; UBRE:
+#'   \eqn{D / \phi + 2\,\mathrm{GDF}}, the AIC scale; GCV:
+#'   \eqn{n \log \mathrm{GCV}}) for a move to be accepted, or for the minimum
+#'   to beat a more regular final candidate; the paired threshold `2 * SE`
+#'   applies when larger.
 #' @param criterion `"auto"` (default): UBRE with known scale for Poisson
 #'   and GCV for Gaussian, as `mgcv`'s `"GCV.Cp"`; or force `"gcv"` /
 #'   `"ubre"`. For overdispersed counts use `"gcv"` or pass an estimated
@@ -86,28 +202,75 @@
 #' @param probe_init `"cold"` (default) or `"warm"`.
 #' @param probe_budget Iteration budget for warm probes (PIRLS iterations for
 #'   Poisson, ALS sweeps for Gaussian); ignored when `probe_init = "cold"`.
-#' @param epsilon_rel Finite-difference step relative to the RMS of `Y`
-#'   (floored at `epsilon_rel` itself).
-#' @param n_cores Parallel workers over probes (`parallel::mclapply`; forked
-#'   processes, so `1` on Windows).
-#' @param seed Probe seed.
-#' @param control [tt_control()] for every fixed-\eqn{\lambda} fit.
+#' @param epsilon_rel Finite-difference step relative to the RMS of the
+#'   response on the cells (rows) with positive weight: `epsilon_rel * RMS`
+#'   for Gaussian data (`epsilon_rel` when the RMS is 0), so the GDF does not
+#'   depend on the units of the response; `epsilon_rel * max(RMS, 1)` for
+#'   Poisson counts.
+#' @param n_cores Parallel workers over the fits of a batch
+#'   (`parallel::mclapply`; forked processes, so `1` on Windows).
+#' @param seed Probe seed (any finite number; probe `j` uses
+#'   `seed * 100003 + j`, wrapped into the integer range when it leaves it).
+#' @param control [tt_control()] for every fixed-\eqn{\lambda} fit; its
+#'   `max_sweeps` (Gaussian) / `pirls_maxit` (Poisson) is the cap of the
+#'   adaptive budget, or the fixed budget (default caps: 400 sweeps, 60
+#'   PIRLS iterations). Its `tol` is not used (see `fit_tol`).
 #' @param budget_check If `TRUE` (default), re-estimate the winner's GDF with
-#'   twice the iteration budget and the same probes. A relative change above
-#'   `budget_tol` means the fixed-\eqn{\lambda} map is not converged at the
-#'   current budget (seen for low-rank Poisson fits at 10 PIRLS iterations);
-#'   a warning suggests raising `control$pirls_maxit` / `control$max_sweeps`.
-#'   The doubling change is a lower bound on the distance to the converged
-#'   map when ALS converges slowly (2 to 4 PIRLS iterations moved GDF by 1.5%
+#'   twice its iteration budget and the same probes. A relative change above
+#'   `budget_tol` means the fixed-\eqn{\lambda} map is not converged at that
+#'   budget (seen for low-rank Poisson fits at 10 PIRLS iterations). The
+#'   doubling change is a lower bound on the distance to the converged map
+#'   when ALS converges slowly (2 to 4 PIRLS iterations moved GDF by 1.5%
 #'   while the converged value was 10% away), hence the tight default.
-#' @param budget_tol Relative GDF change that triggers the warning (`0.01`).
-#' @param verbose Print one line per evaluation.
-#' @return A list with `lambda` (length d), `theta` (group scale), `score`,
-#'   `gcv`, `ubre`, `gdf`, `gdf_se`, `deviance`, `n_eff`, `criterion`,
-#'   `boundary`, `budget` (GDF at twice the budget and its relative change),
-#'   `fit` (the [ttps()] fit at the winner, with `$ggcv`), `search`
-#'   (all evaluations), `n_fits` and `elapsed`.
-#' @seealso [tt_gdf_array()] to score a given \eqn{\lambda}.
+#' @param budget_tol Relative GDF change that fails the check (`0.01`).
+#' @param budget_fallback If `TRUE` (default), a converged and stable winner
+#'   that fails the budget check is rescored with the less favourable of its
+#'   scores at B and 2B and the choice is redone; the new winner, if any, is
+#'   checked in turn (at most three checks). The first winner is kept when
+#'   the redone choice would return an unconverged or unstable candidate, or
+#'   one left unchecked by the limit of checks. `FALSE` only warns.
+#' @param budget `"adaptive"` (default) or `"fixed"` iteration budget; see
+#'   section *Iteration budget*.
+#' @param fit_tol Convergence tolerance of the adaptive budget (default
+#'   `1e-7`): the pilot at \eqn{y} has converged at the first iteration after
+#'   which the relative change of the penalized objective has been at most
+#'   `fit_tol` at two consecutive iterations (ALS sweeps or PIRLS
+#'   iterations; no floor, so free of the units of the response).
+#' @param gdf_method `"mc"` (default): Monte Carlo GDF of the fixed-budget
+#'   map. `"exact"`: one fit per point, polished to a stationary point by
+#'   trust-region Newton, GDF by [tt_edf_exact()] (no probes, `gdf_se = 0`;
+#'   a point whose fit does not reach a local minimum is unconverged).
+#'   `"auto"`: exact for at most 2000 TT parameters and rows x parameters at
+#'   most 5e7, else Monte Carlo.
+#' @param verbose Print one line per computed evaluation and per stage.
+#' @return A list with `lambda` (length d), `theta` (group scale), `score`
+#'   (`ubre` or `gcv`), `score_dev` (the comparison scale,
+#'   \eqn{D / \phi + 2\,\mathrm{GDF}} or \eqn{n \log \mathrm{GCV}}), `gcv`,
+#'   `ubre`, `gdf`, `gdf_se`, `gdf_cv` (per-probe coefficient of variation of
+#'   the GDF) and `stable` (the probe contributions form a usable GDF: all
+#'   finite, none above `n_eff` in absolute value, GDF \eqn{> 0} and
+#'   `gdf_cv` within the limit of section *Perturbations*), `deviance`,
+#'   `n_eff`, `criterion`,
+#'   `groups`, `decision` (`"isotropic"` or `"grouped"`), `rule` (one-line
+#'   description of the final choice), `best_theta` (the minimum among the
+#'   eligible final candidates), `boundary`, `budget` (check of the winner:
+#'   GDF at twice the budget, its relative change, budget mode, B and
+#'   `n_iter`),
+#'   `budget_checks` (one row per check, with the GDF and `score_dev` at B
+#'   and 2B and `ok`), `budget_verified` (`TRUE` when the returned winner
+#'   passed its check, `NA` without a check), `paired` (final candidates with
+#'   `score_dev`, `score_dev_used` (the score in the final choice: the less
+#'   favourable of B and 2B after a failed check), `gdf_cv`, `stable`,
+#'   `converged`, the paired difference and SE against the minimum,
+#'   `qualifies`, `best`, `winner`, `budget_ok` and the difference against the
+#'   winner), `fit` (the [ttps()] fit at the winner, with `$ggcv`), `search`
+#'   (one row per computed evaluation, with `gdf_cv`, `stable`, convergence
+#'   flags, the budget B, `n_iter`, `reevals` (probe-validation rounds) and
+#'   the number of fits run), `n_evals` (computed evaluations, budget checks
+#'   excluded), `n_fits` (fits run, budget checks included), `method` and
+#'   `elapsed`.
+#' @seealso [tt_gdf_array()] to score a given \eqn{\lambda}; [tt_ggcv()] for
+#'   scattered rows.
 #' @export
 tt_ggcv_array <- function(Y,
                           axes = NULL,
@@ -126,11 +289,12 @@ tt_ggcv_array <- function(Y,
                           theta_upper = NULL,
                           theta_start = NULL,
                           n_grid = 9L,
-                          n_global = NULL,
+                          n_global = 0L,
                           n_refine = 2L,
                           n_final = 3L,
                           M_search = 4L,
                           M_final = 16L,
+                          tol = 1,
                           criterion = c("auto", "gcv", "ubre"),
                           scale = NULL,
                           probe_init = c("cold", "warm"),
@@ -138,198 +302,87 @@ tt_ggcv_array <- function(Y,
                           epsilon_rel = 1e-3,
                           n_cores = 1L,
                           seed = 1L,
-                          control = tt_control(max_sweeps = 10L,
-                                               pirls_maxit = 20L,
+                          control = tt_control(max_sweeps = 400L,
+                                               pirls_maxit = 60L,
                                                compute_edf = FALSE,
                                                seed = 1L),
                           budget_check = TRUE,
                           budget_tol = 0.01,
+                          budget_fallback = TRUE,
+                          budget = c("adaptive", "fixed"),
+                          fit_tol = 1e-7,
+                          gdf_method = c("mc", "exact", "auto"),
                           verbose = FALSE) {
   t0 <- proc.time()[["elapsed"]]
   criterion <- match.arg(criterion)
   probe_init <- match.arg(probe_init)
-  st <- .ggcv_arr_setup(
+  budget <- match.arg(budget)
+  map <- .ggcv_map_array(
     Y = Y, axes = axes, family = family, rank = rank, k = k, degree = degree,
     penalty_order = penalty_order, cyclic = cyclic, period = period,
-    knots = knots, weights = weights, offset = offset, groups = groups,
-    criterion = criterion, scale = scale, probe_init = probe_init,
-    probe_budget = probe_budget, epsilon_rel = epsilon_rel,
-    n_cores = n_cores, seed = seed, control = control
+    knots = knots, weights = weights, offset = offset
   )
-  criterion <- st$criterion
-  G <- st$n_groups
+  # the removed working-response proxy, as in tt_ggcv() (the ttps() array
+  # route warns itself and passes the knob on as "algorithmic")
+  if (identical(map$key, "poisson") && identical(control$ggcv_glm_mode, "working")) {
+    .ggcv_warn_working("tt_ggcv_array()")
+  }
+  st <- .ggcv_setup(
+    map, groups = groups, criterion = criterion, scale = scale,
+    probe_init = probe_init, probe_budget = probe_budget,
+    epsilon_rel = epsilon_rel, n_cores = n_cores, seed = seed,
+    control = control, budget = budget, fit_tol = fit_tol,
+    gdf_method = match.arg(gdf_method)
+  )
   bounds <- control$lambda_bounds %||% c(1e-4, 1e4)
-  lo <- rep(as.numeric(theta_lower %||% log10(bounds[1L])), length.out = G)
-  hi <- rep(as.numeric(theta_upper %||% log10(bounds[2L])), length.out = G)
-  if (any(hi <= lo)) stop("theta_upper must exceed theta_lower.", call. = FALSE)
-  M_search <- as.integer(M_search)
-  M_final <- max(as.integer(M_final), M_search)
-
-  cache <- new.env(parent = emptyenv())
-  evals <- list()
-  evaluate <- function(theta, M, stage) {
-    theta <- pmin(pmax(as.numeric(theta), lo), hi)
-    key <- paste(c(sprintf("%.6f", theta), M), collapse = "|")
-    if (!is.null(cache[[key]])) return(cache[[key]])
-    ev <- .ggcv_arr_eval(theta, M = M, st = st)
-    row <- data.frame(
-      stage = stage, t(setNames(theta, paste0("theta", seq_len(G)))),
-      score = ev$score, gcv = ev$gcv, ubre = ev$ubre, gdf = ev$gdf,
-      gdf_se = ev$gdf_se, deviance = ev$deviance, M = M, M_ok = ev$M_ok,
-      time_s = ev$time_s, stringsAsFactors = FALSE
-    )
-    evals[[length(evals) + 1L]] <<- row
-    if (isTRUE(verbose)) {
-      message(sprintf(
-        "gGCV-array %-7s theta=(%s) %s=%.6g GDF=%.2f (se %.2f) dev=%.6g [%.1fs]",
-        stage, paste(sprintf("%.2f", theta), collapse = ","), criterion,
-        ev$score, ev$gdf, ev$gdf_se, ev$deviance, ev$time_s
-      ))
-    }
-    cache[[key]] <- ev
-    ev
-  }
-
-  # ---- global stage --------------------------------------------------------
-  starts <- if (is.null(theta_start)) NULL else {
-    m <- as.matrix(theta_start)
-    if (ncol(m) != G && nrow(m) == G) m <- t(m)
-    if (ncol(m) != G) stop("theta_start must have one column per group.", call. = FALSE)
-    m
-  }
-  if (G == 1L) {
-    pts <- matrix(seq(lo, hi, length.out = max(3L, as.integer(n_grid))), ncol = 1L)
-  } else {
-    ng <- as.integer(n_global %||% (8L * G))
-    pts <- rbind((lo + hi) / 2, .tt_lab_sobol_box(ng, lo, hi, skip = 1L))
-  }
-  pts <- rbind(starts, pts)
-  for (i in seq_len(nrow(pts))) evaluate(pts[i, ], M_search, "global")
-
-  best_theta <- function() {
-    tab <- do.call(rbind, evals)
-    tab <- tab[tab$M == M_search & is.finite(tab$score), , drop = FALSE]
-    if (!nrow(tab)) return(NULL)
-    as.numeric(tab[which.min(tab$score), paste0("theta", seq_len(G))])
-  }
-  th <- best_theta()
-  if (is.null(th)) {
-    stop("tt_ggcv_array: no finite criterion value in the global stage.",
-         call. = FALSE)
-  }
-
-  # ---- refinement ----------------------------------------------------------
-  if (as.integer(n_refine) > 0L) {
-    if (G == 1L) {
-      step <- if (nrow(pts) > 1L) diff(range(pts[, 1L])) / (nrow(pts) - 1L) else 1
-      iv <- c(max(lo, th - step), min(hi, th + step))
-      tryCatch(stats::optimize(function(t) {
-        s <- evaluate(t, M_search, "refine")$score
-        if (is.finite(s)) s else .Machine$double.xmax
-      }, interval = iv, tol = 0.02), error = function(e) NULL)
-    } else {
-      for (pass in seq_len(as.integer(n_refine))) {
-        for (g in seq_len(G)) {
-          iv <- c(max(lo[g], th[g] - 1.5), min(hi[g], th[g] + 1.5))
-          f1 <- function(t) {
-            tt <- th; tt[g] <- t
-            s <- evaluate(tt, M_search, "refine")$score
-            if (is.finite(s)) s else .Machine$double.xmax
-          }
-          tryCatch(stats::optimize(f1, interval = iv, tol = 0.05),
-                   error = function(e) NULL)
-          th <- best_theta()
-        }
-      }
-    }
-    th <- best_theta()
-  }
-
-  # ---- final stage: re-score distinct best candidates with M_final ---------
-  tab <- do.call(rbind, evals)
-  tab <- tab[tab$M == M_search & is.finite(tab$score), , drop = FALSE]
-  tab <- tab[order(tab$score), , drop = FALSE]
-  cand <- list()
-  for (i in seq_len(nrow(tab))) {
-    ti <- as.numeric(tab[i, paste0("theta", seq_len(G))])
-    far <- all(vapply(cand, function(cj) sqrt(sum((cj - ti)^2)) > 0.25, logical(1)))
-    if (!length(cand) || far) cand[[length(cand) + 1L]] <- ti
-    if (length(cand) >= as.integer(n_final)) break
-  }
-  fin <- lapply(cand, function(ti) list(theta = ti, ev = evaluate(ti, M_final, "final")))
-  sc <- vapply(fin, function(z) z$ev$score, numeric(1))
-  if (!any(is.finite(sc))) {
-    stop("tt_ggcv_array: no finite criterion value at final fidelity.", call. = FALSE)
-  }
-  win <- fin[[which.min(ifelse(is.finite(sc), sc, Inf))]]
-  theta <- win$theta
-  ev <- win$ev
-  lambda <- 10^theta[st$groups]
-  boundary <- any(abs(theta - lo) < 0.05 | abs(theta - hi) < 0.05)
-  if (isTRUE(boundary) && isTRUE(control$warn_lambda_boundary %||% TRUE)) {
-    warning("tt_ggcv_array: selected log10(lambda) is at the search boundary ",
-            "(", paste(sprintf("%.2f", theta), collapse = ","), ").", call. = FALSE)
-  }
-  budget <- list(checked = FALSE, gdf_2x = NA_real_, rel_change = NA_real_)
-  if (isTRUE(budget_check)) {
-    st2 <- st
-    for (nm in c("control", "control_probe")) {
-      st2[[nm]]$pirls_maxit <- 2L * as.integer(st[[nm]]$pirls_maxit)
-      st2[[nm]]$max_sweeps <- 2L * as.integer(st[[nm]]$max_sweeps)
-    }
-    ev2 <- .ggcv_arr_eval(theta, M = M_final, st = st2)  # same probes (CRN)
-    rel <- (ev$gdf - ev2$gdf) / ev2$gdf
-    budget <- list(checked = TRUE, gdf_2x = ev2$gdf, rel_change = rel,
-                   score_2x = ev2$score, time_s = ev2$time_s)
-    if (isTRUE(verbose)) {
-      message(sprintf("gGCV-array budget check: GDF %.3f at budget, %.3f at 2x (%+.1f%%)",
-                      ev$gdf, ev2$gdf, 100 * rel))
-    }
-    if (is.finite(rel) && abs(rel) > budget_tol) {
-      warning(sprintf(paste0(
-        "tt_ggcv_array: GDF changes by %+.1f%% when the iteration budget doubles; ",
-        "the fixed-lambda fit is not converged. Increase control$pirls_maxit ",
-        "(Poisson) or control$max_sweeps (Gaussian)."), 100 * rel), call. = FALSE)
-    }
-  }
-  search <- do.call(rbind, evals)
-  n_fits <- sum(search$M + 2L)  # estimator + reference + M probes per evaluation
-  if (isTRUE(budget$checked)) n_fits <- n_fits + M_final + 2L
-  fit <- ev$fit
-  fit$lambda_method <- "gGCV"
-  fit$ggcv <- list(
-    mode = "array", criterion = criterion, score = ev$score, gcv = ev$gcv,
-    ubre = ev$ubre, gdf = ev$gdf, gdf_se = ev$gdf_se, gdf_mc_se = ev$gdf_se,
-    deviance = ev$deviance, n_eff = st$n_eff, theta = theta,
-    groups = st$groups, boundary = boundary, M = M_final,
-    probe_init = probe_init, epsilon = st$eps, budget = budget,
-    last_rel_change = .ggcv_arr_last_rel_change(fit), search = search
+  out <- .ggcv_search(
+    st, lo = theta_lower %||% log10(bounds[1L]),
+    hi = theta_upper %||% log10(bounds[2L]), n_grid = n_grid,
+    n_refine = n_refine, n_global = n_global, n_final = n_final,
+    M_search = M_search, M_final = M_final, tol = tol,
+    theta_start = theta_start, budget_check = budget_check,
+    budget_tol = budget_tol, budget_fallback = budget_fallback,
+    verbose = verbose
   )
-  list(
-    lambda = lambda, theta = theta, score = ev$score, gcv = ev$gcv,
-    ubre = ev$ubre, gdf = ev$gdf, gdf_se = ev$gdf_se, deviance = ev$deviance,
-    n_eff = st$n_eff, criterion = criterion, groups = st$groups,
-    boundary = boundary, budget = budget, fit = fit, search = search,
-    n_fits = n_fits,
-    method = "gGCV", elapsed = proc.time()[["elapsed"]] - t0
-  )
+  out$elapsed <- proc.time()[["elapsed"]] - t0
+  out
 }
 
 #' Global GDF and gGCV score of an array TT fit at a fixed lambda
 #'
 #' Scores one smoothing vector with the same estimator as [tt_ggcv_array()]:
 #' the fixed-\eqn{\lambda} array fit (K-ALS or weighted PIRLS), its deviance,
-#' and a Monte Carlo
-#' GDF from non-negative Rademacher perturbations.
+#' and a Monte Carlo GDF from non-negative perturbations (see the sections
+#' *Perturbations* and *Iteration budget* of [tt_ggcv_array()]). [tt_gdf()]
+#' is the scattered-row counterpart.
 #'
 #' @inheritParams tt_ggcv_array
-#' @param lambda Smoothing vector (scalar or length d).
-#' @param M Number of probes.
-#' @param probes `"rademacher"` (default) or `"unit"`. `"unit"` perturbs one
-#'   weighted cell at a time and returns the exact finite-difference trace
-#'   (one fit per cell; small arrays only).
+#' @param lambda Smoothing vector (scalar or length d, non-negative).
+#' @param M Number of probes (ignored when `probes` is a matrix).
+#' @param probes `"rademacher"` (default; probe `j` drawn from
+#'   `seed * 100003 + j`), `"unit"` (one perturbation per weighted cell: the
+#'   exact finite-difference trace, one fit per cell, small arrays only), or a
+#'   numeric matrix of -1 / +1 values with one row per cell (in
+#'   `as.numeric(Y)` order) and one column per probe, a user probe bank
+#'   (`M = ncol(probes)`; rows of zero-weight cells are ignored).
+#' @param control [tt_control()] for every fit: `max_sweeps` (Gaussian) /
+#'   `pirls_maxit` (Poisson) is the cap of the adaptive budget or the fixed
+#'   budget (default caps: 400 sweeps, 60 PIRLS iterations). The defaults
+#'   changed: up to package commit 77d5fc6 `tt_gdf_array()` ran a fixed
+#'   budget of 10 sweeps / 20 PIRLS iterations; `budget = "fixed"` with
+#'   `control = tt_control(max_sweeps = 10, pirls_maxit = 20,
+#'   compute_edf = FALSE, seed = 1)` gives that map again.
 #' @return A list with `gdf`, `gdf_se`, `deviance`, `gcv`, `ubre`, `n_eff`,
-#'   `contrib`, `fit`, `epsilon`.
+#'   `contrib` (per-probe contributions; per cell for `"unit"`), `M_ok`,
+#'   `converged` and `last_rel_change` (convergence of the estimator),
+#'   `budget` (iteration budget B of the estimator, reference and probe
+#'   fits), `n_iter` (adaptive: the iteration where the pilot's objective
+#'   settled, the cap when it did not; fixed: iterations of the estimator),
+#'   `gdf_cv` (per-probe coefficient of variation; `0` for `"unit"`),
+#'   `stable` (see [tt_ggcv_array()]), `reevals` (probe-validation rounds,
+#'   each at twice the budget), `fit` (the estimator), `epsilon`, `n_fits`
+#'   and `time_s`.
+#' @seealso [tt_gdf()] for scattered rows.
 #' @export
 tt_gdf_array <- function(Y,
                          lambda,
@@ -345,284 +398,97 @@ tt_gdf_array <- function(Y,
                          weights = NULL,
                          offset = NULL,
                          M = 16L,
-                         probes = c("rademacher", "unit"),
+                         probes = "rademacher",
                          scale = NULL,
                          probe_init = c("cold", "warm"),
                          probe_budget = NULL,
                          epsilon_rel = 1e-3,
                          n_cores = 1L,
                          seed = 1L,
-                         control = tt_control(max_sweeps = 10L,
-                                              pirls_maxit = 20L,
+                         budget = c("adaptive", "fixed"),
+                         fit_tol = 1e-7,
+                         control = tt_control(max_sweeps = 400L,
+                                              pirls_maxit = 60L,
                                               compute_edf = FALSE,
-                                              seed = 1L)) {
-  probes <- match.arg(probes)
+                                              seed = 1L),
+                         gdf_method = c("mc", "exact")) {
   probe_init <- match.arg(probe_init)
-  d <- length(dim(Y))
-  st <- .ggcv_arr_setup(
+  budget <- match.arg(budget)
+  gdf_method <- match.arg(gdf_method)
+  map <- .ggcv_map_array(
     Y = Y, axes = axes, family = family, rank = rank, k = k, degree = degree,
     penalty_order = penalty_order, cyclic = cyclic, period = period,
-    knots = knots, weights = weights, offset = offset, groups = seq_len(d),
-    criterion = "gcv", scale = scale, probe_init = probe_init,
-    probe_budget = probe_budget, epsilon_rel = epsilon_rel,
-    n_cores = n_cores, seed = seed, control = control
+    knots = knots, weights = weights, offset = offset
   )
-  theta <- log10(rep(as.numeric(lambda), length.out = d))
-  ev <- .ggcv_arr_eval(theta, M = as.integer(M), st = st, unit = identical(probes, "unit"))
-  list(gdf = ev$gdf, gdf_se = ev$gdf_se, deviance = ev$deviance, gcv = ev$gcv,
-       ubre = ev$ubre, n_eff = st$n_eff, contrib = ev$contrib, M_ok = ev$M_ok,
-       fit = ev$fit, epsilon = st$eps, time_s = ev$time_s)
-}
-
-# ---------------------------------------------------------------------------
-# internals
-# ---------------------------------------------------------------------------
-
-#' @keywords internal
-#' @noRd
-.ggcv_arr_setup <- function(Y, axes, family, rank, k, degree, penalty_order,
-                            cyclic, period, knots, weights, offset, groups,
-                            criterion, scale, probe_init, probe_budget,
-                            epsilon_rel, n_cores, seed, control) {
-  if (!is.array(Y) || length(dim(Y)) < 2L) {
-    stop("`Y` must be a d-way array (d >= 2).", call. = FALSE)
-  }
-  dims <- dim(Y)
-  d <- length(dims)
-  n_cells <- prod(dims)
-  fam <- normalize_family(family)
-  key <- family_key(fam)
-  if (!key %in% c("gaussian", "poisson")) {
-    stop("tt_ggcv_array supports gaussian() and poisson() only.", call. = FALSE)
-  }
-  y <- as.numeric(Y)
-  if (anyNA(y)) stop("`Y` must not contain NA.", call. = FALSE)
-  if (identical(key, "poisson") && any(y < 0)) {
-    stop("poisson requires non-negative Y.", call. = FALSE)
-  }
-  w <- if (is.null(weights)) NULL else as.numeric(weights)
-  if (!is.null(w)) {
-    if (length(w) != n_cells) stop("`weights` must have one value per cell.", call. = FALSE)
-    if (any(!is.finite(w)) || any(w < 0)) {
-      stop("`weights` must be finite and non-negative.", call. = FALSE)
-    }
-    if (all(abs(w - 1) < 1e-12)) w <- NULL
-  }
-  support <- if (is.null(w)) rep(TRUE, n_cells) else w > 0
-  n_eff <- sum(support)
-  if (n_eff < 2L) stop("Need at least two cells with positive weight.", call. = FALSE)
-  off <- if (is.null(offset)) NULL else as.numeric(offset)
-  if (!is.null(off) && length(off) != n_cells && length(off) != 1L) {
-    stop("`offset` must be scalar or have one value per cell.", call. = FALSE)
-  }
-  groups <- if (is.null(groups)) rep(1L, d) else as.integer(groups)
-  if (length(groups) != d || anyNA(groups)) {
-    stop("`groups` must be an integer vector of length d.", call. = FALSE)
-  }
-  groups <- match(groups, sort(unique(groups)))
-  if (identical(criterion, "auto")) {
-    criterion <- if (identical(key, "poisson")) "ubre" else "gcv"
-  }
-  if (is.null(scale) && identical(key, "poisson")) scale <- 1
-  if (identical(criterion, "ubre") && is.null(scale)) {
-    stop("criterion = 'ubre' needs a known `scale` for gaussian().", call. = FALSE)
-  }
-  ctrl <- control
-  if (!inherits(ctrl, "tt_control")) ctrl <- do.call(tt_control, as.list(ctrl))
-  ctrl$tol <- 0
-  ctrl$compute_edf <- FALSE
-  ctrl$trace <- FALSE
-  ctrl$monitor <- FALSE
-  ctrl$warn_lambda_boundary <- FALSE
-  ctrl_probe <- ctrl
-  if (identical(probe_init, "warm")) {
-    if (identical(key, "poisson")) {
-      ctrl_probe$pirls_maxit <- as.integer(probe_budget %||%
-                                             max(2L, ceiling(ctrl$pirls_maxit / 3)))
-    } else {
-      ctrl_probe$max_sweeps <- as.integer(probe_budget %||%
-                                            max(2L, ceiling(ctrl$max_sweeps / 3)))
-    }
-  }
-  rms <- sqrt(sum(y[support]^2) / n_eff)
-  eps <- as.numeric(epsilon_rel) * if (is.finite(rms) && rms > 0) max(rms, 1) else 1
-  n_cores <- max(1L, as.integer(n_cores))
-  if (n_cores > 1L && (.Platform$OS.type == "windows" ||
-                       !requireNamespace("parallel", quietly = TRUE))) {
-    n_cores <- 1L
-  }
-  list(
-    dims = dims, d = d, n_cells = n_cells, y = y, fam = fam, key = key,
-    axes = axes, rank = rank, k = k, degree = degree,
-    penalty_order = penalty_order, cyclic = cyclic, period = period,
-    knots = knots, weights = w, offset = off, support = support,
-    n_eff = n_eff, groups = groups, n_groups = max(groups),
-    criterion = criterion, scale = scale, probe_init = probe_init,
-    eps = eps, n_cores = n_cores, seed = as.integer(seed),
-    control = ctrl, control_probe = ctrl_probe
+  .ggcv_gdf_point(
+    map, lambda = lambda, M = M, probes = probes, scale = scale,
+    probe_init = probe_init, probe_budget = probe_budget,
+    epsilon_rel = epsilon_rel, n_cores = n_cores, seed = seed,
+    budget = budget, fit_tol = fit_tol, control = control,
+    gdf_method = gdf_method
   )
 }
 
-#' One fixed-lambda array fit.
-#' @keywords internal
-#' @noRd
-.ggcv_arr_fit <- function(yvec, lambda, st, init = NULL, ctrl = st$control) {
-  # ttps() reseeds the global RNG for its core initialization; keep the
-  # caller's stream intact.
-  .tt_with_preserved_seed(ttps(
-    array(yvec, dim = st$dims), axes = st$axes, array = TRUE, family = st$fam,
-    rank = st$rank, k = st$k, degree = st$degree,
-    penalty_order = st$penalty_order, lambda = lambda, optimizer = "ALS",
-    init = init, control = ctrl, knots = st$knots, offset = st$offset,
-    weights = st$weights, cyclic = st$cyclic, period = st$period
-  ))
-}
-
-#' Rademacher probe j on the weighted cells (common random numbers).
-#' @keywords internal
-#' @noRd
-.ggcv_arr_probe <- function(j, st) {
-  .tt_with_preserved_seed({
-    set.seed(st$seed * 100003L + as.integer(j))
-    r <- numeric(st$n_cells)
-    r[st$support] <- sample(c(-1, 1), st$n_eff, replace = TRUE)
-  })
-  r
-}
-
-#' Score one theta (group scale): estimator fit, deviance, Monte Carlo GDF.
-#' @keywords internal
-#' @noRd
-.ggcv_arr_eval <- function(theta, M, st, unit = FALSE) {
-  t0 <- proc.time()[["elapsed"]]
-  lambda <- 10^as.numeric(theta)[st$groups]
-  fit0 <- tryCatch(.ggcv_arr_fit(st$y, lambda, st), error = function(e) e)
-  if (inherits(fit0, "error")) {
-    return(list(score = Inf, gcv = Inf, ubre = Inf, gdf = NA_real_,
-                gdf_se = NA_real_, deviance = NA_real_, M_ok = 0L,
-                contrib = numeric(0), fit = NULL, time_s = 0,
-                reason = conditionMessage(fit0)))
-  }
-  mu0 <- as.numeric(fit0$fitted.values)
-  dev <- glm_deviance(st$fam, st$y, mu0, weights = st$weights)
-  eps <- st$eps
-  init <- if (identical(st$probe_init, "warm")) .tt_clone_cores(fit0$cores) else NULL
-  ctrl_p <- st$control_probe
-  refit_mu <- function(yy) {
-    f <- tryCatch(.ggcv_arr_fit(yy, lambda, st, init = init, ctrl = ctrl_p),
-                  error = function(e) NULL)
-    if (is.null(f)) return(NULL)
-    as.numeric(f$fitted.values)
-  }
-  apply_jobs <- function(jobs, FUN) {
-    if (st$n_cores > 1L && length(jobs) > 1L) {
-      parallel::mclapply(jobs, FUN, mc.cores = st$n_cores, mc.preschedule = FALSE)
-    } else {
-      lapply(jobs, FUN)
-    }
-  }
-  if (isTRUE(unit)) {
-    # exact finite-difference trace: one non-negative unit perturbation per cell
-    base <- if (is.null(init)) mu0 else refit_mu(st$y)
-    cells <- which(st$support)
-    contrib <- unlist(apply_jobs(cells, function(i) {
-      yy <- st$y
-      yy[i] <- yy[i] + eps
-      m <- refit_mu(yy)
-      if (is.null(m)) NA_real_ else (m[i] - base[i]) / eps
-    }))
-    ok <- is.finite(contrib)
-    gdf <- if (all(ok)) sum(contrib) else NA_real_
-    gdf_se <- 0
-  } else {
-    jobs <- c(0L, seq_len(M))
-    mus <- apply_jobs(jobs, function(j) {
-      if (j == 0L) {
-        yy <- st$y + 0.5 * eps * as.numeric(st$support)
-      } else {
-        r <- .ggcv_arr_probe(j, st)
-        yy <- st$y + eps * (r + 1) / 2 * as.numeric(st$support)
-      }
-      refit_mu(yy)
-    })
-    mu_ref <- mus[[1L]]
-    contrib <- rep(NA_real_, M)
-    if (!is.null(mu_ref)) {
-      for (j in seq_len(M)) {
-        m <- mus[[j + 1L]]
-        if (is.null(m)) next
-        r <- .ggcv_arr_probe(j, st)
-        contrib[j] <- sum(r * (m - mu_ref)) * 2 / eps
-      }
-    }
-    ok <- is.finite(contrib)
-    gdf <- if (any(ok)) mean(contrib[ok]) else NA_real_
-    gdf_se <- if (sum(ok) >= 2L) stats::sd(contrib[ok]) / sqrt(sum(ok)) else NA_real_
-  }
-  n <- st$n_eff
-  valid <- is.finite(gdf) && gdf > 0 && gdf < n && is.finite(dev)
-  gcv <- if (valid) n * dev / (n - gdf)^2 else Inf
-  ubre <- if (valid && !is.null(st$scale)) {
-    dev / n + 2 * st$scale * gdf / n - st$scale
-  } else if (valid) NA_real_ else Inf
-  score <- if (identical(st$criterion, "ubre")) ubre else gcv
-  list(score = score, gcv = gcv, ubre = ubre, gdf = gdf, gdf_se = gdf_se,
-       deviance = dev, M_ok = sum(ok), contrib = contrib, fit = fit0,
-       time_s = proc.time()[["elapsed"]] - t0)
-}
-
-#' Relative deviance change at the last iteration of a fit (if recorded).
-#' @keywords internal
-#' @noRd
-.ggcv_arr_last_rel_change <- function(fit) {
-  h <- fit$history %||% fit$convergence$history %||% NULL
-  if (!is.data.frame(h) || nrow(h) < 2L) return(NA_real_)
-  col <- intersect(c("deviance", "rss", "objective"), names(h))
-  if (!length(col)) return(NA_real_)
-  v <- as.numeric(h[[col[1L]]])
-  v <- v[is.finite(v)]
-  if (length(v) < 2L) return(NA_real_)
-  abs(v[length(v)] - v[length(v) - 1L]) / max(1, abs(v[length(v) - 1L]))
-}
+# ---------------------------------------------------------------------------
+# ttps() dispatch
+# ---------------------------------------------------------------------------
 
 #' Resolve `lambda = "gGCV"` inside [ttps()] when `array = TRUE`.
 #'
-#' Search knobs are read from `control` under array-specific names (the
-#' scattered `ggcv_M_*` defaults of [tt_control()] are far too expensive on a
-#' full grid): `ggcv_array_groups`, `ggcv_array_n_global`,
-#' `ggcv_array_n_refine`, `ggcv_array_M_search`, `ggcv_array_M_final`,
-#' `ggcv_array_criterion`, `ggcv_array_probe_init`, `ggcv_array_n_cores`,
-#' `ggcv_array_budget_check`.
-#' Set them on a [tt_control()] object with `$<-`.
+#' Search knobs are read from `control`: first the array-specific names
+#' `ggcv_array_<knob>` (set on a [tt_control()] object with `$<-`), then the
+#' unified `ggcv_<knob>`, then the defaults of [tt_ggcv_array()]. Knobs:
+#' `groups`, `n_grid`, `n_global`, `n_refine`, `n_final`, `M_search`,
+#' `M_final`, `tol`, `criterion`, `probe_init`, `n_cores`, `budget_check`,
+#' `budget_fallback`, `budget`, `fit_tol`, `refit`, and the iteration cap
+#' (adaptive budget) or fixed budget of every selection fit, `max_sweeps` /
+#' `pirls_maxit` (`ggcv_max_sweeps` / `ggcv_pirls_maxit`). Poisson groups
+#' follow `.ggcv_poisson_groups()` (the groups knob, then
+#' `ggcv_poisson_anisotropic`), as on scattered rows. `refit(lambda)` refits
+#' the caller's model at the selected lambda (see `.ttps_ggcv_finish()`);
+#' without it the selection fit is returned.
 #' @keywords internal
 #' @noRd
 .ttps_dispatch_ggcv_array <- function(Y, axes, family, rank, k, degree,
                                       penalty_order, cyclic, period, knots,
-                                      weights, offset, control, cl = NULL) {
+                                      weights, offset, control, cl = NULL,
+                                      refit = NULL) {
   w <- if (is.null(weights) || all(abs(as.numeric(weights) - 1) < 1e-12)) {
     NULL
   } else {
     weights
   }
   off <- if (is.null(offset) || all(as.numeric(offset) == 0)) NULL else offset
+  kb <- .ggcv_control_knobs(control, prefix = "ggcv_array_")
+  # Poisson: ggcv_array_groups / ggcv_groups, then ggcv_poisson_anisotropic,
+  # as on scattered rows and in tt_ggcv_poisson()
+  is_pois <- identical(family_key(normalize_family(family)), "poisson")
+  groups <- if (is_pois) {
+    .ggcv_poisson_groups(control, length(dim(Y)), groups = kb$groups)
+  } else {
+    kb$groups
+  }
+  ctrl <- control
+  # the removed working-response proxy: warned once here, as on scattered
+  # rows (the array route never used it, so nothing else changes)
+  if (is_pois && identical(control$ggcv_glm_mode, "working")) {
+    .ggcv_warn_working("ttps(array = TRUE, lambda = \"gGCV\")")
+    ctrl$ggcv_glm_mode <- "algorithmic"  # warned once; tt_ggcv_array() stays quiet
+  }
+  ctrl$max_sweeps <- kb$max_sweeps
+  ctrl$pirls_maxit <- kb$pirls_maxit
   opt <- tt_ggcv_array(
     Y = Y, axes = axes, family = family, rank = rank, k = k, degree = degree,
     penalty_order = penalty_order, cyclic = cyclic, period = period,
-    knots = knots, weights = w, offset = off,
-    groups = control$ggcv_array_groups %||% NULL,
-    n_global = control$ggcv_array_n_global %||% NULL,
-    n_refine = as.integer(control$ggcv_array_n_refine %||% 2L),
-    M_search = as.integer(control$ggcv_array_M_search %||% 4L),
-    M_final = as.integer(control$ggcv_array_M_final %||% 16L),
-    criterion = control$ggcv_array_criterion %||% "auto",
-    probe_init = control$ggcv_array_probe_init %||% "cold",
-    n_cores = as.integer(control$ggcv_array_n_cores %||% 1L),
-    seed = as.integer(control$seed %||% 1L),
-    control = control,
-    budget_check = !isFALSE(control$ggcv_array_budget_check),
+    knots = knots, weights = w, offset = off, groups = groups,
+    n_grid = kb$n_grid, n_global = kb$n_global, n_refine = kb$n_refine,
+    n_final = kb$n_final, M_search = kb$M_search, M_final = kb$M_final,
+    tol = kb$tol, criterion = kb$criterion, probe_init = kb$probe_init,
+    n_cores = kb$n_cores, seed = as.integer(control$seed %||% 1L),
+    control = ctrl, budget_check = kb$budget_check,
+    budget_fallback = kb$budget_fallback, budget = kb$budget,
+    fit_tol = kb$fit_tol, gdf_method = kb$gdf_method,
     verbose = isTRUE(control$trace)
   )
-  fit <- opt$fit
-  if (!is.null(cl)) fit$call <- cl
-  fit
+  .ttps_ggcv_finish(opt, refit = if (kb$refit) refit, cl = cl)
 }

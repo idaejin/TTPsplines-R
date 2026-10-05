@@ -79,6 +79,43 @@ glm_deviance <- function(family, y, mu, weights = NULL) {
   stop("Unsupported family")
 }
 
+#' Held-out log-likelihood of a binned Poisson intensity.
+#'
+#' Cell means are \eqn{\mu_j=\Delta\exp(\eta(x_j))}. The integrated intensity
+#' is \eqn{M\Delta} times the mean of \eqn{\exp(\eta)} on `eta_U`: every cell,
+#' or a uniform sample of cells. That sample is not the empty-cell quadrature
+#' used inside a Berman--Turner fit. Up to a term that does not depend on
+#' \eqn{\eta},
+#' \deqn{\ell=\sum y^{\mathrm{te}}\eta-p_{\mathrm{te}}\sum_j\mu_j.}
+#'
+#' @param y_te,eta_te Held-out counts and log-intensity at those cells.
+#' @param eta_U Log-intensity on the domain sample.
+#' @param n_cells Number of domain cells \eqn{M}.
+#' @param delta Cell volume \eqn{\Delta}. Use \code{1/M} on the unit cube, and
+#'   \code{1} when \eqn{\exp(\eta)} is already a cell mean.
+#' @param p_te Weight on the integral, usually \code{1 - p_tr}.
+#' @return The log-likelihood above.
+#' @export
+poisson_intensity_ll <- function(y_te, eta_te, eta_U, n_cells, delta = 1,
+                                 p_te = 1) {
+  y_te <- as.numeric(y_te)
+  eta_te <- as.numeric(eta_te)
+  if (length(y_te) != length(eta_te)) {
+    stop("`y_te` and `eta_te` must have the same length.", call. = FALSE)
+  }
+  if (length(eta_U) < 1L) stop("`eta_U` is empty.", call. = FALSE)
+  n_cells <- as.numeric(n_cells)[1L]
+  delta <- as.numeric(delta)[1L]
+  p_te <- as.numeric(p_te)[1L]
+  if (any(!is.finite(c(n_cells, delta, p_te))) || n_cells <= 0 ||
+      delta <= 0 || p_te < 0) {
+    stop("`n_cells` and `delta` must be positive and `p_te` non-negative.",
+         call. = FALSE)
+  }
+  integral <- n_cells * delta * mean(exp(as.numeric(eta_U)))
+  sum(y_te * eta_te) - p_te * integral
+}
+
 init_intercept <- function(family, y, offset = NULL, weights = NULL) {
   key <- family_key(family)
   offset <- normalize_offset(offset, length(y))

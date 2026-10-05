@@ -132,3 +132,26 @@ test_that("spectral frozen grid is faster than dense refactorization path", {
 
   expect_lt(t_spec, t_dense)
 })
+
+test_that("Poisson block cGCV scores working UBRE, Gaussian scores GCV", {
+  set.seed(103)
+  n <- 80
+  m <- 10
+  X <- matrix(rnorm(n * m), n, m)
+  z <- rnorm(n)
+  P <- crossprod(diff(diag(m), differences = 2))
+  ws <- TTPsplines:::make_core_workspace(
+    z, X, P, lambda0 = 1,
+    bounds = c(1e-3, 1e2), tol = 1e-6,
+    use_spectral = TRUE
+  )
+  gcv <- TTPsplines:::update_lambda_cgcv(ws)
+  fit_g <- TTPsplines:::.cgcv_eval_at(ws, gcv$lambda)
+  expect_equal(gcv$value, fit_g$value)
+
+  ws$family <- stats::poisson()
+  ubre <- TTPsplines:::update_lambda_cgcv(ws)
+  fit_u <- TTPsplines:::.cgcv_eval_at(ws, ubre$lambda)
+  expect_equal(ubre$value, fit_u$rss + 2 * fit_u$ed)
+  expect_false(isTRUE(all.equal(ubre$value, fit_u$value)))
+})

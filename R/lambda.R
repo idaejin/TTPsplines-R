@@ -86,15 +86,14 @@ update_lambda_fixed <- function(workspace, ...) {
   P0 <- workspace$P0
   M <- workspace$S + lam * workspace$P
   if (!is.null(P0)) M <- M + P0
-  # Global mode (P0 present): prefer exact SPD solve so fixed-λ ALS is an
-  # exact conditional minimizer of Q (P4–P6). Own-margin / legacy keeps the
-  # ridge path for R↔Rcpp parity with gaussian_core_update_cpp.
+  # Global mode (P0 present): minimum-norm solve of the conditional system,
+  # one path for every M (solve_psd_pinv()): the exact conditional minimizer
+  # of Q when M is well conditioned (P4–P6), and no gauge component when M
+  # is singular (saturated TT cores under heavy smoothing), so the fixed-λ
+  # ALS map does not jump with roundoff. Own-margin / legacy keeps the ridge
+  # path for R↔Rcpp parity with gaussian_core_update_cpp.
   if (!is.null(P0)) {
-    g <- tryCatch(
-      as.numeric(solve_spd(M, workspace$b)),
-      error = function(e) solve_spd_ridge(M, workspace$b)
-    )
-    if (!all(is.finite(g))) g <- solve_spd_ridge(M, workspace$b)
+    g <- as.numeric(solve_psd_pinv(M, workspace$b))
   } else {
     g <- solve_spd_ridge(M, workspace$b)
   }
@@ -257,25 +256,31 @@ update_lambda_cgcv <- function(workspace, ...) {
   P0 <- workspace$P0
   b <- workspace$b
   cache <- .cgcv_spectral_from_workspace(workspace)
+  # ponytail: known-scale score is the working UBRE RSS + 2 ed, not Poisson
+  # deviance. Upgrade path: D(y, mu(lambda_n)) + 2 ed once mu is available
+  # without a dense conditional design (array and scattered must share it).
+  known_scale <- !is.null(workspace$family) &&
+    family_key(workspace$family) %in% c("poisson", "bernoulli")
   n_eval <- 0L
+  block_fit <- function(lam) {
+    if (is.null(cache)) {
+      .conditional_gcv(yw, Xw, S, P, b, lam, P0 = P0)
+    } else {
+      .conditional_gcv_spectral(yw, Xw, S, P, b, lam, cache, P0 = P0)
+    }
+  }
+  block_score <- function(fit) {
+    if (known_scale) fit$rss + 2 * fit$ed else fit$value
+  }
   obj <- function(ll) {
     n_eval <<- n_eval + 1L
-    lam <- exp(ll)
-    if (is.null(cache)) {
-      .conditional_gcv(yw, Xw, S, P, b, lam, P0 = P0)$value
-    } else {
-      .conditional_gcv_spectral(yw, Xw, S, P, b, lam, cache, P0 = P0)$value
-    }
+    block_score(block_fit(exp(ll)))
   }
   opt <- stats::optimize(obj, interval = log(bounds), tol = tol)
   lam <- exp(opt$minimum)
-  fit <- if (is.null(cache)) {
-    .conditional_gcv(yw, Xw, S, P, b, lam, P0 = P0)
-  } else {
-    .conditional_gcv_spectral(yw, Xw, S, P, b, lam, cache, P0 = P0)
-  }
+  fit <- block_fit(lam)
   list(
-    lambda = lam, g = fit$g, value = fit$value, ed = fit$ed,
+    lambda = lam, g = fit$g, value = block_score(fit), ed = fit$ed,
     n_eval = n_eval + 1L
   )
 }

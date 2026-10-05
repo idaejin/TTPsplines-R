@@ -191,6 +191,7 @@ tt_pirls_fit_sequential <- function(y, basis, family, ranks, lambda_spec, contro
           )
         } else {
           core_method <- if (identical(method, "CV")) "fixed" else method
+          if (identical(core_method, "cGCV")) ws$family <- fam
           upd <- update_lambda(core_method, ws)
         }
         n_eval <- n_eval + upd$n_eval
@@ -475,6 +476,9 @@ tt_pirls_fit_sequential <- function(y, basis, family, ranks, lambda_spec, contro
 #'
 #' Fit all cores at fixed λ (PIRLS) → Jacobi proposals on last working
 #' response → damped / trust-region λ update.
+#' For Poisson and Bernoulli the proposal is kept only when
+#' deviance + 2 * sum(block ed) does not increase. Block working UBRE
+#' alone walks to the boundary across PIRLS rebuilds.
 #' @keywords internal
 #' @noRd
 tt_pirls_fit_cgcv_outer <- function(y, basis, family, ranks, lambda_spec,
@@ -518,6 +522,13 @@ tt_pirls_fit_cgcv_outer <- function(y, basis, family, ranks, lambda_spec,
   prev_lam <- lambda
   n_outer <- 0L
   fit_last <- NULL
+  # ponytail: joint gate is deviance + 2 * sum of conditional block eds,
+  # not Ye GDF. Upgrade path: D + 2 * tr(d mu / d y) once that trace is cheap.
+  known_scale <- family_key(fam) %in% c("poisson", "bernoulli")
+  score_prev <- Inf
+  joint_path <- numeric()
+  accepted_lambda <- lambda
+  accepted_cores <- lapply(cores, function(x) array(x, dim = dim(x)))
 
   for (outer in seq_len(outer_maxit)) {
     fixed_spec <- list(method = "fixed", values = lambda, automatic = FALSE,
@@ -539,33 +550,73 @@ tt_pirls_fit_cgcv_outer <- function(y, basis, family, ranks, lambda_spec,
 
     step <- .cgcv_simultaneous_step(
       cores, lambda, basis, zc, ranks, control,
-      weight = w, penalty_order = penalty_order
+      weight = w, penalty_order = penalty_order,
+      family = fam
     )
     n_eval <- n_eval + step$n_eval + fit_last$n_criterion_evals
+    fitted_lambda <- lambda
+    score <- NA_real_
+    if (known_scale) {
+      ed <- step$proposals$ed_old
+      if (all(is.finite(ed))) score <- fit_last$deviance + 2 * sum(ed)
+      if (is.finite(score_prev) && is.finite(score) && score >= score_prev) {
+        lambda <- accepted_lambda
+        cores <- accepted_cores
+        n_outer <- outer - 1L
+        if (isTRUE(control$trace)) {
+          cat(sprintf(
+            "  cGCV-outer %2d | dev=%.6g | joint=%.6g rejected\n",
+            outer, fit_last$deviance, score
+          ))
+        }
+        break
+      }
+      if (is.finite(score)) {
+        score_prev <- score
+        joint_path <- c(joint_path, score)
+        accepted_lambda <- fitted_lambda
+        accepted_cores <- lapply(cores, function(x) array(x, dim = dim(x)))
+      }
+    }
+
     lambda <- step$lambda
     n_outer <- outer
 
-    history[[outer]] <- list(
+    history[[length(history) + 1L]] <- list(
       outer = outer,
       deviance = fit_last$deviance,
       objective = fit_last$objective,
-      lambda = lambda
+      joint_ubre = score,
+      lambda = if (known_scale) fitted_lambda else lambda
     )
     prop_df <- step$proposals
     prop_df$outer <- outer
-    proposal_hist[[outer]] <- prop_df
+    proposal_hist[[length(proposal_hist) + 1L]] <- prop_df
 
     if (isTRUE(control$trace)) {
       cat(sprintf(
         "  cGCV-outer %2d | dev=%.6g | lambda=%s\n",
         outer, fit_last$deviance,
-        paste(sprintf("%.3g", lambda), collapse = ",")
+        paste(sprintf("%.3g", if (known_scale) fitted_lambda else lambda),
+              collapse = ",")
       ))
     }
 
-    dlog <- max(abs(log(lambda) - log(pmax(prev_lam, 1e-12))))
-    if (dlog < control$tol_lambda && outer > 1L) break
-    prev_lam <- lambda
+    dlog <- max(abs(log(step$lambda) - log(pmax(fitted_lambda, 1e-12))))
+    if (known_scale) {
+      if (dlog < control$tol_lambda && outer > 1L) {
+        lambda <- fitted_lambda
+        break
+      }
+      if (outer == outer_maxit) {
+        lambda <- accepted_lambda
+        cores <- accepted_cores
+      }
+    } else {
+      dlog_seq <- max(abs(log(lambda) - log(pmax(prev_lam, 1e-12))))
+      if (dlog_seq < control$tol_lambda && outer > 1L) break
+      prev_lam <- lambda
+    }
   }
 
   fixed_spec <- list(method = "fixed", values = lambda, automatic = FALSE,
@@ -616,7 +667,9 @@ tt_pirls_fit_cgcv_outer <- function(y, basis, family, ranks, lambda_spec,
     max_log10_step = delta,
     proposals = prop_all,
     lambda0_table = lambda0_table,
-    trace = prop_all
+    trace = prop_all,
+    joint_ubre = if (is.finite(score_prev)) score_prev else NA_real_,
+    joint_path = joint_path
   )
   fit_final$elapsed <- proc.time()[["elapsed"]] - t0
   fit_final

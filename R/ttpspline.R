@@ -30,11 +30,15 @@
 #' @param lambda Numeric (isotropic / anisotropic fixed), `"cGCV"` (conditional
 #'   GCV, default), `"CV"` (k-fold CV of each \(\lambda_n\); by default on
 #'   the first ALS/PIRLS sweep then frozen — see `tt_control(cv_sweeps, cv_rule)`),
-#'   or `"gGCV"` (joint TT-gGCV via Monte Carlo GDF; Gaussian scattered, or
-#'   Poisson via [tt_ggcv_poisson()] — `tt_control(ggcv_glm_mode)` =
-#'   `"working"` / `"algorithmic"`; much slower — see [tt_ggcv()]). With
-#'   `array = TRUE`, `"gGCV"` uses the full-grid K-ALS selector
-#'   [tt_ggcv_array()] (Gaussian or Poisson; knobs `control$ggcv_array_*`).
+#'   or `"gGCV"` (global GCV / UBRE of the fixed-\eqn{\lambda} fit with a Monte
+#'   Carlo GDF; Gaussian or Poisson, scattered rows or `array = TRUE`; much
+#'   slower than cGCV). gGCV selects with the engine of [tt_ggcv()] /
+#'   [tt_ggcv_array()] (knobs `ggcv_*` of [tt_control()]; in array mode
+#'   `control$ggcv_array_*` take precedence), with the iteration budget
+#'   `ggcv_budget` (adaptive by default, capped by `ggcv_max_sweeps` /
+#'   `ggcv_pirls_maxit`), then refits at the selected \eqn{\lambda} with
+#'   these arguments and `control`; the selection diagnostics are in
+#'   `fit$ggcv`.
 #' @param optimizer One of:
 #'   \itemize{
 #'     \item `"auto"` — documented family default:
@@ -247,6 +251,10 @@ ttps <- function(y,
   if (identical(key, "poisson") && any(y < 0)) {
     stop("poisson requires non-negative y.", call. = FALSE)
   }
+  # the caller's own offset / weights, for the refit after lambda = "gGCV"
+  # (NULL weights select the Kronecker Gram path in array mode)
+  offset_arg <- offset
+  weights_arg <- weights
   offset <- normalize_offset(offset, length(y))
   weights <- normalize_weights(weights, length(y))
   linear <- normalize_linear(linear, length(y))
@@ -308,7 +316,38 @@ ttps <- function(y,
   backend <- resolve_backend(control, optimizer = optimizer)
   ranks <- tt_rank(rank, d = d)
   lambda_spec <- parse_lambda_spec(lambda, d = d, control = control)
+
+  if (!is.null(init)) {
+    if (!is.list(init) || length(init) != d) {
+      stop("`init` must be a length-d list of TT cores (see tt_initialize()).",
+           call. = FALSE)
+    }
+    for (kk in seq_len(d)) {
+      dm <- dim(init[[kk]])
+      if (is.null(dm) || length(dm) != 3L ||
+          dm[1] != ranks[kk] || dm[3] != ranks[kk + 1L]) {
+        stop("init core ", kk, " has incompatible TT dimensions.", call. = FALSE)
+      }
+    }
+  }
+
   if (identical(lambda_spec$method, "gGCV")) {
+    # Selection on the fixed-lambda map of these data (ggcv_engine.R) from
+    # the cold common initialization, then (control$ggcv_refit, default)
+    # a refit at the selected lambda with the caller's own arguments.
+    refit <- function(lam) {
+      ttps(
+        y = if (isTRUE(array)) array_data_out$Y else y,
+        X = if (isTRUE(array)) NULL else X,
+        family = fam, rank = rank, k = k, degree = degree,
+        penalty_order = penalty_order, lambda = lam,
+        optimizer = optimizer_requested, backend = backend_arg, init = init,
+        control = control, knots = knots, offset = offset_arg,
+        weights = weights_arg, cyclic = cyclic, period = period,
+        null_space = null_space, array = isTRUE(array),
+        axes = if (isTRUE(array)) array_data_out$axes else NULL
+      )
+    }
     if (isTRUE(array)) {
       # Full-grid K-ALS / TT-GLAM: non-negative Monte Carlo GDF (ggcv_array.R).
       if (!identical(key, "gaussian") && !identical(key, "poisson")) {
@@ -319,7 +358,7 @@ ttps <- function(y,
         Y = array_data_out$Y, axes = array_data_out$axes, family = fam,
         rank = rank, k = k, degree = degree, penalty_order = penalty_order,
         cyclic = cyclic, period = period, knots = knots, weights = weights,
-        offset = offset, control = control, cl = cl
+        offset = offset, control = control, cl = cl, refit = refit
       ))
     }
     if (!identical(key, "gaussian") && !identical(key, "poisson")) {
@@ -337,16 +376,12 @@ ttps <- function(y,
       stop("lambda = 'gGCV' does not support non-uniform observation weights yet.",
            call. = FALSE)
     }
-    if (identical(key, "poisson")) {
-      return(.ttps_dispatch_ggcv_poisson(
-        y = y, X = X, rank = max(ranks), k = k, degree = degree,
-        penalty_order = penalty_order, control = control, init = init, cl = cl,
-        offset = offset, cyclic = cyclic, period = period, knots = knots
-      ))
-    }
-    return(.ttps_dispatch_ggcv(
-      y = y, X = X, rank = max(ranks), k = k, degree = degree,
-      penalty_order = penalty_order, control = control, init = init, cl = cl
+    # Gaussian ALS / Poisson PIRLS-ALS map on the scattered rows (ggcv.R).
+    return(.ttps_dispatch_ggcv_scattered(
+      y = y, X = X, family = fam, rank = rank, k = k, degree = degree,
+      penalty_order = penalty_order, cyclic = cyclic, period = period,
+      knots = knots, offset = offset, control = control, refit = refit,
+      cl = cl
     ))
   }
   if (identical(lambda_spec$method, "CV")) {
@@ -374,20 +409,6 @@ ttps <- function(y,
       "TTPsplines | family=%s | optimizer=%s | backend=%s | lambda=%s\n",
       fam$family, optimizer_used, backend, lam_lab
     ))
-  }
-
-  if (!is.null(init)) {
-    if (!is.list(init) || length(init) != d) {
-      stop("`init` must be a length-d list of TT cores (see tt_initialize()).",
-           call. = FALSE)
-    }
-    for (kk in seq_len(d)) {
-      dm <- dim(init[[kk]])
-      if (is.null(dm) || length(dm) != 3L ||
-          dm[1] != ranks[kk] || dm[3] != ranks[kk + 1L]) {
-        stop("init core ", kk, " has incompatible TT dimensions.", call. = FALSE)
-      }
-    }
   }
 
   bs <- build_marginal_bases(X, k = k, degree = degree, knots = knots,

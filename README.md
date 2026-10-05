@@ -252,7 +252,8 @@ summary(fit_a)
 ```
 
 Restrictions in this version: no `linear=` / `smooth=` /
-`null_space = "profiled"`; no `lambda = "CV"` / `"gGCV"`. Numerically matches
+`null_space = "profiled"`; no `lambda = "CV"` (`"gGCV"` works, also
+`tt_ggcv_array()`). Numerically matches
 scattered `ttps()` on the same grid. Gaussian unweighted grids use Kronecker
 Gram; Poisson / weighted grids use the weighted array path. For
 exposure-weighted Poisson with **dense** \(\Theta\) prefer
@@ -310,7 +311,7 @@ tst$drop_candidate_names
 | numeric / length-`d` | Fixed isotropic or anisotropic \(\lambda\) | Always available |
 | `"cGCV"` (default) | Conditional / product GCV inside ALS / PIRLS | Default dynamics: `cgcv_update = "outer_simultaneous"` |
 | `"CV"` | K-fold CV of each \(\lambda_k\) | ALS / PIRLS only; default `cv_sweeps = 1` (tune then freeze) |
-| `"gGCV"` | Joint TT-gGCV (Monte Carlo GDF) | Experimental; Gaussian scattered only; expensive — prefer `tt_ggcv()` |
+| `"gGCV"` | Global GCV / UBRE with a Monte Carlo GDF | Gaussian or Poisson, scattered or `array = TRUE`; refits at the selected \(\lambda\); expensive — `tt_ggcv()` / `tt_ggcv_array()` for diagnostics, `tt_gdf()` / `tt_gdf_array()` to score a given \(\lambda\) |
 
 
 ```r
@@ -326,14 +327,15 @@ fit_cv <- ttps(
 )
 fit_cv$cv          # folds, grid, rule, trace
 
-# Joint TT-gGCV (opt-in oracle; prefer tt_ggcv() for search diagnostics)
+# Global TT-gGCV (opt-in; tt_ggcv() returns the search diagnostics)
 # fit_g <- ttps(y, X, rank = 2, k = 6, lambda = "gGCV",
-#               control = tt_control(ggcv_n_global = 16, ggcv_M_search = 4))
-# opt <- tt_ggcv(y, X, rank = 2, k = 6, n_global = 16, M_search = 4)
+#               control = tt_control(ggcv_groups = 1:2, ggcv_M_final = 16))
+# opt <- tt_ggcv(y, X, rank = 2, k = 6, groups = 1:2)
 ```
 
 Useful knobs: `tt_control(cv_folds, cv_ngrid, cv_grid, cv_sweeps, cv_rule)` and
-`tt_control(ggcv_n_global, ggcv_n_refine, ggcv_M_search, ggcv_M_final, ggcv_include_cgcv_anchor)`.
+`tt_control(ggcv_groups, ggcv_n_grid, ggcv_M_search, ggcv_M_final, ggcv_tol,
+ggcv_budget, ggcv_max_sweeps, ggcv_pirls_maxit, ggcv_refit)`.
 
 If cGCV λ sits on a search bound, diagnose with multi-start (stable vs unstable
 hits) via `ttps_multistart()` — see `vignette("cgcv")`.

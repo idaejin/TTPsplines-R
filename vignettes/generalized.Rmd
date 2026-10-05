@@ -57,8 +57,8 @@ predict(fit_b, X[1:5, ], type = "response")
 
 Automatic λ: `lambda = "cGCV"` (see `fit$lambda_boundary` if estimates hug
 the search bounds), or `lambda = "CV"` for k-fold search under ALS / PIRLS
-(`tt_control(cv_folds, cv_sweeps, cv_rule)`). Joint `"gGCV"` is Gaussian-only
-— see `vignette("cgcv")`.
+(`tt_control(cv_folds, cv_sweeps, cv_rule)`). Global `"gGCV"` covers
+Gaussian and Poisson (not Bernoulli) — see `vignette("cgcv")`.
 
 # Parametric and additive confounders (`linear=`, `smooth=`)
 

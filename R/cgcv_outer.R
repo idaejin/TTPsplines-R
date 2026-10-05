@@ -331,7 +331,8 @@
 #' @noRd
 .cgcv_propose_all <- function(cores, lambda, basis, target, ranks, control,
                               weight = NULL, penalty_order = 2L,
-                              grid = NULL, eval_old = TRUE) {
+                              grid = NULL, eval_old = TRUE,
+                              family = NULL) {
   d <- length(cores)
   bounds <- control$lambda_bounds %||% c(1e-4, 1e4)
   rows <- vector("list", d)
@@ -352,6 +353,7 @@
       Right = R_all[[k]]
     )
     ws <- built$workspace
+    ws$family <- family
     upd <- update_lambda_cgcv(ws)
     n_eval <- n_eval + upd$n_eval
     old_fit <- if (isTRUE(eval_old)) .cgcv_eval_at(ws, lambda[k]) else NULL
@@ -477,7 +479,8 @@ tt_ranks_from_cores <- function(cores) {
 #' @noRd
 .cgcv_simultaneous_step <- function(cores, lambda, basis, target, ranks,
                                     control, weight = NULL,
-                                    penalty_order = 2L) {
+                                    penalty_order = 2L,
+                                    family = NULL) {
   rho <- control$cgcv_damping %||% 1
   delta <- control$cgcv_max_log10_step %||% Inf
   bounds <- control$lambda_bounds %||% c(1e-4, 1e4)
@@ -485,7 +488,8 @@ tt_ranks_from_cores <- function(cores) {
 
   prop <- .cgcv_propose_all(
     cores, lambda, basis, target, ranks, control,
-    weight = weight, penalty_order = penalty_order, grid = NULL
+    weight = weight, penalty_order = penalty_order, grid = NULL,
+    family = family
   )
   tilde <- prop$proposals$lambda_tilde
 

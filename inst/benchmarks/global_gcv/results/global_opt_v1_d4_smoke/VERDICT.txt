@@ -1,2 +1,0 @@
-FAIL
-strong_aniso=FALSE

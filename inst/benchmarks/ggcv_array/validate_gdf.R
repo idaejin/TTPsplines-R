@@ -57,9 +57,10 @@ for (cs in cases) {
   ctl <- function(b) tt_control(max_sweeps = b, pirls_maxit = b, seed = 1L, compute_edf = FALSE)
   gdf <- function(b, probes, init = "cold", m = M) {
     t0 <- proc.time()[["elapsed"]]
+    # budget = "fixed": this script studies the fixed budgets B and 3B
     z <- tt_gdf_array(Y, lambda = cs$lambda, axes = axes, family = fam, rank = cs$rank,
                       k = cs$K, M = m, probes = probes, probe_init = init,
-                      n_cores = n_cores, control = ctl(b))
+                      n_cores = n_cores, budget = "fixed", control = ctl(b))
     z$time_s <- proc.time()[["elapsed"]] - t0
     z
   }

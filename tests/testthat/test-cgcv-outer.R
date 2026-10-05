@@ -98,3 +98,31 @@ test_that("tt_cgcv_frozen_curves returns per-margin grids", {
   expect_true(all(fr$curves$margin %in% 1:2))
   expect_true(all(is.finite(fr$curves$gcv) | is.infinite(fr$curves$gcv)))
 })
+
+test_that("Poisson outer cGCV does not accept a higher joint deviance UBRE", {
+  skip_on_cran()
+  set.seed(31)
+  n <- 80
+  X <- matrix(runif(n * 2), n, 2)
+  eta <- 0.4 * sin(2 * pi * X[, 1]) + 0.3 * X[, 2]
+  y <- rpois(n, exp(eta))
+  fit <- ttps(
+    y, X, family = poisson(), rank = 2, k = 5, lambda = "cGCV",
+    control = tt_control(
+      max_sweeps = 4,
+      pirls_maxit = 6,
+      outer_maxit = 4,
+      cgcv_update = "outer_simultaneous",
+      cgcv_damping = 0.25,
+      cgcv_max_log10_step = 1,
+      compute_edf = FALSE,
+      warn_lambda_boundary = FALSE,
+      seed = 31
+    )
+  )
+  scores <- fit$cgcv$joint_path
+  expect_true(length(scores) >= 1L)
+  expect_true(all(is.finite(scores)))
+  if (length(scores) > 1L) expect_true(all(diff(scores) < 0))
+  expect_equal(fit$cgcv$joint_ubre, scores[length(scores)])
+})

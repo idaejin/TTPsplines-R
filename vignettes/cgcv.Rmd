@@ -27,7 +27,7 @@ This note covers \(\lambda\) selectors inside `ttps()`:
 | numeric / length-`d` | Fixed isotropic or anisotropic |
 | `"cGCV"` (default) | Conditional / product GCV inside ALS / PIRLS |
 | `"CV"` | K-fold CV of each \(\lambda_k\) (ALS / PIRLS) |
-| `"gGCV"` | Experimental joint TT-gGCV (Gaussian scattered; expensive) |
+| `"gGCV"` | Global GCV / UBRE with a Monte Carlo GDF (Gaussian or Poisson; scattered or array; expensive) |
 
 Rank selection is `vignette("rank-selection")`; in-sample AIC/BIC is
 `vignette("aic-bic")`.
@@ -186,7 +186,8 @@ data.frame(
 The same `lambda = "cGCV"` (and `"CV"` under PIRLS-ALS) works for Poisson.
 Bernoulli / L-BFGS paths also accept `"cGCV"`, but separation / bound hits
 are more common — check `lambda_boundary`. `"CV"` requires ALS / PIRLS-ALS
-(not global L-BFGS). `"gGCV"` is Gaussian-only.
+(not global L-BFGS). `"gGCV"` covers Gaussian and Poisson responses (UBRE
+by default for Poisson; see below), not Bernoulli.
 
 ```{r poisson, warning=TRUE}
 set.seed(2)
@@ -273,30 +274,88 @@ Useful knobs:
 `"1se"` keeps the **largest** \(\lambda\) whose CV score is within one SE of
 the minimum — useful when `"min"` under-smooths.
 
-# Joint TT-gGCV (`lambda = "gGCV"` / `tt_ggcv()`)
+# Global TT-gGCV (`lambda = "gGCV"` / `tt_ggcv()`)
 
-Product cGCV is the **default**. Joint **TT-gGCV** optimizes all directional
-\(\boldsymbol\lambda\) together with a Monte Carlo estimate of global GCV
-(Hutchinson-style GDF of the fixed-rank TT ALS map). It is much more
-expensive and currently **Gaussian scattered only** (no `array = TRUE`,
-`linear=` / `smooth=`, or non-uniform weights).
+Product cGCV is the **default**. **gGCV** scores the whole
+fixed-\(\boldsymbol\lambda\) fit with one global criterion and searches
+\(\boldsymbol\lambda\) directly:
 
-Prefer the dedicated helper when you want search diagnostics:
+\[
+\mathrm{GCV}(\boldsymbol\lambda) = \frac{n\,D}{(n - \mathrm{GDF})^2}
+\ \text{(Gaussian)}, \qquad
+\mathrm{UBRE}(\boldsymbol\lambda) = \frac{D + 2\,\mathrm{GDF}}{n} - 1
+\ \text{(Poisson)},
+\]
+
+with \(D\) the deviance and GDF the trace of the derivative of the fitting
+map \(y \mapsto \hat\mu(y; \boldsymbol\lambda)\). `criterion = "auto"` picks
+GCV for Gaussian and UBRE (known scale 1) for Poisson, as `mgcv`'s
+`"GCV.Cp"`. GDF is a Monte Carlo trace: non-negative Rademacher
+perturbations against one shared reference fit (Poisson counts are never
+clipped at zero), the same probes at every \(\boldsymbol\lambda\), and, at
+each \(\boldsymbol\lambda\), one iteration budget B for the fit at \(y\),
+the reference and all probes from one cold initialization, so that GDF is
+the derivative of one smooth map. The budget is adaptive by default: a
+pilot at \(y\) finds the iteration \(n\) after which the penalized
+objective has settled (relative change at most `fit_tol` at two
+consecutive iterations) under a cap (`max_sweeps` / `pirls_maxit`), and
+\(B = \lceil 1.5\,n \rceil + 2\), because a budget that suits one
+\(\boldsymbol\lambda\) need not suit another (slowly mixing low-rank ALS).
+An evaluation whose probe contributions are non-finite or outlying (a
+per-probe coefficient of variation above a limit that is 1 for large GDF
+and larger for small GDF) is re-evaluated at 2B and 4B, and flagged
+unstable if it stays so; unstable evaluations do not steer the search or
+win.
+gGCV works for Gaussian and Poisson responses,
+on scattered rows (`tt_ggcv()`, offsets allowed, e.g. Berman–Turner
+quadrature rows) and on product grids (`array = TRUE`, `tt_ggcv_array()`,
+cell weights and offsets allowed). Each new \(\boldsymbol\lambda\) costs
+`M + 2` fits for `M` probes, so gGCV is much slower than cGCV.
+
+**Search.** An isotropic grid on the shared \(\log_{10}\lambda\), a few
+halvings of the grid step around the best point and one parabolic step;
+with smoothing groups (`groups`, e.g. space versus time), a coordinate
+pattern search from the isotropic optimum follows. The best candidates and
+the nearest smoother isotropic point are re-scored with `M_final` probes.
+Scores are compared on the AIC scale (\(D / \phi + 2\,\mathrm{GDF}\) for
+UBRE with scale \(\phi\), or \(n \log \mathrm{GCV}\)), which does not
+depend on the units of the response, against `max(tol, 2 * SE)`, where SE is
+the paired Monte Carlo standard error over the common probes. The winner is the most
+regular final candidate that the minimum does not beat by this margin
+(isotropic before grouped, then the largest \(\lambda\); `decision`), in
+the spirit of the one-standard-error rule: on the Dette d = 8 example with
+Berman–Turner rows the plain argmin sat on the grid boundary, where the
+Monte Carlo GDF was 432 ± 334, against 145 ± 10 at the \(\lambda\) chosen
+by thinning CV. The winner's GDF is then re-estimated at twice its
+iteration budget; if it moves by more than 1%, the winner is rescored with
+the less favourable of its two scores and kept if it still wins,
+otherwise the next candidate by the same rule is checked
+(`budget_checks`, `budget_verified`). The first winner is also kept when
+no other converged candidate with a stable GDF is left to check.
+
+Use the helper when you want the search diagnostics:
 
 ```{r ggcv, eval = FALSE}
 opt <- tt_ggcv(
   y, X[, 1:2],
   rank = 2, k = 5,
-  n_global = 16, n_refine = 2,
-  M_search = 4, M_final = 8,
-  control = tt_control(max_sweeps = 6, backend = "R", compute_edf = FALSE)
+  M_search = 4, M_final = 8
 )
 opt$lambda
-opt$gcv
+opt$decision
+opt$paired         # final candidates: qualifies, best, winner, budget_ok
+head(opt$search)   # one row per computed evaluation (budget B, n_iter)
 fit_g <- opt$fit
+
+# GDF and scores at a given lambda (array data: tt_gdf_array())
+tt_gdf(y, X[, 1:2], lambda = opt$lambda, rank = 2, k = 5, M = 16)$gdf
 ```
 
-Or via `ttps()`:
+Through `ttps()` the same selection runs with the `ggcv_*` knobs of
+`tt_control()`; the model is then refitted at the selected
+\(\boldsymbol\lambda\) with your own arguments and control (so
+`compute_edf`, `tol`, `init` and `optimizer` apply), and the selection
+diagnostics are kept in `fit$ggcv`:
 
 ```{r ggcv-ttps, eval = FALSE}
 fit_g <- ttps(
@@ -304,16 +363,40 @@ fit_g <- ttps(
   rank = 2, k = 5,
   lambda = "gGCV",
   control = tt_control(
-    max_sweeps = 6, backend = "R", compute_edf = FALSE,
-    ggcv_n_global = 16, ggcv_M_search = 4, ggcv_M_final = 8
+    max_sweeps = 20, compute_edf = TRUE,
+    ggcv_groups = 1:2, ggcv_M_search = 4, ggcv_M_final = 8
   )
 )
-fit_g$lambda_method
 fit_g$lambda
+fit_g$ggcv[c("criterion", "gdf", "gdf_se", "decision", "boundary")]
 ```
 
-Knobs: `ggcv_n_global`, `ggcv_n_refine`, `ggcv_M_search`, `ggcv_M_final`,
-`ggcv_include_cgcv_anchor` (default `TRUE` seeds with a cGCV fit).
+| Control | Role |
+|---------|------|
+| `ggcv_groups` | Margins sharing one \(\lambda\) (`NULL` = isotropic, `1:d` = one per margin) |
+| `ggcv_n_grid`, `ggcv_n_refine` | Isotropic grid size and halvings (`9`, `2`) |
+| `ggcv_n_global` | Sobol starts of the grouped stage (`NULL` = none) |
+| `ggcv_n_final` | Candidates re-scored with `ggcv_M_final` probes (`3`) |
+| `ggcv_M_search`, `ggcv_M_final` | Monte Carlo probes (`4`, `16`) |
+| `ggcv_tol` | Minimum improvement of the comparison score, AIC scale (`1`) |
+| `ggcv_criterion` | `"auto"`, `"gcv"` or `"ubre"` |
+| `ggcv_budget` | `"adaptive"` (default) or `"fixed"` iteration budget |
+| `ggcv_fit_tol` | Convergence tolerance of the adaptive budget: relative change of the penalized objective (`1e-7`) |
+| `ggcv_max_sweeps`, `ggcv_pirls_maxit` | Iteration caps of the selection fits (`400`, `60`); the fixed budget with `"fixed"` |
+| `ggcv_budget_check` | Re-estimate the selected GDF at twice its budget (`TRUE`) |
+| `ggcv_budget_fallback` | Rescore a winner that fails that check with its less favourable score and choose again (`TRUE`) |
+| `ggcv_n_cores` | Forked workers per batch of fits (`1`) |
+| `ggcv_refit` | Refit at the selected \(\lambda\) with your arguments (`TRUE`) |
+
+With `array = TRUE`, knobs named `ggcv_array_<knob>` (set with `$<-` on the
+control object) take precedence over `ggcv_<knob>`. Warnings flag a selected
+\(\lambda\) at the search boundary, a selection fit that reached the cap
+without converging, a GDF that moves by more than 1% when the budget doubles
+(with the margin by which a kept winner still wins, or the candidates the
+selection moved past), and an unstable Monte Carlo GDF; raise
+`ggcv_pirls_maxit` (Poisson) or `ggcv_max_sweeps` (Gaussian), lower
+`ggcv_fit_tol`, or increase `ggcv_M_final`. Not yet supported:
+`linear=` / `smooth=` terms and non-uniform weights on scattered rows.
 
 # What this is not
 
@@ -328,7 +411,7 @@ Knobs: `ggcv_n_global`, `ggcv_n_refine`, `ggcv_M_search`, `ggcv_M_final`,
 
 - `vignette("rank-selection", package = "TTPsplines")` — CV + 1-SE for \(r\)
 - `vignette("aic-bic", package = "TTPsplines")` — AIC / BIC from EDF
-- `vignette("array-mode", package = "TTPsplines")` — cGCV on product grids
+- `vignette("array-mode", package = "TTPsplines")` — cGCV / gGCV on product grids
 - `vignette("getting-started", package = "TTPsplines")`
 - `vignette("generalized", package = "TTPsplines")`
 

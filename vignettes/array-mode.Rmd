@@ -213,8 +213,27 @@ round(fit_cgcv$lambda, 4)
 fit_cgcv$lambda_method
 ```
 
-**Not** available with `array = TRUE` in this version: `lambda = "CV"` and
-`lambda = "gGCV"`. Use fixed \(\lambda\) or `"cGCV"`.
+`lambda = "gGCV"` (global GCV / UBRE with a Monte Carlo GDF of the
+fixed-\(\lambda\) array fit) also works with `array = TRUE`, for Gaussian and
+Poisson grids with cell `weights` and offsets. It is much slower than cGCV,
+which stays the default; `tt_ggcv_array()` runs the same search and returns
+its diagnostics (criterion, search log, budget check; see
+`vignette("cgcv")`); `tt_gdf_array()` scores a given \(\lambda\).
+`lambda = "CV"` is **not** available with `array = TRUE` in this version.
+
+```{r ggcv-array, eval = FALSE}
+# default iteration caps: 400 ALS sweeps / 60 PIRLS iterations (adaptive)
+sel <- tt_ggcv_array(Y, axes = axes, rank = 3L, k = 8L)
+sel$lambda
+head(sel$search)
+tt_gdf_array(Y, lambda = sel$lambda, axes = axes, rank = 3L, k = 8L)$gdf
+
+fit_g <- ttps(
+  Y, axes = axes, array = TRUE, rank = 3L, k = 8L, lambda = "gGCV",
+  control = tt_control(compute_edf = FALSE, seed = 1L)
+)
+fit_g$ggcv$gdf
+```
 
 # A 3D walkthrough (still small)
 
@@ -290,7 +309,7 @@ grid problem:
 - `axes` length and lengths of each vector must match `dim(y)`.
 - No `linear=` / `smooth=` terms.
 - `null_space = "joint"` only (not `"profiled"`).
-- No `lambda = "CV"` / `"gGCV"`.
+- No `lambda = "CV"` (`"gGCV"` works; see `vignette("cgcv")`).
 - Gaussian unweighted grids use the Kronecker Gram path; GLM / weighted grids
   use the weighted array Gram (still without forming \(X_k\)).
 - Rank \(r\) is still **user-chosen** (see `vignette("rank-selection")`).

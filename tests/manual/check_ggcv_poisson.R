@@ -1,4 +1,5 @@
-# Self-check: Poisson lambda = "gGCV" (working + tiny algorithmic).
+# Self-check: Poisson lambda = "gGCV" (deprecated "working" mode warns and
+# uses the exact map; tiny algorithmic run).
 # From ttpsplines-pkg root: Rscript tests/manual/check_ggcv_poisson.R
 pkg_root <- Sys.getenv(
   "TTP_PKG",
@@ -30,11 +31,21 @@ ctrl_w <- tt_control(
   warn_lambda_boundary = FALSE,
   seed = 2L
 )
-fit_w <- ttps(y, X, family = poisson(), rank = 2L, k = 6L,
-              lambda = "gGCV", control = ctrl_w)
+warned <- FALSE
+fit_w <- withCallingHandlers(
+  ttps(y, X, family = poisson(), rank = 2L, k = 6L,
+       lambda = "gGCV", control = ctrl_w),
+  warning = function(w) {
+    if (grepl("deprecated", conditionMessage(w))) {
+      warned <<- TRUE
+      invokeRestart("muffleWarning")
+    }
+  }
+)
+stopifnot(warned)
 stopifnot(inherits(fit_w, "ttpspline"))
 stopifnot(identical(fit_w$lambda_method, "gGCV"))
-stopifnot(identical(fit_w$ggcv$mode, "working"))
+stopifnot(identical(fit_w$ggcv$mode, "scattered"))
 stopifnot(length(fit_w$lambda) == 2L, all(fit_w$lambda > 0))
 cat("check_ggcv_poisson working: OK  lambda=",
     paste(sprintf("%.3g", fit_w$lambda), collapse = ","), "\n")
@@ -48,14 +59,14 @@ ctrl_a <- tt_control(
   ggcv_n_refine = 1L,
   ggcv_M_search = 2L,
   ggcv_M_final = 3L,
-  ggcv_include_cgcv_anchor = FALSE,
   compute_edf = FALSE,
   warn_lambda_boundary = FALSE,
   seed = 2L
 )
 fit_a <- ttps(y, X, family = poisson(), rank = 2L, k = 6L,
               lambda = "gGCV", control = ctrl_a)
-stopifnot(identical(fit_a$ggcv$mode, "algorithmic"))
+stopifnot(identical(fit_a$ggcv$mode, "scattered"),
+          identical(fit_a$ggcv$criterion, "ubre"))
 stopifnot(is.finite(fit_a$ggcv$gcv), is.finite(fit_a$ggcv$gdf))
 cat("check_ggcv_poisson algorithmic: OK  lambda=",
     paste(sprintf("%.3g", fit_a$lambda), collapse = ","),

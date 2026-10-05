@@ -22,7 +22,7 @@ lambda    ∈ {scalar, length-d, "cGCV", "CV", "gGCV"*}
 backend   ∈ {auto, R, Rcpp}
 array     ∈ {FALSE (scattered), TRUE (product grid Y + axes)}
 * auto: Gaussian→ALS, Poisson→PIRLS-ALS, binomial→LBFGS
-* gGCV: experimental, Gaussian scattered only
+* gGCV: opt-in, Gaussian or Poisson, scattered or array (one engine, R/ggcv_engine.R)
 ```
 
 Public entry: `ttps(...)` (+ `ttps_dlnm()` for exposure×lag; vignette deferred).
@@ -50,14 +50,14 @@ Manual smoke: `tests/manual/smoke_test_apis.Rmd`.
 |---|---|
 | Gaussian ALS / cGCV | working |
 | Poisson PIRLS / Bernoulli LBFGS (`auto`) | working |
-| `array = TRUE` (Gaussian Kronecker; Poisson weighted) | working; no linear/smooth/CV/gGCV |
+| `array = TRUE` (Gaussian Kronecker; Poisson weighted) | working; no linear/smooth/CV |
 | `tt_ic()` AIC/BIC | working (`AIC()` S3 not yet) |
 | Rank helpers `tt_rank_select` / `tt_rank_refit` | working |
 | `linear=` / `smooth=` (ALS/PIRLS) | working; vignette section in `generalized` |
 | Dense GLAM Gaussian / Poisson | working |
 | `ttps_dlnm` / `predict_dlnm` | working API; **no vignette yet** (deferred) |
 | Rcpp | kernels only; ALS sweeps stay in R |
-| Joint gGCV | experimental; Gaussian scattered |
+| Global gGCV (`tt_ggcv()`, `tt_ggcv_array()`; scoring `tt_gdf()`, `tt_gdf_array()`) | opt-in; Gaussian / Poisson, scattered / array; adaptive iteration budget; refit at selected λ |
 
 ## Minimal examples
 
